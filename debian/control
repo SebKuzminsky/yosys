@@ -6,8 +6,8 @@ Uploaders: Ruben Undheim <ruben.undheim@gmail.com>
 Build-Depends: debhelper (>= 9), tcl8.5-dev, libreadline-dev, git, bison,
                flex, gawk, libffi-dev
 Standards-Version: 3.9.5
-Vcs-Git: git://git.debian.org/git/debian-science/packages/yosys.git
-Vcs-Browser: http://git.debian.org/?p=debian-science/packages/yosys.git
+Vcs-Git: git://anonscm.debian.org/git/debian-science/packages/yosys.git
+Vcs-Browser: http://anonscm.debian.org/gitweb/?p=debian-science/packages/yosys.git
 Homepage: http://www.clifford.at/yosys
 
 Package: yosys
