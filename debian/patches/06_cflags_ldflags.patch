@@ -2,10 +2,10 @@ Description: Patch to make CPPFLAGS, CXXFLAGS and LDFLAGS
   from dpkg-buildflags be used.
 Forwarded: will do
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys/Makefile
+Index: yosys-0.3.0+20140906git652345c/Makefile
 ===================================================================
---- yosys.orig/Makefile	2014-09-14 13:03:35.882682725 +0200
-+++ yosys/Makefile	2014-09-14 13:09:24.306686462 +0200
+--- yosys-0.3.0+20140906git652345c.orig/Makefile	2014-09-27 09:35:26.107358641 +0000
++++ yosys-0.3.0+20140906git652345c/Makefile	2014-09-27 09:36:19.247452999 +0000
 @@ -27,8 +27,8 @@
  
  all: top-all

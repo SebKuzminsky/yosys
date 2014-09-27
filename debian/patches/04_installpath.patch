@@ -2,10 +2,10 @@ Description: This makes sure that DESTDIR
   is not overwritten in the Makefile.
 Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys/Makefile
+Index: yosys-0.3.0+20140906git652345c/Makefile
 ===================================================================
---- yosys.orig/Makefile	2014-09-14 10:15:11.298574348 +0200
-+++ yosys/Makefile	2014-09-14 10:15:33.618574588 +0200
+--- yosys-0.3.0+20140906git652345c.orig/Makefile	2014-09-27 09:34:46.987363882 +0000
++++ yosys-0.3.0+20140906git652345c/Makefile	2014-09-27 09:35:10.123393601 +0000
 @@ -14,7 +14,7 @@
  # other configuration flags
  ENABLE_GPROF := 0

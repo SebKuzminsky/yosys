@@ -5,10 +5,10 @@ Description: Compilation from the upstream code depends on being in
   It must be updated every time upstream changes!
 Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys/Makefile
+Index: yosys-0.3.0+20140906git652345c/Makefile
 ===================================================================
---- yosys.orig/Makefile	2014-09-05 22:04:33.718537262 +0200
-+++ yosys/Makefile	2014-09-05 22:14:29.998543657 +0200
+--- yosys-0.3.0+20140906git652345c.orig/Makefile	2014-09-27 09:30:48.000000000 +0000
++++ yosys-0.3.0+20140906git652345c/Makefile	2014-09-27 09:33:30.187362369 +0000
 @@ -45,7 +45,7 @@
  endif
  

@@ -2,10 +2,10 @@ Description: Don't build abc when building yosys.
   It is built as a separate source package.
 Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys/Makefile
+Index: yosys-0.3.0+20140906git652345c/Makefile
 ===================================================================
---- yosys.orig/Makefile	2014-09-05 22:17:14.586545422 +0200
-+++ yosys/Makefile	2014-09-05 22:17:29.818545586 +0200
+--- yosys-0.3.0+20140906git652345c.orig/Makefile	2014-09-27 09:33:30.187362369 +0000
++++ yosys-0.3.0+20140906git652345c/Makefile	2014-09-27 09:33:53.963346112 +0000
 @@ -110,9 +110,9 @@
  LDFLAGS += -pg
  endif
