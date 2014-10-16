@@ -2,4 +2,4 @@ yosys (0.3.0+20140906git652345c-1) unstable; urgency=low
 
   * Initial release (Closes: #761365)
 
- -- Ruben Undheim <ruben.undheim@gmail.com>  Fri, 05 Sep 2014 22:06:20 +0200
+ -- Ruben Undheim <ruben.undheim@gmail.com>  Thu, 16 Oct 2014 22:02:03 +0200
