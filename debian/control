@@ -1,18 +1,28 @@
 Source: yosys
-Section: electronics
-Priority: optional
 Maintainer: Debian Science Maintainers <debian-science-maintainers@lists.alioth.debian.org>
 Uploaders: Ruben Undheim <ruben.undheim@gmail.com>
-Build-Depends: debhelper (>= 9), tcl8.5-dev, libreadline-dev, git, bison,
-               flex, gawk, libffi-dev
-Standards-Version: 3.9.5
+Section: electronics
+Priority: optional
+Build-Depends: debhelper (>= 9),
+               tcl8.5-dev,
+               libreadline-dev,
+               git,
+               bison,
+               flex,
+               gawk,
+               libffi-dev
+Standards-Version: 3.9.6
+Vcs-Browser: https://anonscm.debian.org/cgit/debian-science/packages/yosys.git
 Vcs-Git: git://anonscm.debian.org/debian-science/packages/yosys.git
-Vcs-Browser: http://anonscm.debian.org/gitweb/?p=debian-science/packages/yosys.git
 Homepage: http://www.clifford.at/yosys
 
 Package: yosys
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, iverilog, graphviz, xdot,
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         iverilog,
+         graphviz,
+         xdot,
          berkeley-abc
 Description: Framework for Verilog RTL synthesis
  This is a framework for Verilog RTL synthesis. It currently has extensive
