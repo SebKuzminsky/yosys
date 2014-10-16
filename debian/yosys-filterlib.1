@@ -2,7 +2,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH YOSYS-FILTERLIB 1 "September 13, 2014"
+.TH YOSYS-FILTERLIB 1 "October 16, 2014"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -29,15 +29,20 @@ command.
 .\" TeX users may be more comfortable with the \fB<whatever>\fP and
 .\" \fI<whatever>\fP escape sequences to invode bold face and italics,
 .\" respectively.
-\fByosys-filterlib\fP is a utility delivered together with yosys.
-.SH OPTIONS
-A summary of options is included below.
+\fByosys-filterlib\fP is a program used to strip sensitive information from Liberty files.
+
+Occasionally Liberty files contain trade secrets (such as sensitive timing information) that cannot be shared
+freely. This complicates processes such as reporting bugs in the tools involved. When the information in
+the Liberty file used by Yosys and ABC are not part of the sensitive information, this tool
+yosys-filterlib can be used to strip the sensitive information from the Liberty file.
+.\".SH OPTIONS
+.\"A summary of options is included below.
 .\"#.TP
 .\"a
 .SH SEE ALSO
 yosys(1), yosys-config(1) 
 .SH AUTHOR
-yosys was written by Clifford Wolf <clifford@clifford.at>.
+yosys-filterlib was written by Clifford Wolf <clifford@clifford.at>.
 .PP
 This manual page was written by Ruben Undheim <ruben.undheim@gmail.com>,
 for the Debian project (and may be used by others).

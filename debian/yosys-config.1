@@ -2,7 +2,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH YOSYS-CONFIG 1 "September 13, 2014"
+.TH YOSYS-CONFIG 1 "October 16, 2014"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -29,15 +29,25 @@ command.
 .\" TeX users may be more comfortable with the \fB<whatever>\fP and
 .\" \fI<whatever>\fP escape sequences to invode bold face and italics,
 .\" respectively.
-\fByosys-config\fP is a utility delivered together with yosys.
+\fByosys-config\fP is a shell script which can be used to query compiler options and other information needed for building loadable modules for yosys. It is similar in behaviour to pkg-config.
 .SH OPTIONS
 A summary of options is included below.
-.\"#.TP
-.\"a
+.TP
+.B \-\-cxx
+.TP
+.B \-\-cxxflag
+.TP
+.B \-\-ldflags
+.TP
+.B \-\-ldlibs
+.TP
+.B \-\-bindir
+.TP
+.B \-\-datdir
 .SH SEE ALSO
-yosys(1), yosys-filterlib(1) 
+yosys(1), yosys-filterlib(1)
 .SH AUTHOR
-yosys was written by Clifford Wolf <clifford@clifford.at>.
+yosys-config was written by Clifford Wolf <clifford@clifford.at>.
 .PP
 This manual page was written by Ruben Undheim <ruben.undheim@gmail.com>,
 for the Debian project (and may be used by others).
