@@ -2,20 +2,16 @@ Description: Don't build abc when building yosys.
   It is built as a separate source package.
 Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys-0.3.0+20140906git652345c/Makefile
+Index: yosys/Makefile
 ===================================================================
---- yosys-0.3.0+20140906git652345c.orig/Makefile	2014-09-27 09:33:30.187362369 +0000
-+++ yosys-0.3.0+20140906git652345c/Makefile	2014-09-27 09:33:53.963346112 +0000
-@@ -110,9 +110,9 @@
- LDFLAGS += -pg
+--- yosys.orig/Makefile	2014-10-28 21:25:22.411413201 +0100
++++ yosys/Makefile	2014-10-28 21:27:48.631415935 +0100
+@@ -130,7 +130,7 @@
+ 
+ ifeq ($(ENABLE_ABC),1)
+ CXXFLAGS += -DYOSYS_ENABLE_ABC
+-TARGETS += yosys-abc$(EXE)
++#TARGETS += yosys-abc$(EXE)
  endif
  
--ifeq ($(ENABLE_ABC),1)
--TARGETS += yosys-abc
--endif
-+#ifeq ($(ENABLE_ABC),1)
-+#TARGETS += yosys-abc
-+#endif
- 
  ifeq ($(ENABLE_VERIFIC),1)
- VERIFIC_DIR ?= /usr/local/src/verific_lib_eval

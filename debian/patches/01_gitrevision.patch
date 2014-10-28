@@ -5,16 +5,16 @@ Description: Compilation from the upstream code depends on being in
   It must be updated every time upstream changes!
 Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys-0.3.0+20140906git652345c/Makefile
+Index: yosys/Makefile
 ===================================================================
---- yosys-0.3.0+20140906git652345c.orig/Makefile	2014-09-27 09:30:48.000000000 +0000
-+++ yosys-0.3.0+20140906git652345c/Makefile	2014-09-27 09:33:30.187362369 +0000
-@@ -45,7 +45,7 @@
+--- yosys.orig/Makefile	2014-10-28 21:24:31.983412258 +0100
++++ yosys/Makefile	2014-10-28 21:24:28.447412191 +0100
+@@ -48,7 +48,7 @@
  endif
  
- YOSYS_VER := 0.3.0+
+ YOSYS_VER := 0.3.0+$(shell test -d .git && { git log --author=clifford@clifford.at --oneline ca125bf41.. | wc -l; })
 -GIT_REV := $(shell git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
-+GIT_REV := 652345c
++GIT_REV := f9c096e 
  OBJS = kernel/version_$(GIT_REV).o
  
  # set 'ABCREV = default' to use abc/ as it is

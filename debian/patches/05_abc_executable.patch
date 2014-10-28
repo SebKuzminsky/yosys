@@ -4,16 +4,16 @@ Description: The dependency abc is built with the name yosys-abc
   This patch changes the name of the command that yosys looks for.
 Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys-0.3.0+20140906git652345c/passes/abc/abc.cc
+Index: yosys/passes/abc/abc.cc
 ===================================================================
---- yosys-0.3.0+20140906git652345c.orig/passes/abc/abc.cc	2014-09-27 09:30:48.000000000 +0000
-+++ yosys-0.3.0+20140906git652345c/passes/abc/abc.cc	2014-09-27 09:35:58.267358979 +0000
-@@ -1095,7 +1095,7 @@
+--- yosys.orig/passes/abc/abc.cc	2014-10-28 21:30:10.095418581 +0100
++++ yosys/passes/abc/abc.cc	2014-10-28 21:30:10.091418581 +0100
+@@ -1101,7 +1101,7 @@
  		log_header("Executing ABC pass (technology mapping using ABC).\n");
  		log_push();
  
 -		std::string exe_file = proc_self_dirname() + "yosys-abc";
 +		std::string exe_file = proc_self_dirname() + "berkeley-abc";
  		std::string script_file, liberty_file, constr_file, clk_str, delay_target;
- 		bool dff_mode = false, keepff = false, cleanup = true;
+ 		bool fast_mode = false, dff_mode = false, keepff = false, cleanup = true;
  		int lut_mode = 0;

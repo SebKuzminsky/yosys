@@ -2,11 +2,11 @@ Description: This makes sure that DESTDIR
   is not overwritten in the Makefile.
 Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys-0.3.0+20140906git652345c/Makefile
+Index: yosys/Makefile
 ===================================================================
---- yosys-0.3.0+20140906git652345c.orig/Makefile	2014-09-27 09:34:46.987363882 +0000
-+++ yosys-0.3.0+20140906git652345c/Makefile	2014-09-27 09:35:10.123393601 +0000
-@@ -14,7 +14,7 @@
+--- yosys.orig/Makefile	2014-10-28 21:29:28.995417812 +0100
++++ yosys/Makefile	2014-10-28 21:29:28.987417812 +0100
+@@ -15,7 +15,7 @@
  # other configuration flags
  ENABLE_GPROF := 0
  
@@ -14,8 +14,8 @@ Index: yosys-0.3.0+20140906git652345c/Makefile
 +#DESTDIR := /usr/local
  INSTALL_SUDO :=
  
- OBJS =
-@@ -263,10 +263,10 @@
+ EXE =
+@@ -282,10 +282,10 @@
  	@echo ""
  
  install: $(TARGETS) $(EXTRA_TARGETS)

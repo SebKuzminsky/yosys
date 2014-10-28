@@ -2,11 +2,11 @@ Description: Patch to make CPPFLAGS, CXXFLAGS and LDFLAGS
   from dpkg-buildflags be used.
 Forwarded: will do
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys-0.3.0+20140906git652345c/Makefile
+Index: yosys/Makefile
 ===================================================================
---- yosys-0.3.0+20140906git652345c.orig/Makefile	2014-09-27 09:35:26.107358641 +0000
-+++ yosys-0.3.0+20140906git652345c/Makefile	2014-09-27 09:36:19.247452999 +0000
-@@ -27,8 +27,8 @@
+--- yosys.orig/Makefile	2014-10-28 21:32:11.583420853 +0100
++++ yosys/Makefile	2014-10-28 21:34:03.899422954 +0100
+@@ -30,8 +30,8 @@
  
  all: top-all
  
@@ -17,8 +17,8 @@ Index: yosys-0.3.0+20140906git652345c/Makefile
  LDLIBS = -lstdc++ -lm
  QMAKE = qmake-qt4
  SED = sed
-@@ -195,10 +195,10 @@
- 	$(P) $(CXX) -o yosys $(LDFLAGS) $(OBJS) $(LDLIBS)
+@@ -214,10 +214,10 @@
+ 	$(P) $(CXX) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
  
  %.o: %.cc
 -	$(P) $(CXX) -o $@ -c $(CXXFLAGS) $<
@@ -30,14 +30,14 @@ Index: yosys-0.3.0+20140906git652345c/Makefile
  
  kernel/version_$(GIT_REV).cc: Makefile
  	$(P) rm -f kernel/version_*.o kernel/version_*.d kernel/version_*.cc
-@@ -206,8 +206,8 @@
- 			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\";" > kernel/version_$(GIT_REV).cc
+@@ -225,8 +225,8 @@
+ 			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\"; }" > kernel/version_$(GIT_REV).cc
  
- yosys-config: yosys-config.in
+ yosys-config: misc/yosys-config.in
 -	$(P) $(SED) -e 's,@CXX@,$(CXX),;' -e 's,@CXXFLAGS@,$(CXXFLAGS),;' -e 's,@LDFLAGS@,$(LDFLAGS),;' -e 's,@LDLIBS@,$(LDLIBS),;' \
--			-e 's,@BINDIR@,$(DESTDIR)/bin,;' -e 's,@DATDIR@,$(DESTDIR)/share/yosys,;' < yosys-config.in > yosys-config
+-			-e 's,@BINDIR@,$(DESTDIR)/bin,;' -e 's,@DATDIR@,$(DESTDIR)/share/yosys,;' < misc/yosys-config.in > yosys-config
 +	$(P) $(SED) -e 's#@CXX@#$(CXX)#;' -e 's#@CXXFLAGS@#$(CXXFLAGS)#;' -e 's#@LDFLAGS@#$(LDFLAGS)#;' -e 's#@LDLIBS@#$(LDLIBS)#;' \
-+			-e 's#@BINDIR@#$(DESTDIR)/bin#;' -e 's#@DATDIR@#$(DESTDIR)/share/yosys#;' < yosys-config.in > yosys-config
++			-e 's#@BINDIR@#$(DESTDIR)/bin#;' -e 's#@DATDIR@#$(DESTDIR)/share/yosys#;' < misc/yosys-config.in > yosys-config
  	$(Q) chmod +x yosys-config
  
- abc/abc-$(ABCREV):
+ abc/abc-$(ABCREV)$(EXE):
