@@ -1,3 +1,9 @@
+yosys (0.3.0+20141027gitf9c096e-1) unstable; urgency=medium
+
+  * New upstream version
+
+ -- Ruben Undheim <ruben.undheim@gmail.com>  Tue, 28 Oct 2014 21:40:13 +0100
+
 yosys (0.3.0+20140906git652345c-1) unstable; urgency=low
 
   * Initial release (Closes: #761365)
