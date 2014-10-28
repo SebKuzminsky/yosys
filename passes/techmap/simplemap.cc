@@ -24,16 +24,17 @@
 #include <stdio.h>
 #include <string.h>
 
-extern void simplemap_get_mappers(std::map<RTLIL::IdString, void(*)(RTLIL::Module*, RTLIL::Cell*)> &mappers);
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
 
 static void simplemap_not(RTLIL::Module *module, RTLIL::Cell *cell)
 {
 	RTLIL::SigSpec sig_a = cell->getPort("\\A");
 	RTLIL::SigSpec sig_y = cell->getPort("\\Y");
 
-	sig_a.extend(SIZE(sig_y), cell->parameters.at("\\A_SIGNED").as_bool());
+	sig_a.extend(GetSize(sig_y), cell->parameters.at("\\A_SIGNED").as_bool());
 
-	for (int i = 0; i < SIZE(sig_y); i++) {
+	for (int i = 0; i < GetSize(sig_y); i++) {
 		RTLIL::Cell *gate = module->addCell(NEW_ID, "$_NOT_");
 		gate->setPort("\\A", sig_a[i]);
 		gate->setPort("\\Y", sig_y[i]);
@@ -45,7 +46,7 @@ static void simplemap_pos(RTLIL::Module *module, RTLIL::Cell *cell)
 	RTLIL::SigSpec sig_a = cell->getPort("\\A");
 	RTLIL::SigSpec sig_y = cell->getPort("\\Y");
 
-	sig_a.extend_u0(SIZE(sig_y), cell->parameters.at("\\A_SIGNED").as_bool());
+	sig_a.extend_u0(GetSize(sig_y), cell->parameters.at("\\A_SIGNED").as_bool());
 
 	module->connect(RTLIL::SigSig(sig_y, sig_a));
 }
@@ -56,14 +57,14 @@ static void simplemap_bitop(RTLIL::Module *module, RTLIL::Cell *cell)
 	RTLIL::SigSpec sig_b = cell->getPort("\\B");
 	RTLIL::SigSpec sig_y = cell->getPort("\\Y");
 
-	sig_a.extend_u0(SIZE(sig_y), cell->parameters.at("\\A_SIGNED").as_bool());
-	sig_b.extend_u0(SIZE(sig_y), cell->parameters.at("\\B_SIGNED").as_bool());
+	sig_a.extend_u0(GetSize(sig_y), cell->parameters.at("\\A_SIGNED").as_bool());
+	sig_b.extend_u0(GetSize(sig_y), cell->parameters.at("\\B_SIGNED").as_bool());
 
 	if (cell->type == "$xnor")
 	{
-		RTLIL::SigSpec sig_t = module->addWire(NEW_ID, SIZE(sig_y));
+		RTLIL::SigSpec sig_t = module->addWire(NEW_ID, GetSize(sig_y));
 
-		for (int i = 0; i < SIZE(sig_y); i++) {
+		for (int i = 0; i < GetSize(sig_y); i++) {
 			RTLIL::Cell *gate = module->addCell(NEW_ID, "$_NOT_");
 			gate->setPort("\\A", sig_t[i]);
 			gate->setPort("\\Y", sig_y[i]);
@@ -79,7 +80,7 @@ static void simplemap_bitop(RTLIL::Module *module, RTLIL::Cell *cell)
 	if (cell->type == "$xnor") gate_type = "$_XOR_";
 	log_assert(!gate_type.empty());
 
-	for (int i = 0; i < SIZE(sig_y); i++) {
+	for (int i = 0; i < GetSize(sig_y); i++) {
 		RTLIL::Cell *gate = module->addCell(NEW_ID, gate_type);
 		gate->setPort("\\A", sig_a[i]);
 		gate->setPort("\\B", sig_b[i]);
@@ -237,7 +238,7 @@ static void simplemap_mux(RTLIL::Module *module, RTLIL::Cell *cell)
 	RTLIL::SigSpec sig_b = cell->getPort("\\B");
 	RTLIL::SigSpec sig_y = cell->getPort("\\Y");
 
-	for (int i = 0; i < SIZE(sig_y); i++) {
+	for (int i = 0; i < GetSize(sig_y); i++) {
 		RTLIL::Cell *gate = module->addCell(NEW_ID, "$_MUX_");
 		gate->setPort("\\A", sig_a[i]);
 		gate->setPort("\\B", sig_b[i]);
@@ -372,6 +373,11 @@ static void simplemap_dlatch(RTLIL::Module *module, RTLIL::Cell *cell)
 	}
 }
 
+PRIVATE_NAMESPACE_END
+YOSYS_NAMESPACE_BEGIN
+
+extern void simplemap_get_mappers(std::map<RTLIL::IdString, void(*)(RTLIL::Module*, RTLIL::Cell*)> &mappers);
+
 void simplemap_get_mappers(std::map<RTLIL::IdString, void(*)(RTLIL::Module*, RTLIL::Cell*)> &mappers)
 {
 	mappers["$not"]         = simplemap_not;
@@ -397,6 +403,9 @@ void simplemap_get_mappers(std::map<RTLIL::IdString, void(*)(RTLIL::Module*, RTL
 	mappers["$adff"]        = simplemap_adff;
 	mappers["$dlatch"]      = simplemap_dlatch;
 }
+
+YOSYS_NAMESPACE_END
+PRIVATE_NAMESPACE_BEGIN
 
 struct SimplemapPass : public Pass {
 	SimplemapPass() : Pass("simplemap", "mapping simple coarse-grain cells") { }
@@ -440,3 +449,4 @@ struct SimplemapPass : public Pass {
 	}
 } SimplemapPass;
  
+PRIVATE_NAMESPACE_END

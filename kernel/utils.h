@@ -25,6 +25,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+YOSYS_NAMESPACE_BEGIN
+
 // ------------------------------------------------
 // A map-like container, but you can save and restore the state
 // ------------------------------------------------
@@ -81,7 +83,7 @@ public:
 
 	void reset(const Key &k)
 	{
-		for (int i = SIZE(backup_state)-1; i >= 0; i--)
+		for (int i = GetSize(backup_state)-1; i >= 0; i--)
 			if (backup_state[i].count(k) != 0) {
 				if (backup_state[i].at(k) == nullptr)
 					current_state.erase(k);
@@ -155,10 +157,10 @@ struct TopoSort
 	void sort_worker(const T &n, std::set<T> &marked_cells, std::set<T> &active_cells, std::vector<T> &active_stack)
 	{
 		if (active_cells.count(n)) {
-			found_loops = false;
+			found_loops = true;
 			if (analyze_loops) {
 				std::set<T> loop;
-				for (int i = SIZE(active_stack)-1; i >= 0; i--) {
+				for (int i = GetSize(active_stack)-1; i >= 0; i--) {
 					loop.insert(active_stack[i]);
 					if (active_stack[i] == n)
 						break;
@@ -202,9 +204,11 @@ struct TopoSort
 		for (auto &it : database)
 			sort_worker(it.first, marked_cells, active_cells, active_stack);
 
-		log_assert(SIZE(sorted) == SIZE(database));
+		log_assert(GetSize(sorted) == GetSize(database));
 		return !found_loops;
 	}
 };
+
+YOSYS_NAMESPACE_END
 
 #endif

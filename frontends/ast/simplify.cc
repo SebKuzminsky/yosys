@@ -28,10 +28,12 @@
 
 #include "kernel/log.h"
 #include "libs/sha1/sha1.h"
+#include "frontends/verilog/verilog_frontend.h"
 #include "ast.h"
 
 #include <sstream>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <math.h>
 
 YOSYS_NAMESPACE_BEGIN
@@ -575,9 +577,9 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 	{
 		AstNode *index_expr = nullptr;
 
-		for (int i = 0; 2*i < SIZE(id2ast->multirange_dimensions); i++)
+		for (int i = 0; 2*i < GetSize(id2ast->multirange_dimensions); i++)
 		{
-			if (SIZE(children[0]->children) < i)
+			if (GetSize(children[0]->children) < i)
 				log_error("Insufficient number of array indices for %s at %s:%d.\n", log_id(str), filename.c_str(), linenum);
 
 			AstNode *new_index_expr = children[0]->children[i]->children.at(0)->clone();
@@ -591,7 +593,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 				index_expr = new AstNode(AST_ADD, new AstNode(AST_MUL, index_expr, AstNode::mkconst_int(id2ast->multirange_dimensions[2*i-1], true)), new_index_expr);
 		}
 
-		for (int i = SIZE(id2ast->multirange_dimensions)/1; i < SIZE(children[0]->children); i++)
+		for (int i = GetSize(id2ast->multirange_dimensions)/1; i < GetSize(children[0]->children); i++)
 			children.push_back(children[0]->children[i]->clone());
 
 		delete children[0];
@@ -1123,7 +1125,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 			if (left_at_zero_ast->type != AST_CONSTANT || right_at_zero_ast->type != AST_CONSTANT)
 				log_error("Unsupported expression on dynamic range select on signal `%s' at %s:%d!\n",
 						str.c_str(), filename.c_str(), linenum);
-			result_width = left_at_zero_ast->integer - right_at_zero_ast->integer + 1;
+			result_width = abs(int(left_at_zero_ast->integer - right_at_zero_ast->integer)) + 1;
 		}
 		did_something = true;
 		newNode = new AstNode(AST_CASE, shift_expr);
@@ -1365,12 +1367,14 @@ skip_dynamic_range_lvalue_expansion:;
 					log_error("Failed to evaluate system function `%s' with non-constant value at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
 
 				RTLIL::Const arg_value = buf->bitsAsConst();
+				if (arg_value.as_bool())
+					arg_value = const_sub(arg_value, 1, false, false, GetSize(arg_value));
 				delete buf;
 
 				uint32_t result = 0;
 				for (size_t i = 0; i < arg_value.bits.size(); i++)
 					if (arg_value.bits.at(i) == RTLIL::State::S1)
-						result = i;
+						result = i + 1;
 
 				newNode = mkconst_int(result, false);
 				goto apply_newNode;
@@ -1453,9 +1457,9 @@ skip_dynamic_range_lvalue_expansion:;
 				rtype = RTLIL::unescape_id(dpi_decl->children.at(0)->str);
 				fname = RTLIL::unescape_id(dpi_decl->children.at(1)->str);
 
-				for (int i = 2; i < SIZE(dpi_decl->children); i++)
+				for (int i = 2; i < GetSize(dpi_decl->children); i++)
 				{
-					if (i-2 >= SIZE(children))
+					if (i-2 >= GetSize(children))
 						log_error("Insufficient number of arguments in DPI function call at %s:%d.\n", filename.c_str(), linenum);
 
 					argtypes.push_back(RTLIL::unescape_id(dpi_decl->children.at(i)->str));
@@ -1478,6 +1482,44 @@ skip_dynamic_range_lvalue_expansion:;
 				log_error("Can't resolve function name `%s' at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
 		}
 		if (type == AST_TCALL) {
+			if (str == "\\$readmemh" || str == "\\$readmemb")
+			{
+				if (GetSize(children) < 2 || GetSize(children) > 4)
+					log_error("System function %s got %d arguments, expected 2-4 at %s:%d.\n",
+							RTLIL::unescape_id(str).c_str(), int(children.size()), filename.c_str(), linenum);
+
+				AstNode *node_filename = children[0]->clone();
+				while (node_filename->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
+				if (node_filename->type != AST_CONSTANT)
+					log_error("Failed to evaluate system function `%s' with non-constant 1st argument at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+
+				AstNode *node_memory = children[1]->clone();
+				while (node_memory->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
+				if (node_memory->type != AST_IDENTIFIER || node_memory->id2ast == nullptr || node_memory->id2ast->type != AST_MEMORY)
+					log_error("Failed to evaluate system function `%s' with non-memory 2nd argument at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+
+				int start_addr = -1, finish_addr = -1;
+
+				if (GetSize(children) > 2) {
+					AstNode *node_addr = children[2]->clone();
+					while (node_addr->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
+					if (node_addr->type != AST_CONSTANT)
+						log_error("Failed to evaluate system function `%s' with non-constant 3rd argument at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+					start_addr = node_addr->asInt(false);
+				}
+
+				if (GetSize(children) > 3) {
+					AstNode *node_addr = children[3]->clone();
+					while (node_addr->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
+					if (node_addr->type != AST_CONSTANT)
+						log_error("Failed to evaluate system function `%s' with non-constant 4th argument at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+					finish_addr = node_addr->asInt(false);
+				}
+
+				newNode = readmem(str == "\\$readmemh", node_filename->bitsAsConst().decode_string(), node_memory->id2ast, start_addr, finish_addr);
+				goto apply_newNode;
+			}
+
 			if (current_scope.count(str) == 0 || current_scope[str]->type != AST_TASK)
 				log_error("Can't resolve task name `%s' at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
 		}
@@ -1556,7 +1598,7 @@ skip_dynamic_range_lvalue_expansion:;
 				celltype = RTLIL::escape_id(celltype);
 
 			AstNode *cell = new AstNode(AST_CELL, new AstNode(AST_CELLTYPE));
-			cell->str = prefix.substr(0, SIZE(prefix)-1);
+			cell->str = prefix.substr(0, GetSize(prefix)-1);
 			cell->children[0]->str = celltype;
 
 			for (auto attr : decl->attributes)
@@ -1679,7 +1721,7 @@ skip_dynamic_range_lvalue_expansion:;
 						bool param_upto = current_scope[str]->range_valid && current_scope[str]->range_swapped;
 						int param_offset = current_scope[str]->range_valid ? current_scope[str]->range_right : 0;
 						int param_width = current_scope[str]->range_valid ? current_scope[str]->range_left - current_scope[str]->range_right + 1 :
-								SIZE(current_scope[str]->children[0]->bits);
+								GetSize(current_scope[str]->children[0]->bits);
 						int tmp_range_left = children[0]->range_left, tmp_range_right = children[0]->range_right;
 						if (param_upto) {
 							tmp_range_left = (param_width + 2*param_offset) - children[0]->range_right - 1;
@@ -1845,7 +1887,7 @@ skip_dynamic_range_lvalue_expansion:;
 			if (children[0]->type == AST_CONSTANT && children[0]->bits_only_01()) {
 				std::vector<AstNode*> new_children;
 				new_children.push_back(children[0]);
-				for (int i = 1; i < SIZE(children); i++) {
+				for (int i = 1; i < GetSize(children); i++) {
 					AstNode *child = children[i];
 					log_assert(child->type == AST_COND);
 					for (auto v : child->children) {
@@ -1855,7 +1897,7 @@ skip_dynamic_range_lvalue_expansion:;
 							continue;
 						if (v->type == AST_CONSTANT && v->bits_only_01()) {
 							if (v->bits == children[0]->bits) {
-								while (i+1 < SIZE(children))
+								while (i+1 < GetSize(children))
 									delete children[++i];
 								goto keep_const_cond;
 							}
@@ -1984,6 +2026,83 @@ static void replace_result_wire_name_in_function(AstNode *node, std::string &fro
 		replace_result_wire_name_in_function(it, from, to);
 	if (node->str == from)
 		node->str = to;
+}
+
+// replace a readmem[bh] TCALL ast node with a block of memory assignments
+AstNode *AstNode::readmem(bool is_readmemh, std::string mem_filename, AstNode *memory, int start_addr, int finish_addr)
+{
+	AstNode *block = new AstNode(AST_BLOCK);
+
+	std::ifstream f;
+	f.open(mem_filename.c_str());
+
+	if (f.fail())
+		log_error("Can not open file `%s` for %s at %s:%d.\n", mem_filename.c_str(), str.c_str(), filename.c_str(), linenum);
+
+	log_assert(GetSize(memory->children) == 2 && memory->children[1]->type == AST_RANGE && memory->children[1]->range_valid);
+	int range_left =  memory->children[1]->range_left, range_right =  memory->children[1]->range_right;
+	int range_min = std::min(range_left, range_right), range_max = std::max(range_left, range_right);
+
+	if (start_addr < 0)
+		start_addr = range_min;
+
+	if (finish_addr < 0)
+		finish_addr = range_max;
+
+	bool in_comment = false;
+	int increment = start_addr <= finish_addr ? +1 : -1;
+	int cursor = start_addr;
+
+	while (!f.eof())
+	{
+		std::string line, token;
+		std::getline(f, line);
+
+		for (int i = 0; i < GetSize(line); i++) {
+			if (in_comment && line.substr(i, 2) == "*/") {
+				line[i] = ' ';
+				line[i+1] = ' ';
+				in_comment = false;
+				continue;
+			}
+			if (!in_comment && line.substr(i, 2) == "/*")
+				in_comment = true;
+			if (in_comment)
+				line[i] = ' ';
+		}
+
+		while (1)
+		{
+			token = next_token(line, " \t\r\n");
+			if (token.empty() || token.substr(0, 2) == "//")
+				break;
+
+			if (token[0] == '@') {
+				token = token.substr(1);
+				const char *nptr = token.c_str();
+				char *endptr;
+				cursor = strtol(nptr, &endptr, 16);
+				if (!*nptr || *endptr)
+					log_error("Can not parse address `%s` for %s at %s:%d.\n", nptr, str.c_str(), filename.c_str(), linenum);
+				continue;
+			}
+
+			AstNode *value = VERILOG_FRONTEND::const2ast((is_readmemh ? "'h" : "'b") + token);
+
+			block->children.push_back(new AstNode(AST_ASSIGN_EQ, new AstNode(AST_IDENTIFIER, new AstNode(AST_RANGE, AstNode::mkconst_int(cursor, false))), value));
+			block->children.back()->children[0]->str = memory->str;
+			block->children.back()->children[0]->id2ast = memory;
+
+			if ((cursor == finish_addr) || (increment > 0 && cursor >= range_max) || (increment < 0 && cursor <= range_min))
+				break;
+			cursor += increment;
+		}
+
+		if ((cursor == finish_addr) || (increment > 0 && cursor >= range_max) || (increment < 0 && cursor <= range_min))
+			break;
+	}
+
+	return block;
 }
 
 // annotate the names of all wires and other named objects in a generate block
@@ -2177,14 +2296,25 @@ void AstNode::mem2reg_as_needed_pass1(std::map<AstNode*, std::set<std::string>> 
 	}
 }
 
+bool AstNode::mem2reg_check(std::set<AstNode*> &mem2reg_set)
+{
+	if (type != AST_IDENTIFIER || !id2ast || !mem2reg_set.count(id2ast))
+		return false;
+
+	if (children.empty() || children[0]->type != AST_RANGE || GetSize(children[0]->children) != 1)
+		log_error("Invalid array access at %s:%d.\n", filename.c_str(), linenum);
+
+	return true;
+}
+
 // actually replace memories with registers
 void AstNode::mem2reg_as_needed_pass2(std::set<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block)
 {
 	if (type == AST_BLOCK)
 		block = this;
 
-	if ((type == AST_ASSIGN_LE || type == AST_ASSIGN_EQ) && block != NULL && children[0]->id2ast &&
-			mem2reg_set.count(children[0]->id2ast) > 0 && children[0]->children[0]->children[0]->type != AST_CONSTANT)
+	if ((type == AST_ASSIGN_LE || type == AST_ASSIGN_EQ) && block != NULL &&
+			children[0]->mem2reg_check(mem2reg_set) && children[0]->children[0]->children[0]->type != AST_CONSTANT)
 	{
 		std::stringstream sstr;
 		sstr << "$mem2reg_wr$" << children[0]->str << "$" << filename << ":" << linenum << "$" << (autoidx++);
@@ -2240,7 +2370,7 @@ void AstNode::mem2reg_as_needed_pass2(std::set<AstNode*> &mem2reg_set, AstNode *
 		type = AST_ASSIGN_EQ;
 	}
 
-	if (type == AST_IDENTIFIER && id2ast && mem2reg_set.count(id2ast) > 0)
+	if (mem2reg_check(mem2reg_set))
 	{
 		AstNode *bit_part_sel = NULL;
 		if (children.size() == 2)
@@ -2444,7 +2574,7 @@ AstNode *AstNode::eval_const_function(AstNode *fcall)
 	}
 
 	log_assert(block != NULL);
-	log_assert(variables.count(str));
+	log_assert(variables.count(str) != 0);
 
 	while (!block->children.empty())
 	{

@@ -25,27 +25,27 @@
 #include <stdio.h>
 #include <set>
 
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
+
 using RTLIL::id2cstr;
 
-static CellTypes ct, ct_reg, ct_all;
-static int count_rm_cells, count_rm_wires;
+CellTypes ct, ct_reg, ct_all;
+int count_rm_cells, count_rm_wires;
 
-static void rmunused_module_cells(RTLIL::Module *module, bool verbose)
+void rmunused_module_cells(RTLIL::Module *module, bool verbose)
 {
-	SigMap assign_map(module);
+	SigMap sigmap(module);
 	std::set<RTLIL::Cell*, RTLIL::sort_by_name_id<RTLIL::Cell>> queue, unused;
 
 	SigSet<RTLIL::Cell*> wire2driver;
 	for (auto &it : module->cells_) {
 		RTLIL::Cell *cell = it.second;
 		for (auto &it2 : cell->connections()) {
-			if (!ct.cell_input(cell->type, it2.first)) {
-				RTLIL::SigSpec sig = it2.second;
-				assign_map.apply(sig);
-				wire2driver.insert(sig, cell);
-			}
+			if (!ct.cell_input(cell->type, it2.first))
+				wire2driver.insert(sigmap(it2.second), cell);
 		}
-		if (cell->type == "$memwr" || cell->type == "$assert" || cell->get_bool_attribute("\\keep"))
+		if (cell->type == "$memwr" || cell->type == "$assert" || cell->has_keep_attr())
 			queue.insert(cell);
 		unused.insert(cell);
 	}
@@ -54,15 +54,13 @@ static void rmunused_module_cells(RTLIL::Module *module, bool verbose)
 		RTLIL::Wire *wire = it.second;
 		if (wire->port_output || wire->get_bool_attribute("\\keep")) {
 			std::set<RTLIL::Cell*> cell_list;
-			RTLIL::SigSpec sig = RTLIL::SigSpec(wire);
-			assign_map.apply(sig);
-			wire2driver.find(sig, cell_list);
+			wire2driver.find(sigmap(wire), cell_list);
 			for (auto cell : cell_list)
 				queue.insert(cell);
 		}
 	}
 
-	while (queue.size() > 0)
+	while (!queue.empty())
 	{
 		std::set<RTLIL::Cell*, RTLIL::sort_by_name_id<RTLIL::Cell>> new_queue;
 		for (auto cell : queue)
@@ -71,12 +69,10 @@ static void rmunused_module_cells(RTLIL::Module *module, bool verbose)
 			for (auto &it : cell->connections()) {
 				if (!ct.cell_output(cell->type, it.first)) {
 					std::set<RTLIL::Cell*> cell_list;
-					RTLIL::SigSpec sig = it.second;
-					assign_map.apply(sig);
-					wire2driver.find(sig, cell_list);
-					for (auto cell : cell_list) {
-						if (unused.count(cell) > 0)
-							new_queue.insert(cell);
+					wire2driver.find(sigmap(it.second), cell_list);
+					for (auto c : cell_list) {
+						if (unused.count(c))
+							new_queue.insert(c);
 					}
 				}
 			}
@@ -93,7 +89,7 @@ static void rmunused_module_cells(RTLIL::Module *module, bool verbose)
 	}
 }
 
-static int count_nontrivial_wire_attrs(RTLIL::Wire *w)
+int count_nontrivial_wire_attrs(RTLIL::Wire *w)
 {
 	int count = w->attributes.size();
 	count -= w->attributes.count("\\src");
@@ -101,7 +97,7 @@ static int count_nontrivial_wire_attrs(RTLIL::Wire *w)
 	return count;
 }
 
-static bool compare_signals(RTLIL::SigBit &s1, RTLIL::SigBit &s2, SigPool &regs, SigPool &conns, std::set<RTLIL::Wire*> &direct_wires)
+bool compare_signals(RTLIL::SigBit &s1, RTLIL::SigBit &s2, SigPool &regs, SigPool &conns, std::set<RTLIL::Wire*> &direct_wires)
 {
 	RTLIL::Wire *w1 = s1.wire;
 	RTLIL::Wire *w2 = s2.wire;
@@ -116,7 +112,7 @@ static bool compare_signals(RTLIL::SigBit &s1, RTLIL::SigBit &s2, SigPool &regs,
 		if (regs.check_any(s1) != regs.check_any(s2))
 			return regs.check_any(s2);
 		if (direct_wires.count(w1) != direct_wires.count(w2))
-			return direct_wires.count(w2);
+			return direct_wires.count(w2) != 0;
 		if (conns.check_any(s1) != conns.check_any(s2))
 			return conns.check_any(s2);
 	}
@@ -136,7 +132,7 @@ static bool compare_signals(RTLIL::SigBit &s1, RTLIL::SigBit &s2, SigPool &regs,
 	return w2->name < w1->name;
 }
 
-static bool check_public_name(RTLIL::IdString id)
+bool check_public_name(RTLIL::IdString id)
 {
 	const std::string &id_str = id.str();
 	if (id_str[0] == '$')
@@ -148,7 +144,7 @@ static bool check_public_name(RTLIL::IdString id)
 	return true;
 }
 
-static void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool verbose)
+void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool verbose)
 {
 	SigPool register_signals;
 	SigPool connected_signals;
@@ -226,9 +222,9 @@ static void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool
 			if (!used_signals.check_any(s2) && wire->port_id == 0 && !wire->get_bool_attribute("\\keep")) {
 				maybe_del_wires.push_back(wire);
 			} else {
-				log_assert(SIZE(s1) == SIZE(s2));
+				log_assert(GetSize(s1) == GetSize(s2));
 				RTLIL::SigSig new_conn;
-				for (int i = 0; i < SIZE(s1); i++)
+				for (int i = 0; i < GetSize(s1); i++)
 					if (s1[i] != s2[i]) {
 						new_conn.first.append_bit(s1[i]);
 						new_conn.second.append_bit(s2[i]);
@@ -247,7 +243,7 @@ static void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool
 		RTLIL::SigSpec sig = assign_map(RTLIL::SigSpec(wire));
 		if (!used_signals_nodrivers.check_any(sig)) {
 			std::string unused_bits;
-			for (int i = 0; i < SIZE(sig); i++) {
+			for (int i = 0; i < GetSize(sig); i++) {
 				if (sig[i].wire == NULL)
 					continue;
 				if (!used_signals_nodrivers.check(sig[i])) {
@@ -285,10 +281,23 @@ static void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool
 		log("  removed %d unused temporary wires.\n", del_wires_count);
 }
 
-static void rmunused_module(RTLIL::Module *module, bool purge_mode, bool verbose)
+void rmunused_module(RTLIL::Module *module, bool purge_mode, bool verbose)
 {
 	if (verbose)
 		log("Finding unused cells or wires in module %s..\n", module->name.c_str());
+
+	std::vector<RTLIL::Cell*> delcells;
+	for (auto cell : module->cells())
+		if (cell->type.in("$pos", "$_BUF_")) {
+			bool is_signed = cell->type == "$pos" && cell->getParam("\\A_SIGNED").as_bool();
+			RTLIL::SigSpec a = cell->getPort("\\A");
+			RTLIL::SigSpec y = cell->getPort("\\Y");
+			a.extend_u0(GetSize(y), is_signed);
+			module->connect(y, a);
+			delcells.push_back(cell);
+		}
+	for (auto cell : delcells)
+		module->remove(cell);
 
 	rmunused_module_cells(module, verbose);
 	rmunused_module_signals(module, purge_mode, verbose);
@@ -419,3 +428,4 @@ struct CleanPass : public Pass {
 	}
 } CleanPass;
  
+PRIVATE_NAMESPACE_END

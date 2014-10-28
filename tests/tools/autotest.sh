@@ -105,6 +105,9 @@ do
 
 	body() {
 		cd ${bn}.out
+		fn=$(basename $fn)
+		bn=$(basename $bn)
+
 		cp ../$fn $fn
 		if [ ! -f ../${bn}_tb.v ]; then
 			"$toolsdir"/../../yosys -b "test_autotb $autotb_opts" -o ${bn}_tb.v $fn
@@ -142,8 +145,8 @@ do
 		elif [ "$frontend" = "verific_gates" ]; then
 			test_passes -p "verific -vlog2k $fn; verific -import -gates -all; opt; memory;;"
 		else
-			test_passes -f "$frontend" -p "hierarchy; proc; opt_const; opt_share;; wreduce;; share;; opt; memory -nomap;; fsm; opt" $fn
-			test_passes -f "$frontend" -p "hierarchy; proc; opt; memory; opt; fsm; opt -fine; techmap; opt; abc -dff; opt" $fn
+			test_passes -f "$frontend" -p "hierarchy; proc; opt; memory; opt; fsm; opt -fine" $fn
+			test_passes -f "$frontend" -p "hierarchy; synth -run coarse; techmap; opt; abc -dff" $fn
 		fi
 		touch ../${bn}.log
 	}

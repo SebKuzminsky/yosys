@@ -12,8 +12,15 @@
 /Makefile.conf
 /abc
 /yosys
+/yosys.exe
+/yosys.html
 /yosys-abc
+/yosys-abc.exe
 /yosys-config
 /yosys-filterlib
+/yosys-filterlib.exe
+/yosys-filterlib.html
 /kernel/version_*.cc
 /share
+/yosys-win32-mxebin-*
+/yosys-win32-vcxsrc-*

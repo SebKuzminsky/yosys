@@ -32,7 +32,12 @@
 
 #include <sstream>
 #include <stdarg.h>
-#include <math.h>
+
+#if defined(__APPLE__)
+#  include <cmath>
+#else
+#  include <math.h>
+#endif
 
 YOSYS_NAMESPACE_BEGIN
 
@@ -267,7 +272,7 @@ void AstNode::dumpAst(FILE *f, std::string indent)
 					bits[i-1] == RTLIL::S1 ? '1' :
 					bits[i-1] == RTLIL::Sx ? 'x' :
 					bits[i-1] == RTLIL::Sz ? 'z' : '?');
-		fprintf(f, "'(%zd)", bits.size());
+		fprintf(f, "'(%d)", GetSize(bits));
 	}
 	if (is_input)
 		fprintf(f, " input");
@@ -471,7 +476,7 @@ void AstNode::dumpVlog(FILE *f, std::string indent)
 		else if (bits.size() == 32)
 			fprintf(f, "%d", RTLIL::Const(bits).as_int());
 		else
-			fprintf(f, "%zd'b %s", bits.size(), RTLIL::Const(bits).as_string().c_str());
+			fprintf(f, "%d'b %s", GetSize(bits), RTLIL::Const(bits).as_string().c_str());
 		break;
 
 	case AST_REALVALUE:
@@ -701,6 +706,8 @@ AstNode *AstNode::mkconst_bits(const std::vector<RTLIL::State> &v, bool is_signe
 AstNode *AstNode::mkconst_str(const std::vector<RTLIL::State> &v)
 {
 	AstNode *node = mkconst_str(RTLIL::Const(v).decode_string());
+	while (GetSize(node->bits) < GetSize(v))
+		node->bits.push_back(RTLIL::State::S0);
 	log_assert(node->bits == v);
 	return node;
 }

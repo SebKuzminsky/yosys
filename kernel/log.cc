@@ -21,7 +21,10 @@
 #include "libs/sha1/sha1.h"
 #include "backends/ilang/ilang_backend.h"
 
-#include <sys/time.h>
+#if !defined(_WIN32) || defined(__MINGW32__)
+#  include <sys/time.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -48,6 +51,26 @@ static struct timeval initial_tv = { 0, 0 };
 static bool next_print_log = false;
 static int log_newline_count = 0;
 
+#if defined(_WIN32) && !defined(__MINGW32__)
+// this will get time information and return it in timeval, simulating gettimeofday()
+int gettimeofday(struct timeval *tv, struct timezone *tz)
+{
+	LARGE_INTEGER counter;
+	LARGE_INTEGER freq;
+
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&counter);
+
+	counter.QuadPart *= 1000000;
+	counter.QuadPart /= freq.QuadPart;
+
+	tv->tv_sec = long(counter.QuadPart / 1000000);
+	tv->tv_usec = counter.QuadPart % 1000000;
+
+	return 0;
+}
+#endif
+
 void logv(const char *format, va_list ap)
 {
 	while (format[0] == '\n' && format[1] != 0) {
@@ -62,9 +85,9 @@ void logv(const char *format, va_list ap)
 
 	size_t nnl_pos = str.find_last_not_of('\n');
 	if (nnl_pos == std::string::npos)
-		log_newline_count += SIZE(str);
+		log_newline_count += GetSize(str);
 	else
-		log_newline_count = SIZE(str) - nnl_pos - 1;
+		log_newline_count = GetSize(str) - nnl_pos - 1;
 
 	if (log_hasher)
 		log_hasher->update(str);

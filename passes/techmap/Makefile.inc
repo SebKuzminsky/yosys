@@ -8,6 +8,8 @@ ifneq ($(SMALL),1)
 OBJS += passes/techmap/iopadmap.o
 OBJS += passes/techmap/hilomap.o
 OBJS += passes/techmap/extract.o
+OBJS += passes/techmap/maccmap.o
+OBJS += passes/techmap/alumacc.o
 endif
 
 GENFILES += passes/techmap/techmap.inc
@@ -21,9 +23,9 @@ passes/techmap/techmap.inc: techlibs/common/techmap.v
 
 passes/techmap/techmap.o: passes/techmap/techmap.inc
 
-TARGETS += yosys-filterlib
-GENFILES += passes/techmap/filterlib.o
+TARGETS += yosys-filterlib$(EXE)
+EXTRA_OBJS += passes/techmap/filterlib.o
 
-yosys-filterlib: passes/techmap/filterlib.o
-	$(P) $(CXX) -o yosys-filterlib $(LDFLAGS) $^ $(LDLIBS)
+yosys-filterlib$(EXE): passes/techmap/filterlib.o
+	$(P) $(CXX) -o yosys-filterlib$(EXE) $(LDFLAGS) $^ $(LDLIBS)
 

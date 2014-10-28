@@ -21,11 +21,17 @@
 #include "kernel/celltypes.h"
 #include "kernel/log.h"
 #include <string.h>
-#include <dirent.h>
+
+#ifndef _WIN32
+#  include <dirent.h>
+#endif
 
 #ifdef YOSYS_ENABLE_READLINE
 #  include <readline/readline.h>
 #endif
+
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
 
 using RTLIL::id2cstr;
 
@@ -69,7 +75,7 @@ struct ShowWorker
 	{
 		if (currentColor == 0)
 			return "color=\"black\"";
-		return stringf("colorscheme=\"dark28\", color=\"%d\", fontcolor=\"%d\"", currentColor%8+1);
+		return stringf("colorscheme=\"dark28\", color=\"%d\", fontcolor=\"%d\"", currentColor%8+1, currentColor%8+1);
 	}
 
 	std::string nextColor(std::string presetColor)
@@ -175,7 +181,7 @@ struct ShowWorker
 
 	std::string gen_signode_simple(RTLIL::SigSpec sig, bool range_check = true)
 	{
-		if (SIZE(sig) == 0) {
+		if (GetSize(sig) == 0) {
 			fprintf(f, "v%d [ label=\"\" ];\n", single_idx_count);
 			return stringf("v%d", single_idx_count++);
 		}
@@ -354,6 +360,9 @@ struct ShowWorker
 				else
 					out_ports.push_back(conn.first);
 			}
+
+			std::sort(in_ports.begin(), in_ports.end(), RTLIL::sort_by_id_str());
+			std::sort(out_ports.begin(), out_ports.end(), RTLIL::sort_by_id_str());
 
 			std::string label_string = "{{";
 
@@ -754,20 +763,20 @@ struct ShowPass : public Pass {
 		if (format != "dot" && !format.empty()) {
 			std::string cmd = stringf("dot -T%s -o '%s' '%s'", format.c_str(), out_file.c_str(), dot_file.c_str());
 			log("Exec: %s\n", cmd.c_str());
-			if (system(cmd.c_str()) != 0)
+			if (run_command(cmd) != 0)
 				log_cmd_error("Shell command failed!\n");
 		}
 
 		if (!viewer_exe.empty()) {
 			std::string cmd = stringf("%s '%s' &", viewer_exe.c_str(), out_file.c_str());
 			log("Exec: %s\n", cmd.c_str());
-			if (system(cmd.c_str()) != 0)
+			if (run_command(cmd) != 0)
 				log_cmd_error("Shell command failed!\n");
 		} else
 		if (format.empty()) {
 			std::string cmd = stringf("fuser -s '%s' || xdot '%s' < '%s' &", dot_file.c_str(), dot_file.c_str(), dot_file.c_str());
 			log("Exec: %s\n", cmd.c_str());
-			if (system(cmd.c_str()) != 0)
+			if (run_command(cmd) != 0)
 				log_cmd_error("Shell command failed!\n");
 		}
 
@@ -792,3 +801,4 @@ struct ShowPass : public Pass {
 	}
 } ShowPass;
  
+PRIVATE_NAMESPACE_END

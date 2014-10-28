@@ -3,6 +3,7 @@ CONFIG := clang
 # CONFIG := gcc
 # CONFIG := gcc-4.6
 # CONFIG := emcc
+# CONFIG := mxe
 
 # features (the more the better)
 ENABLE_TCL := 1
@@ -17,10 +18,12 @@ ENABLE_GPROF := 0
 DESTDIR := /usr/local
 INSTALL_SUDO :=
 
+EXE =
 OBJS =
 GENFILES =
+EXTRA_OBJS =
 EXTRA_TARGETS =
-TARGETS = yosys yosys-config
+TARGETS = yosys$(EXE) yosys-config
 
 PRETTY = 1
 SMALL = 0
@@ -44,7 +47,7 @@ else
 	LDLIBS += -lrt
 endif
 
-YOSYS_VER := 0.3.0+
+YOSYS_VER := 0.3.0+$(shell test -d .git && { git log --author=clifford@clifford.at --oneline ca125bf41.. | wc -l; })
 GIT_REV := $(shell git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
 OBJS = kernel/version_$(GIT_REV).o
 
@@ -54,8 +57,9 @@ OBJS = kernel/version_$(GIT_REV).o
 # is just a symlink to your actual ABC working directory, as 'make mrproper'
 # will remove the 'abc' directory and you do not want to accidentally
 # delete your work on ABC..
-ABCREV = 4d547a5e065b
+ABCREV = 930a4de962a1
 ABCPULL = 1
+ABCMKARGS = # CC="$(CXX)" CXX="$(CXX)"
 
 define newline
 
@@ -83,6 +87,17 @@ else ifeq ($(CONFIG),emcc)
 CXX = emcc
 CXXFLAGS += -std=c++11 -Os -Wno-warn-absolute-paths
 CXXFLAGS := $(filter-out -ggdb,$(CXXFLAGS))
+EXE = .html
+
+else ifeq ($(CONFIG),mxe)
+CXX = /usr/local/src/mxe/usr/bin/i686-pc-mingw32-gcc
+CXXFLAGS += -std=gnu++0x -Os -D_POSIX_SOURCE
+CXXFLAGS := $(filter-out -fPIC,$(CXXFLAGS))
+LDFLAGS := $(filter-out -rdynamic,$(LDFLAGS)) -s
+LDLIBS := $(filter-out -lrt,$(LDLIBS))
+ABCMKARGS += ARCHFLAGS="-DSIZEOF_VOID_P=4 -DSIZEOF_LONG=4 -DSIZEOF_INT=4 -DWIN32_NO_DLL -x c++ -fpermissive -w"
+ABCMKARGS += LIBS="lib/x86/pthreadVC2.lib -s" READLINE=0 CC="$(CXX)" CXX="$(CXX)"
+EXE = .exe
 
 else ifneq ($(CONFIG),none)
 $(error Invalid CONFIG setting '$(CONFIG)'. Valid values: clang, gcc, gcc-4.6, emcc, none)
@@ -91,11 +106,14 @@ endif
 ifeq ($(ENABLE_READLINE),1)
 CXXFLAGS += -DYOSYS_ENABLE_READLINE
 LDLIBS += -lreadline
+ifeq ($(CONFIG),mxe)
+LDLIBS += -lpdcurses
+endif
 endif
 
 ifeq ($(ENABLE_PLUGINS),1)
-CXXFLAGS += -DYOSYS_ENABLE_PLUGINS
-LDLIBS += -lffi -ldl
+CXXFLAGS += -DYOSYS_ENABLE_PLUGINS $(shell pkg-config --silence-errors --cflags libffi)
+LDLIBS += $(shell pkg-config --silence-errors --libs libffi || echo -lffi) -ldl
 endif
 
 ifeq ($(ENABLE_TCL),1)
@@ -111,7 +129,8 @@ LDFLAGS += -pg
 endif
 
 ifeq ($(ENABLE_ABC),1)
-TARGETS += yosys-abc
+CXXFLAGS += -DYOSYS_ENABLE_ABC
+TARGETS += yosys-abc$(EXE)
 endif
 
 ifeq ($(ENABLE_VERIFIC),1)
@@ -124,8 +143,8 @@ endif
 ifeq ($(PRETTY), 1)
 P_STATUS = 0
 P_OFFSET = 0
-P_UPDATE = $(eval P_STATUS=$(shell echo $(OBJS) yosys | gawk 'BEGIN { RS = " "; I = $(P_STATUS)+0; } $$1 == "$@" && NR > I { I = NR; } END { print I; }'))
-P_SHOW = [$(shell gawk "BEGIN { N=$(words $(OBJS) yosys); printf \"%3d\", $(P_OFFSET)+90*$(P_STATUS)/N; exit; }")%]
+P_UPDATE = $(eval P_STATUS=$(shell echo $(OBJS) yosys$(EXE) | gawk 'BEGIN { RS = " "; I = $(P_STATUS)+0; } $$1 == "$@" && NR > I { I = NR; } END { print I; }'))
+P_SHOW = [$(shell gawk "BEGIN { N=$(words $(OBJS) yosys$(EXE)); printf \"%3d\", $(P_OFFSET)+90*$(P_STATUS)/N; exit; }")%]
 P = @echo "$(if $(findstring $@,$(TARGETS) $(EXTRA_TARGETS)),$(eval P_OFFSET = 10))$(call P_UPDATE)$(call P_SHOW) Building $@";
 Q = @
 S = -s
@@ -191,8 +210,8 @@ top-all: $(TARGETS) $(EXTRA_TARGETS)
 	@echo "  Build successful."
 	@echo ""
 
-yosys: $(OBJS)
-	$(P) $(CXX) -o yosys $(LDFLAGS) $(OBJS) $(LDLIBS)
+yosys$(EXE): $(OBJS)
+	$(P) $(CXX) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
 
 %.o: %.cc
 	$(P) $(CXX) -o $@ -c $(CXXFLAGS) $<
@@ -202,15 +221,15 @@ yosys: $(OBJS)
 
 kernel/version_$(GIT_REV).cc: Makefile
 	$(P) rm -f kernel/version_*.o kernel/version_*.d kernel/version_*.cc
-	$(Q) echo "extern const char *yosys_version_str; const char *yosys_version_str=\"Yosys $(YOSYS_VER) (git sha1 $(GIT_REV), $(CXX) ` \
-			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\";" > kernel/version_$(GIT_REV).cc
+	$(Q) echo "namespace Yosys { extern const char *yosys_version_str; const char *yosys_version_str=\"Yosys $(YOSYS_VER) (git sha1 $(GIT_REV), $(notdir $(CXX)) ` \
+			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\"; }" > kernel/version_$(GIT_REV).cc
 
-yosys-config: yosys-config.in
+yosys-config: misc/yosys-config.in
 	$(P) $(SED) -e 's,@CXX@,$(CXX),;' -e 's,@CXXFLAGS@,$(CXXFLAGS),;' -e 's,@LDFLAGS@,$(LDFLAGS),;' -e 's,@LDLIBS@,$(LDLIBS),;' \
-			-e 's,@BINDIR@,$(DESTDIR)/bin,;' -e 's,@DATDIR@,$(DESTDIR)/share/yosys,;' < yosys-config.in > yosys-config
+			-e 's,@BINDIR@,$(DESTDIR)/bin,;' -e 's,@DATDIR@,$(DESTDIR)/share/yosys,;' < misc/yosys-config.in > yosys-config
 	$(Q) chmod +x yosys-config
 
-abc/abc-$(ABCREV):
+abc/abc-$(ABCREV)$(EXE):
 	$(P)
 ifneq ($(ABCREV),default)
 	$(Q) if ( cd abc 2> /dev/null && hg identify; ) | grep -q +; then \
@@ -224,14 +243,14 @@ ifneq ($(ABCREV),default)
 	fi
 endif
 	$(Q) rm -f abc/abc-[0-9a-f]*
-	$(Q) cd abc && $(MAKE) $(S) PROG="abc-$(ABCREV)" MSG_PREFIX="$(eval P_OFFSET = 5)$(call P_SHOW)$(eval P_OFFSET = 10) ABC: "
+	$(Q) cd abc && $(MAKE) $(S) $(ABCMKARGS) PROG="abc-$(ABCREV)$(EXE)" MSG_PREFIX="$(eval P_OFFSET = 5)$(call P_SHOW)$(eval P_OFFSET = 10) ABC: "
 
 ifeq ($(ABCREV),default)
-.PHONY: abc/abc-$(ABCREV)
+.PHONY: abc/abc-$(ABCREV)$(EXE)
 endif
 
-yosys-abc: abc/abc-$(ABCREV)
-	$(P) cp abc/abc-$(ABCREV) yosys-abc
+yosys-abc$(EXE): abc/abc-$(ABCREV)$(EXE)
+	$(P) cp abc/abc-$(ABCREV)$(EXE) yosys-abc$(EXE)
 
 test: $(TARGETS) $(EXTRA_TARGETS)
 	+cd tests/simple && bash run-test.sh
@@ -276,13 +295,13 @@ manual: $(TARGETS) $(EXTRA_TARGETS)
 clean:
 	rm -rf share
 	cd manual && bash clean.sh
-	rm -f $(OBJS) $(GENFILES) $(TARGETS) $(EXTRA_TARGETS)
+	rm -f $(OBJS) $(GENFILES) $(TARGETS) $(EXTRA_TARGETS) $(EXTRA_OBJS)
 	rm -f kernel/version_*.o kernel/version_*.cc abc/abc-[0-9a-f]*
 	rm -f libs/*/*.d frontends/*/*.d passes/*/*.d backends/*/*.d kernel/*.d techlibs/*/*.d
 
 clean-abc:
-	make -C abc clean
-	rm -f yosys-abc abc/abc-[0-9a-f]*
+	$(MAKE) -C abc clean
+	rm -f yosys-abc$(EXE) abc/abc-[0-9a-f]*
 
 mrproper: clean
 	git clean -xdf
@@ -293,6 +312,26 @@ qtcreator:
 	done; find backends frontends kernel libs passes -type f \( -name '*.h' -o -name '*.hh' \); } > qtcreator.files
 	{ echo .; find backends frontends kernel libs passes -type f \( -name '*.h' -o -name '*.hh' \) -printf '%h\n' | sort -u; } > qtcreator.includes
 	touch qtcreator.config qtcreator.creator
+
+ifeq ($(CONFIG),mxe)
+dist: $(TARGETS) $(EXTRA_TARGETS)
+	rm -rf yosys-win32-{mxebin,vcxsrc}-$(YOSYS_VER){,.zip}
+	mkdir -p yosys-win32-mxebin-$(YOSYS_VER)
+	cp -r yosys.exe share/ yosys-win32-mxebin-$(YOSYS_VER)/
+ifeq ($(ENABLE_ABC),1)
+	cp -r yosys-abc.exe abc/lib/x86/pthreadVC2.dll yosys-win32-mxebin-$(YOSYS_VER)/
+endif
+	echo -en 'This is Yosys $(YOSYS_VER) for Win32.\r\n' > yosys-win32-mxebin-$(YOSYS_VER)/readme.txt
+	echo -en 'Documentation at http://www.clifford.at/yosys/.\r\n' >> yosys-win32-mxebin-$(YOSYS_VER)/readme.txt
+	sed -e 's,^[^ ]*:,,; s, ,\n,g; s, *\\,,; s,/[^/]*/\.\./,/,g; s,'"$$PWD/"',,' \
+			$(addsuffix .d,$(basename $(OBJS))) | sort -u | grep '^[^/]' | grep -v kernel/version_ > srcfiles.txt
+	bash misc/create_vcxsrc.sh yosys-win32-vcxsrc $(YOSYS_VER) $(GIT_REV)
+	echo "namespace Yosys { extern const char *yosys_version_str; const char *yosys_version_str=\"Yosys (Version Information Unavailable)\"; }" > kernel/version.cc
+	zip yosys-win32-vcxsrc-$(YOSYS_VER)/genfiles.zip $(GENFILES) kernel/version.cc
+	zip -r yosys-win32-mxebin-$(YOSYS_VER).zip yosys-win32-mxebin-$(YOSYS_VER)/
+	zip -r yosys-win32-vcxsrc-$(YOSYS_VER).zip yosys-win32-vcxsrc-$(YOSYS_VER)/
+	rm -f srcfiles.txt kernel/version.cc
+endif
 
 config-clean: clean
 	rm -f Makefile.conf
@@ -310,6 +349,12 @@ config-emcc: clean
 	echo 'CONFIG := emcc' > Makefile.conf
 	echo 'ENABLE_TCL := 0' >> Makefile.conf
 	echo 'ENABLE_ABC := 0' >> Makefile.conf
+	echo 'ENABLE_PLUGINS := 0' >> Makefile.conf
+	echo 'ENABLE_READLINE := 0' >> Makefile.conf
+
+config-mxe: clean
+	echo 'CONFIG := mxe' > Makefile.conf
+	echo 'ENABLE_TCL := 0' >> Makefile.conf
 	echo 'ENABLE_PLUGINS := 0' >> Makefile.conf
 	echo 'ENABLE_READLINE := 0' >> Makefile.conf
 

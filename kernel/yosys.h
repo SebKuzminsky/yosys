@@ -32,6 +32,8 @@
 //
 // This header is very boring. It just defines some general things that
 // belong nowhere else and includes the interesting headers.
+//
+// Find more information in the "CodingReadme" file.
 
 
 #ifndef YOSYS_H
@@ -54,22 +56,50 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdio.h>
+
+#ifndef _YOSYS_
+#  error It looks like you are trying to build Yosys without the config defines set. \
+         When building Yosys with a custom make system, make sure you set all the \
+         defines the Yosys Makefile would set for your build configuration.
+#endif
+
+#ifdef YOSYS_ENABLE_TCL
+#  include <tcl.h>
+#endif
+
+#ifdef _WIN32
+#  undef NOMINMAX
+#  define NOMINMAX 1
+#  undef YY_NO_UNISTD_H
+#  define YY_NO_UNISTD_H 1
+
+#  include <windows.h>
+#  include <io.h>
+#  include <direct.h>
+
+#  define strtok_r strtok_s
+#  define strdup _strdup
+#  define snprintf _snprintf
+#  define getcwd _getcwd
+#  define mkdir _mkdir
+#  define popen _popen
+#  define pclose _pclose
+#  define PATH_MAX MAX_PATH
+
+#  ifndef __MINGW32__
+#    define isatty _isatty
+#    define fileno _fileno
+#  endif
+#endif
 
 #define PRIVATE_NAMESPACE_BEGIN  namespace {
 #define PRIVATE_NAMESPACE_END    }
-
-#if 0
-#  define YOSYS_NAMESPACE_BEGIN  namespace Yosys {
-#  define YOSYS_NAMESPACE_END    }
-#  define YOSYS_NAMESPACE_PREFIX Yosys::
-#  define USING_YOSYS_NAMESPACE  using namespace Yosys;
-#else
-#  define YOSYS_NAMESPACE_BEGIN
-#  define YOSYS_NAMESPACE_END
-#  define YOSYS_NAMESPACE_PREFIX
-#  define USING_YOSYS_NAMESPACE
-#endif
+#define YOSYS_NAMESPACE_BEGIN    namespace Yosys {
+#define YOSYS_NAMESPACE_END      }
+#define YOSYS_NAMESPACE_PREFIX   Yosys::
+#define USING_YOSYS_NAMESPACE    using namespace Yosys;
 
 #if __cplusplus >= 201103L
 #  define OVERRIDE override
@@ -77,6 +107,13 @@
 #else
 #  define OVERRIDE
 #  define FINAL
+#endif
+
+#if !defined(__GNUC__) && !defined(__clang__)
+#  define __attribute__(...)
+#  define _NORETURN_ __declspec(noreturn)
+#else
+#  define _NORETURN_
 #endif
 
 YOSYS_NAMESPACE_BEGIN
@@ -88,10 +125,19 @@ namespace RTLIL {
 	struct Cell;
 }
 
-std::string stringf(const char *fmt, ...);
+std::string stringf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 std::string vstringf(const char *fmt, va_list ap);
-template<typename T> int SIZE(const T &obj) { return obj.size(); }
-int SIZE(RTLIL::Wire *wire);
+int readsome(std::istream &f, char *s, int n);
+std::string next_token(std::string &text, const char *sep);
+bool patmatch(const char *pattern, const char *string);
+int run_command(const std::string &command, std::function<void(const std::string&)> process_line = std::function<void(const std::string&)>());
+std::string make_temp_file(std::string template_str = "/tmp/yosys_XXXXXX");
+std::string make_temp_dir(std::string template_str = "/tmp/yosys_XXXXXX");
+bool check_file_exists(std::string filename, bool is_exec = false);
+void remove_directory(std::string dirname);
+
+template<typename T> int GetSize(const T &obj) { return obj.size(); }
+int GetSize(RTLIL::Wire *wire);
 
 YOSYS_NAMESPACE_END
 
@@ -105,7 +151,6 @@ void yosys_setup();
 void yosys_shutdown();
 
 #ifdef YOSYS_ENABLE_TCL
-#include <tcl.h>
 Tcl_Interp *yosys_get_tcl_interp();
 #endif
 

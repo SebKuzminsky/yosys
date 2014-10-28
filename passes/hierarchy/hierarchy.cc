@@ -17,23 +17,26 @@
  *
  */
 
-#include "kernel/register.h"
-#include "kernel/log.h"
+#include "kernel/yosys.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <fnmatch.h>
 #include <set>
-#include <unistd.h>
 
-namespace {
-	struct generate_port_decl_t {
-		bool input, output;
-		RTLIL::IdString portname;
-		int index;
-	};
-}
+#ifndef _WIN32
+#  include <unistd.h>
+#endif
 
-static void generate(RTLIL::Design *design, const std::vector<std::string> &celltypes, const std::vector<generate_port_decl_t> &portdecls)
+
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
+
+struct generate_port_decl_t {
+	bool input, output;
+	RTLIL::IdString portname;
+	int index;
+};
+
+void generate(RTLIL::Design *design, const std::vector<std::string> &celltypes, const std::vector<generate_port_decl_t> &portdecls)
 {
 	std::set<RTLIL::IdString> found_celltypes;
 
@@ -46,7 +49,7 @@ static void generate(RTLIL::Design *design, const std::vector<std::string> &cell
 		if (cell->type.substr(0, 1) == "$" && cell->type.substr(0, 3) != "$__")
 			continue;
 		for (auto &pattern : celltypes)
-			if (!fnmatch(pattern.c_str(), RTLIL::unescape_id(cell->type).c_str(), FNM_NOESCAPE))
+			if (patmatch(pattern.c_str(), RTLIL::unescape_id(cell->type).c_str()))
 				found_celltypes.insert(cell->type);
 	}
 
@@ -96,7 +99,7 @@ static void generate(RTLIL::Design *design, const std::vector<std::string> &cell
 		while (portnames.size() > 0) {
 			RTLIL::IdString portname = *portnames.begin();
 			for (auto &decl : portdecls)
-				if (decl.index == 0 && !fnmatch(decl.portname.c_str(), RTLIL::unescape_id(portname).c_str(), FNM_NOESCAPE)) {
+				if (decl.index == 0 && patmatch(decl.portname.c_str(), RTLIL::unescape_id(portname).c_str())) {
 					generate_port_decl_t d = decl;
 					d.portname = portname;
 					d.index = *indices.begin();
@@ -135,7 +138,7 @@ static void generate(RTLIL::Design *design, const std::vector<std::string> &cell
 	}
 }
 
-static bool expand_module(RTLIL::Design *design, RTLIL::Module *module, bool flag_check, std::vector<std::string> &libdirs)
+bool expand_module(RTLIL::Design *design, RTLIL::Module *module, bool flag_check, std::vector<std::string> &libdirs)
 {
 	bool did_something = false;
 	std::map<RTLIL::Cell*, std::pair<int, int>> array_cells;
@@ -171,7 +174,7 @@ static bool expand_module(RTLIL::Design *design, RTLIL::Module *module, bool fla
 			for (auto &dir : libdirs)
 			{
 				filename = dir + "/" + RTLIL::unescape_id(cell->type) + ".v";
-				if (access(filename.c_str(), F_OK) == 0) {
+				if (check_file_exists(filename)) {
 					std::vector<std::string> args;
 					args.push_back(filename);
 					Frontend::frontend_call(design, NULL, filename, "verilog");
@@ -179,7 +182,7 @@ static bool expand_module(RTLIL::Design *design, RTLIL::Module *module, bool fla
 				}
 
 				filename = dir + "/" + RTLIL::unescape_id(cell->type) + ".il";
-				if (access(filename.c_str(), F_OK) == 0) {
+				if (check_file_exists(filename)) {
 					std::vector<std::string> args;
 					args.push_back(filename);
 					Frontend::frontend_call(design, NULL, filename, "ilang");
@@ -245,7 +248,7 @@ static bool expand_module(RTLIL::Design *design, RTLIL::Module *module, bool fla
 	return did_something;
 }
 
-static void hierarchy_worker(RTLIL::Design *design, std::set<RTLIL::Module*> &used, RTLIL::Module *mod, int indent)
+void hierarchy_worker(RTLIL::Design *design, std::set<RTLIL::Module*> &used, RTLIL::Module *mod, int indent)
 {
 	if (used.count(mod) > 0)
 		return;
@@ -262,7 +265,7 @@ static void hierarchy_worker(RTLIL::Design *design, std::set<RTLIL::Module*> &us
 	}
 }
 
-static void hierarchy(RTLIL::Design *design, RTLIL::Module *top, bool purge_lib, bool first_pass)
+void hierarchy(RTLIL::Design *design, RTLIL::Module *top, bool purge_lib, bool first_pass)
 {
 	std::set<RTLIL::Module*> used;
 	hierarchy_worker(design, used, top, 0);
@@ -282,7 +285,18 @@ static void hierarchy(RTLIL::Design *design, RTLIL::Module *top, bool purge_lib,
 		delete mod;
 	}
 
-	log("Removed %zd unused modules.\n", del_modules.size());
+	log("Removed %d unused modules.\n", GetSize(del_modules));
+}
+
+bool set_keep_assert(std::map<RTLIL::Module*, bool> &cache, RTLIL::Module *mod)
+{
+	if (cache.count(mod) == 0)
+		for (auto c : mod->cells()) {
+			RTLIL::Module *m = mod->design->module(c->type);
+			if ((m != nullptr && set_keep_assert(cache, m)) || c->type == "$assert")
+				return cache[mod] = true;
+		}
+	return cache[mod];
 }
 
 struct HierarchyPass : public Pass {
@@ -315,6 +329,11 @@ struct HierarchyPass : public Pass {
 		log("    -keep_positionals\n");
 		log("        per default this pass also converts positional arguments in cells\n");
 		log("        to arguments using port names. this option disables this behavior.\n");
+		log("\n");
+		log("    -nokeep_asserts\n");
+		log("        per default this pass sets the \"keep\" attribute on all modules\n");
+		log("        that directly or indirectly contain one or more $assert cells. this\n");
+		log("        option disables this behavior.\n");
 		log("\n");
 		log("    -top <module>\n");
 		log("        use the specified top module to built a design hierarchy. modules\n");
@@ -352,6 +371,7 @@ struct HierarchyPass : public Pass {
 
 		bool generate_mode = false;
 		bool keep_positionals = false;
+		bool nokeep_asserts = false;
 		std::vector<std::string> generate_cells;
 		std::vector<generate_port_decl_t> generate_ports;
 
@@ -407,6 +427,10 @@ struct HierarchyPass : public Pass {
 			}
 			if (args[argidx] == "-keep_positionals") {
 				keep_positionals = true;
+				continue;
+			}
+			if (args[argidx] == "-nokeep_asserts") {
+				nokeep_asserts = true;
 				continue;
 			}
 			if (args[argidx] == "-libdir" && argidx+1 < args.size()) {
@@ -476,6 +500,15 @@ struct HierarchyPass : public Pass {
 					mod_it.second->attributes.erase("\\top");
 		}
 
+		if (!nokeep_asserts) {
+			std::map<RTLIL::Module*, bool> cache;
+			for (auto mod : design->modules())
+				if (set_keep_assert(cache, mod)) {
+					log("Module %s directly or indirectly contains $assert cells -> setting \"keep\" attribute.\n", log_id(mod));
+					mod->set_bool_attribute("\\keep");
+				}
+		}
+
 		if (!keep_positionals)
 		{
 			std::set<RTLIL::Module*> pos_mods;
@@ -528,3 +561,4 @@ struct HierarchyPass : public Pass {
 	}
 } HierarchyPass;
  
+PRIVATE_NAMESPACE_END

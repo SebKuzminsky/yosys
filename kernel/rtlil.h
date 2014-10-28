@@ -428,7 +428,8 @@ struct RTLIL::Const
 	Const(std::string str);
 	Const(int val, int width = 32);
 	Const(RTLIL::State bit, int width = 1);
-	Const(std::vector<RTLIL::State> bits) : bits(bits) { flags = CONST_FLAG_NONE; };
+	Const(const std::vector<RTLIL::State> &bits) : bits(bits) { flags = CONST_FLAG_NONE; };
+	Const(const std::vector<bool> &bits);
 
 	bool operator <(const RTLIL::Const &other) const;
 	bool operator ==(const RTLIL::Const &other) const;
@@ -856,6 +857,11 @@ public:
 	void check();
 	void fixup_parameters(bool set_a_signed = false, bool set_b_signed = false);
 
+	bool has_keep_attr() const {
+		return get_bool_attribute("\\keep") || (module && module->design && module->design->module(type) &&
+				module->design->module(type)->get_bool_attribute("\\keep"));
+	}
+
 	template<typename T> void rewrite_sigspecs(T functor);
 };
 
@@ -892,7 +898,7 @@ struct RTLIL::SigBit
 	SigBit() : wire(NULL), data(RTLIL::State::S0) { }
 	SigBit(RTLIL::State bit) : wire(NULL), data(bit) { }
 	SigBit(RTLIL::Wire *wire) : wire(wire), offset(0) { log_assert(wire && wire->width == 1); }
-	SigBit(RTLIL::Wire *wire, int offset) : wire(wire), offset(offset) { log_assert(wire); }
+	SigBit(RTLIL::Wire *wire, int offset) : wire(wire), offset(offset) { log_assert(wire != nullptr); }
 	SigBit(const RTLIL::SigChunk &chunk) : wire(chunk.wire) { log_assert(chunk.width == 1); if (wire) offset = chunk.offset; else data = chunk.data[0]; }
 	SigBit(const RTLIL::SigChunk &chunk, int index) : wire(chunk.wire) { if (wire) offset = chunk.offset + index; else data = chunk.data[index]; }
 	SigBit(const RTLIL::SigSpec &sig);
@@ -914,23 +920,25 @@ struct RTLIL::SigBit
 	}
 };
 
-struct RTLIL::SigSpecIterator
+struct RTLIL::SigSpecIterator : public std::iterator<std::input_iterator_tag, RTLIL::SigSpec>
 {
 	RTLIL::SigSpec *sig_p;
 	int index;
 
 	inline RTLIL::SigBit &operator*() const;
 	inline bool operator!=(const RTLIL::SigSpecIterator &other) const { return index != other.index; }
+	inline bool operator==(const RTLIL::SigSpecIterator &other) const { return index == other.index; }
 	inline void operator++() { index++; }
 };
 
-struct RTLIL::SigSpecConstIterator
+struct RTLIL::SigSpecConstIterator : public std::iterator<std::input_iterator_tag, RTLIL::SigSpec>
 {
 	const RTLIL::SigSpec *sig_p;
 	int index;
 
 	inline const RTLIL::SigBit &operator*() const;
 	inline bool operator!=(const RTLIL::SigSpecConstIterator &other) const { return index != other.index; }
+	inline bool operator==(const RTLIL::SigSpecIterator &other) const { return index == other.index; }
 	inline void operator++() { index++; }
 };
 

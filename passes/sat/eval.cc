@@ -31,7 +31,8 @@
 #include <string.h>
 #include <algorithm>
 
-namespace {
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
 
 /* this should only be used for regression testing of ConstEval -- see vloghammer */
 struct BruteForceEquivChecker
@@ -68,7 +69,7 @@ struct BruteForceEquivChecker
 					log_signal(undef2), log_signal(mod1_inputs), log_signal(inputs));
 
 		if (ignore_x_mod1) {
-			for (int i = 0; i < SIZE(sig1); i++)
+			for (int i = 0; i < GetSize(sig1); i++)
 				if (sig1[i] == RTLIL::State::Sx)
 					sig2[i] = RTLIL::State::Sx;
 		}
@@ -203,7 +204,7 @@ struct VlogHammerReporter
 				if (y_undef.at(i))
 				{
 					log("    Toggling undef bit %d to test undef gating.\n", i);
-					if (!ez.solve(y_vec, y_values, ez.IFF(y_vec.at(i), y_values.at(i) ? ez.FALSE : ez.TRUE)))
+					if (!ez.solve(y_vec, y_values, ez.IFF(y_vec.at(i), y_values.at(i) ? ez.CONST_FALSE : ez.CONST_TRUE)))
 						log_error("Failed to find solution with toggled bit!\n");
 
 					cmp_vars.push_back(y_vec.at(expected_y.size() + i));
@@ -289,7 +290,7 @@ struct VlogHammerReporter
 				} else if (rtl_sig.size() > 0) {
 					if (rtl_sig.size() != sig.size())
 						log_error("Output (y) has a different width in module %s compared to rtl!\n", RTLIL::id2cstr(module->name));
-					for (int i = 0; i < SIZE(sig); i++)
+					for (int i = 0; i < GetSize(sig); i++)
 						if (rtl_sig[i] == RTLIL::State::Sx)
 							sig[i] = RTLIL::State::Sx;
 				}
@@ -356,8 +357,6 @@ struct VlogHammerReporter
 		}
 	}
 };
-
-} /* namespace */
 
 struct EvalPass : public Pass {
 	EvalPass() : Pass("eval", "evaluate the circuit given an input") { }
@@ -601,3 +600,4 @@ struct EvalPass : public Pass {
 	}
 } EvalPass;
  
+PRIVATE_NAMESPACE_END

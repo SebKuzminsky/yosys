@@ -26,7 +26,6 @@
  *
  */
 
-#include "verilog_backend.h"
 #include "kernel/register.h"
 #include "kernel/celltypes.h"
 #include "kernel/log.h"
@@ -35,7 +34,8 @@
 #include <set>
 #include <map>
 
-namespace {
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
 
 bool norename, noattr, attr2comment, noexpr;
 int auto_name_counter, auto_name_offset, auto_name_digits;
@@ -315,7 +315,7 @@ std::string cellname(RTLIL::Cell *cell)
 	if (!norename && cell->name[0] == '$' && reg_ct.count(cell->type) && cell->hasPort("\\Q"))
 	{
 		RTLIL::SigSpec sig = cell->getPort("\\Q");
-		if (SIZE(sig) != 1 || sig.is_fully_const())
+		if (GetSize(sig) != 1 || sig.is_fully_const())
 			goto no_special_reg_name;
 
 		RTLIL::Wire *wire = sig[0].wire;
@@ -973,7 +973,8 @@ void dump_module(std::ostream &f, std::string indent, RTLIL::Module *module)
 			for (int i = 0; i < wire->width; i++)
 				if (reg_bits.count(std::pair<RTLIL::Wire*,int>(wire, i)) == 0)
 					goto this_wire_aint_reg;
-			reg_wires.insert(wire->name);
+			if (wire->width)
+				reg_wires.insert(wire->name);
 		this_wire_aint_reg:;
 		}
 	}
@@ -1014,8 +1015,6 @@ void dump_module(std::ostream &f, std::string indent, RTLIL::Module *module)
 	f << stringf("%s" "endmodule\n", indent.c_str());
 	active_module = NULL;
 }
-
-} /* namespace */
 
 struct VerilogBackend : public Backend {
 	VerilogBackend() : Backend("verilog", "write design to verilog file") { }
@@ -1138,3 +1137,4 @@ struct VerilogBackend : public Backend {
 	}
 } VerilogBackend;
 
+PRIVATE_NAMESPACE_END

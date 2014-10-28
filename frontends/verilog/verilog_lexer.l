@@ -42,7 +42,7 @@
 #include "kernel/log.h"
 #include "verilog_frontend.h"
 #include "frontends/ast/ast.h"
-#include "parser.tab.h"
+#include "verilog_parser.tab.h"
 
 USING_YOSYS_NAMESPACE
 using namespace AST;
@@ -64,7 +64,7 @@ YOSYS_NAMESPACE_END
 	return TOK_ID;
 
 #define YY_INPUT(buf,result,max_size) \
-	result = lexin->readsome(buf, max_size);
+	result = readsome(*VERILOG_FRONTEND::lexin, buf, max_size)
 
 %}
 

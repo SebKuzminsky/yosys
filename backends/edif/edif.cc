@@ -27,6 +27,9 @@
 #include "kernel/log.h"
 #include <string>
 
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
+
 #define EDIF_DEF(_id) edif_names(RTLIL::unescape_id(_id), true).c_str()
 #define EDIF_REF(_id) edif_names(RTLIL::unescape_id(_id), false).c_str()
 
@@ -305,7 +308,7 @@ struct EdifBackend : public Backend {
 				*f << stringf(")\n");
 				for (auto &p : cell->connections()) {
 					RTLIL::SigSpec sig = sigmap(p.second);
-					for (int i = 0; i < SIZE(sig); i++)
+					for (int i = 0; i < GetSize(sig); i++)
 						if (sig.size() == 1)
 							net_join_db[sig[i]].insert(stringf("(portRef %s (instanceRef %s))", EDIF_REF(p.first), EDIF_REF(cell->name)));
 						else
@@ -345,3 +348,4 @@ struct EdifBackend : public Backend {
 	}
 } EdifBackend;
 
+PRIVATE_NAMESPACE_END

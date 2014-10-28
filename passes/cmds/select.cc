@@ -17,13 +17,14 @@
  *
  */
 
-#include "kernel/register.h"
+#include "kernel/yosys.h"
 #include "kernel/celltypes.h"
 #include "kernel/sigtools.h"
-#include "kernel/log.h"
 #include <string.h>
-#include <fnmatch.h>
 #include <errno.h>
+
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
 
 using RTLIL::id2cstr;
 
@@ -35,9 +36,9 @@ static bool match_ids(RTLIL::IdString id, std::string pattern)
 		return true;
 	if (id.size() > 0 && id[0] == '\\' && id.substr(1) == pattern)
 		return true;
-	if (!fnmatch(pattern.c_str(), id.c_str(), 0))
+	if (patmatch(pattern.c_str(), id.c_str()))
 		return true;
-	if (id.size() > 0 && id[0] == '\\' && !fnmatch(pattern.c_str(), id.substr(1).c_str(), 0))
+	if (id.size() > 0 && id[0] == '\\' && patmatch(pattern.c_str(), id.substr(1).c_str()))
 		return true;
 	if (id.size() > 0 && id[0] == '$' && pattern.size() > 0 && pattern[0] == '$') {
 		const char *p = id.c_str();
@@ -80,7 +81,7 @@ static bool match_attr_val(const RTLIL::Const &value, std::string pattern, char 
 		std::string value_str = value.decode_string();
 
 		if (match_op == '=')
-			if (!fnmatch(pattern.c_str(), value.decode_string().c_str(), FNM_NOESCAPE))
+			if (patmatch(pattern.c_str(), value.decode_string().c_str()))
 				return true;
 
 		if (match_op == '=')
@@ -104,9 +105,9 @@ static bool match_attr(const std::map<RTLIL::IdString, RTLIL::Const> &attributes
 {
 	if (name_pat.find('*') != std::string::npos || name_pat.find('?') != std::string::npos || name_pat.find('[') != std::string::npos) {
 		for (auto &it : attributes) {
-			if (!fnmatch(name_pat.c_str(), it.first.c_str(), FNM_NOESCAPE) && match_attr_val(it.second, value_pat, match_op))
+			if (patmatch(name_pat.c_str(), it.first.c_str()) && match_attr_val(it.second, value_pat, match_op))
 				return true;
-			if (it.first.size() > 0 && it.first[0] == '\\' && !fnmatch(name_pat.c_str(), it.first.substr(1).c_str(), FNM_NOESCAPE) && match_attr_val(it.second, value_pat, match_op))
+			if (it.first.size() > 0 && it.first[0] == '\\' && patmatch(name_pat.c_str(), it.first.substr(1).c_str()) && match_attr_val(it.second, value_pat, match_op))
 				return true;
 		}
 	} else {
@@ -795,6 +796,9 @@ static void select_stmt(RTLIL::Design *design, std::string arg)
 	select_filter_active_mod(design, work_stack.back());
 }
 
+PRIVATE_NAMESPACE_END
+YOSYS_NAMESPACE_BEGIN
+
 // used in kernel/register.cc and maybe other locations, extern decl. in register.h
 void handle_extra_select_args(Pass *pass, std::vector<std::string> args, size_t argidx, size_t args_size, RTLIL::Design *design)
 {
@@ -817,6 +821,9 @@ void handle_extra_select_args(Pass *pass, std::vector<std::string> args, size_t 
 	else
 		design->selection_stack.push_back(RTLIL::Selection(false));
 }
+
+YOSYS_NAMESPACE_END
+PRIVATE_NAMESPACE_BEGIN
 
 struct SelectPass : public Pass {
 	SelectPass() : Pass("select", "modify and view the list of selected objects") { }
@@ -1135,7 +1142,7 @@ struct SelectPass : public Pass {
 
 		if (list_mode || count_mode || !write_file.empty())
 		{
-		#define LOG_OBJECT(...) do { if (list_mode) log(__VA_ARGS__); if (f != NULL) fprintf(f, __VA_ARGS__); total_count++; } while (0)
+		#define LOG_OBJECT(...) { if (list_mode) log(__VA_ARGS__); if (f != NULL) fprintf(f, __VA_ARGS__); total_count++; }
 			int total_count = 0;
 			FILE *f = NULL;
 			if (!write_file.empty()) {
@@ -1154,16 +1161,16 @@ struct SelectPass : public Pass {
 				if (sel->selected_module(mod_it.first)) {
 					for (auto &it : mod_it.second->wires_)
 						if (sel->selected_member(mod_it.first, it.first))
-							LOG_OBJECT("%s/%s\n", id2cstr(mod_it.first), id2cstr(it.first));
+							LOG_OBJECT("%s/%s\n", id2cstr(mod_it.first), id2cstr(it.first))
 					for (auto &it : mod_it.second->memories)
 						if (sel->selected_member(mod_it.first, it.first))
-							LOG_OBJECT("%s/%s\n", id2cstr(mod_it.first), id2cstr(it.first));
+							LOG_OBJECT("%s/%s\n", id2cstr(mod_it.first), id2cstr(it.first))
 					for (auto &it : mod_it.second->cells_)
 						if (sel->selected_member(mod_it.first, it.first))
-							LOG_OBJECT("%s/%s\n", id2cstr(mod_it.first), id2cstr(it.first));
+							LOG_OBJECT("%s/%s\n", id2cstr(mod_it.first), id2cstr(it.first))
 					for (auto &it : mod_it.second->processes)
 						if (sel->selected_member(mod_it.first, it.first))
-							LOG_OBJECT("%s/%s\n", id2cstr(mod_it.first), id2cstr(it.first));
+							LOG_OBJECT("%s/%s\n", id2cstr(mod_it.first), id2cstr(it.first))
 				}
 			}
 			if (count_mode)
@@ -1384,3 +1391,4 @@ struct LsPass : public Pass {
 	}
 } LsPass;
  
+PRIVATE_NAMESPACE_END

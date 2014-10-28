@@ -20,12 +20,9 @@
 #ifndef CELLTYPES_H
 #define CELLTYPES_H
 
-#include <set>
-#include <string>
-#include <stdlib.h>
+#include <kernel/yosys.h>
 
-#include <kernel/rtlil.h>
-#include <kernel/log.h>
+YOSYS_NAMESPACE_BEGIN
 
 struct CellType
 {
@@ -96,7 +93,7 @@ struct CellTypes
 			"$shl", "$shr", "$sshl", "$sshr", "$shift", "$shiftx",
 			"$lt", "$le", "$eq", "$ne", "$eqx", "$nex", "$ge", "$gt",
 			"$add", "$sub", "$mul", "$div", "$mod", "$pow",
-			"$logic_and", "$logic_or", "$concat"
+			"$logic_and", "$logic_or", "$concat", "$macc"
 		};
 
 		for (auto type : unary_ops)
@@ -108,7 +105,9 @@ struct CellTypes
 		for (auto type : std::vector<RTLIL::IdString>({"$mux", "$pmux"}))
 			setup_type(type, {"\\A", "\\B", "\\S"}, {"\\Y"}, true);
 
+		setup_type("$lcu", {"\\P", "\\G", "\\CI"}, {"\\CO"}, true);
 		setup_type("$alu", {"\\A", "\\B", "\\CI", "\\BI"}, {"\\X", "\\Y", "\\CO"}, true);
+		setup_type("$fa", {"\\A", "\\B", "\\C"}, {"\\X", "\\Y"}, true);
 
 		setup_type("$assert", {"\\A", "\\EN"}, std::set<RTLIL::IdString>(), true);
 	}
@@ -131,6 +130,7 @@ struct CellTypes
 
 	void setup_stdcells()
 	{
+		setup_type("$_BUF_", {"\\A"}, {"\\Y"}, true);
 		setup_type("$_NOT_", {"\\A"}, {"\\Y"}, true);
 		setup_type("$_AND_", {"\\A", "\\B"}, {"\\Y"}, true);
 		setup_type("$_NAND_", {"\\A", "\\B"}, {"\\Y"}, true);
@@ -262,6 +262,8 @@ struct CellTypes
 		HANDLE_CELL_TYPE(neg)
 #undef HANDLE_CELL_TYPE
 
+		if (type == "$_BUF_")
+			return arg1;
 		if (type == "$_NOT_")
 			return eval_not(arg1);
 		if (type == "$_AND_")
@@ -301,7 +303,7 @@ struct CellTypes
 			int width = cell->parameters.at("\\WIDTH").as_int();
 
 			std::vector<RTLIL::State> t = cell->parameters.at("\\LUT").bits;
-			while (SIZE(t) < (1 << width))
+			while (GetSize(t) < (1 << width))
 				t.push_back(RTLIL::S0);
 			t.resize(1 << width);
 
@@ -309,16 +311,16 @@ struct CellTypes
 				RTLIL::State sel = arg1.bits.at(i);
 				std::vector<RTLIL::State> new_t;
 				if (sel == RTLIL::S0)
-					new_t = std::vector<RTLIL::State>(t.begin(), t.begin() + SIZE(t)/2);
+					new_t = std::vector<RTLIL::State>(t.begin(), t.begin() + GetSize(t)/2);
 				else if (sel == RTLIL::S1)
-					new_t = std::vector<RTLIL::State>(t.begin() + SIZE(t)/2, t.end());
+					new_t = std::vector<RTLIL::State>(t.begin() + GetSize(t)/2, t.end());
 				else
-					for (int j = 0; j < SIZE(t)/2; j++)
-						new_t.push_back(t[j] == t[j + SIZE(t)/2] ? t[j] : RTLIL::Sx);
+					for (int j = 0; j < GetSize(t)/2; j++)
+						new_t.push_back(t[j] == t[j + GetSize(t)/2] ? t[j] : RTLIL::Sx);
 				t.swap(new_t);
 			}
 
-			log_assert(SIZE(t) == 1);
+			log_assert(GetSize(t) == 1);
 			return t;
 		}
 
@@ -360,6 +362,8 @@ struct CellTypes
 		return eval(cell, arg1, arg2, arg3);
 	}
 };
+
+YOSYS_NAMESPACE_END
 
 #endif
 

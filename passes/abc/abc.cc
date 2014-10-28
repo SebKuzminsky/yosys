@@ -34,23 +34,36 @@
 #define ABC_COMMAND_LUT "strash; scorr -v; ifraig -v; retime -v; strash; dch -vf; if -v"
 #define ABC_COMMAND_DFL "strash; scorr -v; ifraig -v; retime -v; strash; dch -vf; map -v"
 
+#define ABC_FAST_COMMAND_LIB "retime -v {D}; map -v {D}"
+#define ABC_FAST_COMMAND_CTR "retime -v {D}; map -v {D}; buffer -v; upsize -v {D}; dnsize -v {D}; stime -p"
+#define ABC_FAST_COMMAND_LUT "retime -v; if -v"
+#define ABC_FAST_COMMAND_DFL "retime -v; map -v"
+
 #include "kernel/register.h"
 #include "kernel/sigtools.h"
+#include "kernel/cost.h"
 #include "kernel/log.h"
-#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <dirent.h>
 #include <cerrno>
 #include <sstream>
 #include <climits>
 
+#ifndef _WIN32
+#  include <unistd.h>
+#  include <dirent.h>
+#endif
+
 #include "blifparse.h"
+
+USING_YOSYS_NAMESPACE
+PRIVATE_NAMESPACE_BEGIN
 
 enum class gate_type_t {
 	G_NONE,
 	G_FF,
+	G_BUF,
 	G_NOT,
 	G_AND,
 	G_NAND,
@@ -76,16 +89,16 @@ struct gate_t
 	RTLIL::SigBit bit;
 };
 
-static int map_autoidx;
-static SigMap assign_map;
-static RTLIL::Module *module;
-static std::vector<gate_t> signal_list;
-static std::map<RTLIL::SigBit, int> signal_map;
+int map_autoidx;
+SigMap assign_map;
+RTLIL::Module *module;
+std::vector<gate_t> signal_list;
+std::map<RTLIL::SigBit, int> signal_map;
 
-static bool clk_polarity;
-static RTLIL::SigSpec clk_sig;
+bool clk_polarity;
+RTLIL::SigSpec clk_sig;
 
-static int map_signal(RTLIL::SigBit bit, gate_type_t gate_type = G(NONE), int in1 = -1, int in2 = -1, int in3 = -1, int in4 = -1)
+int map_signal(RTLIL::SigBit bit, gate_type_t gate_type = G(NONE), int in1 = -1, int in2 = -1, int in3 = -1, int in4 = -1)
 {
 	assign_map.apply(bit);
 
@@ -119,14 +132,14 @@ static int map_signal(RTLIL::SigBit bit, gate_type_t gate_type = G(NONE), int in
 	return gate.id;
 }
 
-static void mark_port(RTLIL::SigSpec sig)
+void mark_port(RTLIL::SigSpec sig)
 {
 	for (auto &bit : assign_map(sig))
 		if (bit.wire != NULL && signal_map.count(bit) > 0)
 			signal_list[signal_map[bit]].is_port = true;
 }
 
-static void extract_cell(RTLIL::Cell *cell, bool keepff)
+void extract_cell(RTLIL::Cell *cell, bool keepff)
 {
 	if (cell->type == "$_DFF_N_" || cell->type == "$_DFF_P_")
 	{
@@ -152,7 +165,7 @@ static void extract_cell(RTLIL::Cell *cell, bool keepff)
 		return;
 	}
 
-	if (cell->type == "$_NOT_")
+	if (cell->type.in("$_BUF_", "$_NOT_"))
 	{
 		RTLIL::SigSpec sig_a = cell->getPort("\\A");
 		RTLIL::SigSpec sig_y = cell->getPort("\\Y");
@@ -160,13 +173,13 @@ static void extract_cell(RTLIL::Cell *cell, bool keepff)
 		assign_map.apply(sig_a);
 		assign_map.apply(sig_y);
 
-		map_signal(sig_y, G(NOT), map_signal(sig_a));
+		map_signal(sig_y, cell->type == "$_BUF_" ? G(BUF) : G(NOT), map_signal(sig_a));
 
 		module->remove(cell);
 		return;
 	}
 
-	if (cell->type.in("$_AND_", "$_NAND_", "$_OR_", "$_NOR", "$_XOR_", "$_XNOR_"))
+	if (cell->type.in("$_AND_", "$_NAND_", "$_OR_", "$_NOR_", "$_XOR_", "$_XNOR_"))
 	{
 		RTLIL::SigSpec sig_a = cell->getPort("\\A");
 		RTLIL::SigSpec sig_b = cell->getPort("\\B");
@@ -268,22 +281,23 @@ static void extract_cell(RTLIL::Cell *cell, bool keepff)
 	}
 }
 
-static std::string remap_name(RTLIL::IdString abc_name)
+std::string remap_name(RTLIL::IdString abc_name)
 {
 	std::stringstream sstr;
 	sstr << "$abc$" << map_autoidx << "$" << abc_name.substr(1);
 	return sstr.str();
 }
 
-static void dump_loop_graph(FILE *f, int &nr, std::map<int, std::set<int>> &edges, std::set<int> &workpool, std::vector<int> &in_counts)
+void dump_loop_graph(FILE *f, int &nr, std::map<int, std::set<int>> &edges, std::set<int> &workpool, std::vector<int> &in_counts)
 {
 	if (f == NULL)
 		return;
 
 	log("Dumping loop state graph to slide %d.\n", ++nr);
 
-	fprintf(f, "digraph slide%d {\n", nr);
-	fprintf(f, "  rankdir=\"LR\";\n");
+	fprintf(f, "digraph \"slide%d\" {\n", nr);
+	fprintf(f, "  label=\"slide%d\";\n", nr);
+	fprintf(f, "  rankdir=\"TD\";\n");
 
 	std::set<int> nodes;
 	for (auto &e : edges) {
@@ -303,7 +317,7 @@ static void dump_loop_graph(FILE *f, int &nr, std::map<int, std::set<int>> &edge
 	fprintf(f, "}\n");
 }
 
-static void handle_loops()
+void handle_loops()
 {
 	// http://en.wikipedia.org/wiki/Topological_sorting
 	// (Kahn, Arthur B. (1962), "Topological sorting of large networks")
@@ -370,10 +384,10 @@ static void handle_loops()
 				int id2 = edge_it.first;
 				RTLIL::Wire *w1 = signal_list[id1].bit.wire;
 				RTLIL::Wire *w2 = signal_list[id2].bit.wire;
-				if (w1 != NULL)
-					continue;
-				else if (w2 == NULL)
+				if (w1 == NULL)
 					id1 = id2;
+				else if (w2 == NULL)
+					continue;
 				else if (w1->name[0] == '$' && w2->name[0] == '\\')
 					id1 = id2;
 				else if (w1->name[0] == '\\' && w2->name[0] == '$')
@@ -382,7 +396,7 @@ static void handle_loops()
 					id1 = id2;
 				else if (edges[id1].size() > edges[id2].size())
 					continue;
-				else if (w2->name < w1->name)
+				else if (w2->name.str() < w1->name.str())
 					id1 = id2;
 			}
 
@@ -390,6 +404,8 @@ static void handle_loops()
 				edges.erase(id1);
 				continue;
 			}
+
+			log_assert(signal_list[id1].bit.wire != NULL);
 
 			std::stringstream sstr;
 			sstr << "$abcloop$" << (autoidx++);
@@ -434,7 +450,7 @@ static void handle_loops()
 		fclose(dot_f);
 }
 
-static std::string add_echos_to_abc_cmd(std::string str)
+std::string add_echos_to_abc_cmd(std::string str)
 {
 	std::string new_str, token;
 	for (size_t i = 0; i < str.size(); i++) {
@@ -458,7 +474,7 @@ static std::string add_echos_to_abc_cmd(std::string str)
 	return new_str;
 }
 
-static std::string fold_abc_cmd(std::string str)
+std::string fold_abc_cmd(std::string str)
 {
 	std::string token, new_str = "          ";
 	int char_counter = 10;
@@ -477,9 +493,58 @@ static std::string fold_abc_cmd(std::string str)
 	return new_str;
 }
 
-static void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::string script_file, std::string exe_file,
+struct abc_output_filter
+{
+	bool got_cr;
+	int escape_seq_state;
+	std::string linebuf;
+
+	abc_output_filter()
+	{
+		got_cr = false;
+		escape_seq_state = 0;
+	}
+
+	void next_char(char ch)
+	{
+		if (escape_seq_state == 0 && ch == '\033') {
+			escape_seq_state = 1;
+			return;
+		}
+		if (escape_seq_state == 1) {
+			escape_seq_state = ch == '[' ? 2 : 0;
+			return;
+		}
+		if (escape_seq_state == 2) {
+			if ((ch < '0' || '9' < ch) && ch != ';')
+				escape_seq_state = 0;
+			return;
+		}
+		escape_seq_state = 0;
+		if (ch == '\r') {
+			got_cr = true;
+			return;
+		}
+		if (ch == '\n') {
+			log("ABC: %s\n", linebuf.c_str());
+			got_cr = false, linebuf.clear();
+			return;
+		}
+		if (got_cr)
+			got_cr = false, linebuf.clear();
+		linebuf += ch;
+	}
+
+	void next_line(const std::string &line)
+	{
+		for (char ch : line)
+			next_char(ch);
+	}
+};
+
+void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::string script_file, std::string exe_file,
 		std::string liberty_file, std::string constr_file, bool cleanup, int lut_mode, bool dff_mode, std::string clk_str,
-		bool keepff, std::string delay_target)
+		bool keepff, std::string delay_target, bool fast_mode)
 {
 	module = current_module;
 	map_autoidx = autoidx++;
@@ -491,47 +556,55 @@ static void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std
 	clk_polarity = true;
 	clk_sig = RTLIL::SigSpec();
 
-	char tempdir_name[] = "/tmp/yosys-abc-XXXXXX";
+	std::string tempdir_name = "/tmp/yosys-abc-XXXXXX";
 	if (!cleanup)
 		tempdir_name[0] = tempdir_name[4] = '_';
-	char *p = mkdtemp(tempdir_name);
-	log_header("Extracting gate netlist of module `%s' to `%s/input.blif'..\n", module->name.c_str(), tempdir_name);
-	if (p == NULL)
-		log_error("For some reason mkdtemp() failed!\n");
+	tempdir_name = make_temp_dir(tempdir_name);
+	log_header("Extracting gate netlist of module `%s' to `%s/input.blif'..\n", module->name.c_str(), tempdir_name.c_str());
 
-	std::string abc_command;
+	std::string abc_script = stringf("read_blif %s/input.blif; ", tempdir_name.c_str());
+
+	if (!liberty_file.empty()) {
+		abc_script += stringf("read_lib -w %s; ", liberty_file.c_str());
+		if (!constr_file.empty())
+			abc_script += stringf("read_constr -v %s; ", constr_file.c_str());
+	} else
+	if (lut_mode)
+		abc_script += stringf("read_lut %s/lutdefs.txt; ", tempdir_name.c_str());
+	else
+		abc_script += stringf("read_library %s/stdcells.genlib; ", tempdir_name.c_str());
+
 	if (!script_file.empty()) {
 		if (script_file[0] == '+') {
 			for (size_t i = 1; i < script_file.size(); i++)
 				if (script_file[i] == '\'')
-					abc_command += "'\\''";
+					abc_script += "'\\''";
 				else if (script_file[i] == ',')
-					abc_command += " ";
+					abc_script += " ";
 				else
-					abc_command += script_file[i];
+					abc_script += script_file[i];
 		} else
-			abc_command = stringf("source %s", script_file.c_str());
+			abc_script += stringf("source %s", script_file.c_str());
 	} else if (lut_mode)
-		abc_command = ABC_COMMAND_LUT;
+		abc_script += fast_mode ? ABC_FAST_COMMAND_LUT : ABC_COMMAND_LUT;
 	else if (!liberty_file.empty())
-		abc_command = constr_file.empty() ? ABC_COMMAND_LIB : ABC_COMMAND_CTR;
+		abc_script += constr_file.empty() ? (fast_mode ? ABC_FAST_COMMAND_LIB : ABC_COMMAND_LIB) : (fast_mode ? ABC_FAST_COMMAND_CTR : ABC_COMMAND_CTR);
 	else
-		abc_command = ABC_COMMAND_DFL;
+		abc_script += fast_mode ? ABC_FAST_COMMAND_DFL : ABC_COMMAND_DFL;
 
-	for (size_t pos = abc_command.find("{D}"); pos != std::string::npos; pos = abc_command.find("{D}", pos))
-		abc_command = abc_command.substr(0, pos) + delay_target + abc_command.substr(pos+3);
+	for (size_t pos = abc_script.find("{D}"); pos != std::string::npos; pos = abc_script.find("{D}", pos))
+		abc_script = abc_script.substr(0, pos) + delay_target + abc_script.substr(pos+3);
 
-	abc_command = add_echos_to_abc_cmd(abc_command);
+	abc_script += stringf("; write_blif %s/output.blif", tempdir_name.c_str());
+	abc_script = add_echos_to_abc_cmd(abc_script);
 
-	if (abc_command.size() > 128) {
-		for (size_t i = 0; i+1 < abc_command.size(); i++)
-			if (abc_command[i] == ';' && abc_command[i+1] == ' ')
-				abc_command[i+1] = '\n';
-		FILE *f = fopen(stringf("%s/abc.script", tempdir_name).c_str(), "wt");
-		fprintf(f, "%s\n", abc_command.c_str());
-		fclose(f);
-		abc_command = stringf("source %s/abc.script", tempdir_name);
-	}
+	for (size_t i = 0; i+1 < abc_script.size(); i++)
+		if (abc_script[i] == ';' && abc_script[i+1] == ' ')
+			abc_script[i+1] = '\n';
+
+	FILE *f = fopen(stringf("%s/abc.script", tempdir_name.c_str()).c_str(), "wt");
+	fprintf(f, "%s\n", abc_script.c_str());
+	fclose(f);
 
 	if (clk_str.empty()) {
 		if (clk_str[0] == '!') {
@@ -591,11 +664,10 @@ static void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std
 	
 	handle_loops();
 
-	if (asprintf(&p, "%s/input.blif", tempdir_name) < 0) log_abort();
-	FILE *f = fopen(p, "wt");
+	std::string buffer = stringf("%s/input.blif", tempdir_name.c_str());
+	f = fopen(buffer.c_str(), "wt");
 	if (f == NULL)
-		log_error("Opening %s for writing failed: %s\n", p, strerror(errno));
-	free(p);
+		log_error("Opening %s for writing failed: %s\n", buffer.c_str(), strerror(errno));
 
 	fprintf(f, ".model netlist\n");
 
@@ -634,7 +706,10 @@ static void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std
 
 	int count_gates = 0;
 	for (auto &si : signal_list) {
-		if (si.type == G(NOT)) {
+		if (si.type == G(BUF)) {
+			fprintf(f, ".names n%d n%d\n", si.in1, si.id);
+			fprintf(f, "1 1\n");
+		} else if (si.type == G(NOT)) {
 			fprintf(f, ".names n%d n%d\n", si.in1, si.id);
 			fprintf(f, "0 1\n");
 		} else if (si.type == G(AND)) {
@@ -692,132 +767,62 @@ static void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std
 	fprintf(f, ".end\n");
 	fclose(f);
 
-	log("Extracted %d gates and %zd wires to a netlist network with %d inputs and %d outputs.\n",
-			count_gates, signal_list.size(), count_input, count_output);
+	log("Extracted %d gates and %d wires to a netlist network with %d inputs and %d outputs.\n",
+			count_gates, GetSize(signal_list), count_input, count_output);
 	log_push();
 	
 	if (count_output > 0)
 	{
 		log_header("Executing ABC.\n");
 
-		if (asprintf(&p, "%s/stdcells.genlib", tempdir_name) < 0) log_abort();
-		f = fopen(p, "wt");
+		buffer = stringf("%s/stdcells.genlib", tempdir_name.c_str());
+		f = fopen(buffer.c_str(), "wt");
 		if (f == NULL)
-			log_error("Opening %s for writing failed: %s\n", p, strerror(errno));
-		fprintf(f, "GATE ZERO 1 Y=CONST0;\n");
-		fprintf(f, "GATE ONE  1 Y=CONST1;\n");
-		fprintf(f, "GATE BUF  1 Y=A;                  PIN * NONINV  1 999 1 0 1 0\n");
-		fprintf(f, "GATE INV  1 Y=!A;                 PIN * INV     1 999 1 0 1 0\n");
-		fprintf(f, "GATE AND  1 Y=A*B;                PIN * NONINV  1 999 1 0 1 0\n");
-		fprintf(f, "GATE NAND 1 Y=!(A*B);             PIN * INV     1 999 1 0 1 0\n");
-		fprintf(f, "GATE OR   1 Y=A+B;                PIN * NONINV  1 999 1 0 1 0\n");
-		fprintf(f, "GATE NOR  1 Y=!(A+B);             PIN * INV     1 999 1 0 1 0\n");
-		fprintf(f, "GATE XOR  1 Y=(A*!B)+(!A*B);      PIN * UNKNOWN 1 999 1 0 1 0\n");
-		fprintf(f, "GATE XNOR 1 Y=(A*B)+(!A*!B);      PIN * UNKNOWN 1 999 1 0 1 0\n");
-		fprintf(f, "GATE MUX  1 Y=(A*B)+(S*B)+(!S*A); PIN * UNKNOWN 1 999 1 0 1 0\n");
-		fprintf(f, "GATE AOI3 1 Y=!((A*B)+C);         PIN * INV     1 999 1 0 1 0\n");
-		fprintf(f, "GATE OAI3 1 Y=!((A+B)*C);         PIN * INV     1 999 1 0 1 0\n");
-		fprintf(f, "GATE AOI4 1 Y=!((A*B)+(C*D));     PIN * INV     1 999 1 0 1 0\n");
-		fprintf(f, "GATE OAI4 1 Y=!((A+B)*(C+D));     PIN * INV     1 999 1 0 1 0\n");
+			log_error("Opening %s for writing failed: %s\n", buffer.c_str(), strerror(errno));
+		fprintf(f, "GATE ZERO  1 Y=CONST0;\n");
+		fprintf(f, "GATE ONE   1 Y=CONST1;\n");
+		fprintf(f, "GATE BUF  %d Y=A;                  PIN * NONINV  1 999 1 0 1 0\n", get_cell_cost("$_BUF_"));
+		fprintf(f, "GATE NOT  %d Y=!A;                 PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_NOT_"));
+		fprintf(f, "GATE AND  %d Y=A*B;                PIN * NONINV  1 999 1 0 1 0\n", get_cell_cost("$_AND_"));
+		fprintf(f, "GATE NAND %d Y=!(A*B);             PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_NAND_"));
+		fprintf(f, "GATE OR   %d Y=A+B;                PIN * NONINV  1 999 1 0 1 0\n", get_cell_cost("$_OR_"));
+		fprintf(f, "GATE NOR  %d Y=!(A+B);             PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_NOR_"));
+		fprintf(f, "GATE XOR  %d Y=(A*!B)+(!A*B);      PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_XOR_"));
+		fprintf(f, "GATE XNOR %d Y=(A*B)+(!A*!B);      PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_XNOR_"));
+		fprintf(f, "GATE AOI3 %d Y=!((A*B)+C);         PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_AOI3_"));
+		fprintf(f, "GATE OAI3 %d Y=!((A+B)*C);         PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_OAI3_"));
+		fprintf(f, "GATE AOI4 %d Y=!((A*B)+(C*D));     PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_AOI4_"));
+		fprintf(f, "GATE OAI4 %d Y=!((A+B)*(C+D));     PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_OAI4_"));
+		fprintf(f, "GATE MUX  %d Y=(A*B)+(S*B)+(!S*A); PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_MUX_"));
 		fclose(f);
-		free(p);
 
 		if (lut_mode) {
-			if (asprintf(&p, "%s/lutdefs.txt", tempdir_name) < 0) log_abort();
-			f = fopen(p, "wt");
+			buffer = stringf("%s/lutdefs.txt", tempdir_name.c_str());
+			f = fopen(buffer.c_str(), "wt");
 			if (f == NULL)
-				log_error("Opening %s for writing failed: %s\n", p, strerror(errno));
+				log_error("Opening %s for writing failed: %s\n", buffer.c_str(), strerror(errno));
 			for (int i = 0; i < lut_mode; i++)
 				fprintf(f, "%d 1.00 1.00\n", i+1);
 			fclose(f);
-			free(p);
 		}
 
-		std::string buffer;
-		if (!liberty_file.empty()) {
-			buffer += stringf("%s -s -c 'read_blif %s/input.blif; read_lib -w %s; ",
-					exe_file.c_str(), tempdir_name, liberty_file.c_str());
-			if (!constr_file.empty())
-				buffer += stringf("read_constr -v %s; ", constr_file.c_str());
-			buffer += abc_command + "; ";
-		} else
-		if (lut_mode)
-			buffer += stringf("%s -s -c 'read_blif %s/input.blif; read_lut %s/lutdefs.txt; %s; ",
-					exe_file.c_str(), tempdir_name, tempdir_name, abc_command.c_str());
-		else
-			buffer += stringf("%s -s -c 'read_blif %s/input.blif; read_library %s/stdcells.genlib; %s; ",
-					exe_file.c_str(), tempdir_name, tempdir_name, abc_command.c_str());
-		buffer += stringf("write_blif %s/output.blif' 2>&1", tempdir_name);
+		buffer = stringf("%s -s -f %s/abc.script 2>&1", exe_file.c_str(), tempdir_name.c_str());
+		log("Running ABC command: %s\n", buffer.c_str());
 
-		log("%s\n", buffer.c_str());
+		abc_output_filter filt;
+		int ret = run_command(buffer, std::bind(&abc_output_filter::next_line, filt, std::placeholders::_1));
+		if (ret != 0)
+			log_error("ABC: execution of command \"%s\" failed: return code %d.\n", buffer.c_str(), ret);
 
-		errno = ENOMEM;  // popen does not set errno if memory allocation fails, therefore set it by hand
-		f = popen(buffer.c_str(), "r");
+		buffer = stringf("%s/%s", tempdir_name.c_str(), "output.blif");
+		f = fopen(buffer.c_str(), "rt");
 		if (f == NULL)
-			log_error("Opening pipe to `%s' for reading failed: %s\n", buffer.c_str(), strerror(errno));
-#if 0
-		char logbuf[1024];
-		while (fgets(logbuf, 1024, f) != NULL)
-			log("ABC: %s", logbuf);
-#else
-		bool got_cr = false;
-		int escape_seq_state = 0;
-		std::string linebuf;
-		char logbuf[1024];
-		while (fgets(logbuf, 1024, f) != NULL)
-			for (char *p = logbuf; *p; p++) {
-				if (escape_seq_state == 0 && *p == '\033') {
-					escape_seq_state = 1;
-					continue;
-				}
-				if (escape_seq_state == 1) {
-					escape_seq_state = *p == '[' ? 2 : 0;
-					continue;
-				}
-				if (escape_seq_state == 2) {
-					if ((*p < '0' || '9' < *p) && *p != ';')
-						escape_seq_state = 0;
-					continue;
-				}
-				escape_seq_state = 0;
-				if (*p == '\r') {
-					got_cr = true;
-					continue;
-				}
-				if (*p == '\n') {
-					log("ABC: %s\n", linebuf.c_str());
-					got_cr = false, linebuf.clear();
-					continue;
-				}
-				if (got_cr)
-					got_cr = false, linebuf.clear();
-				linebuf += *p;
-			}
-		if (!linebuf.empty())
-			log("ABC: %s\n", linebuf.c_str());
-#endif
-		errno = 0;
-		int ret = pclose(f);
-		if (ret < 0)
-			log_error("Closing pipe to `%s' failed: %s\n", buffer.c_str(), strerror(errno));
-		if (WEXITSTATUS(ret) != 0) {
-			switch (WEXITSTATUS(ret)) {
-				case 127: log_error("ABC: execution of command \"%s\" failed: Command not found\n", exe_file.c_str()); break;
-				case 126: log_error("ABC: execution of command \"%s\" failed: Command not executable\n", exe_file.c_str()); break;
-				default:  log_error("ABC: execution of command \"%s\" failed: the shell returned %d\n", exe_file.c_str(), WEXITSTATUS(ret)); break;
-			}
-		}
-
-		if (asprintf(&p, "%s/%s", tempdir_name, "output.blif") < 0) log_abort();
-		f = fopen(p, "rt");
-		if (f == NULL)
-			log_error("Can't open ABC output file `%s'.\n", p);
+			log_error("Can't open ABC output file `%s'.\n", buffer.c_str());
 
 		bool builtin_lib = liberty_file.empty() && script_file.empty() && !lut_mode;
 		RTLIL::Design *mapped_design = abc_parse_blif(f, builtin_lib ? "\\DFF" : "\\_dff_");
 
 		fclose(f);
-		free(p);
 
 		log_header("Re-integrating ABC results.\n");
 		RTLIL::Module *mapped_mod = mapped_design->modules_["\\netlist"];
@@ -849,7 +854,7 @@ static void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std
 					module->connect(conn);
 					continue;
 				}
-				if (c->type == "\\INV") {
+				if (c->type == "\\NOT") {
 					RTLIL::Cell *cell = module->addCell(remap_name(c->name), "$_NOT_");
 					cell->setPort("\\A", RTLIL::SigSpec(module->wires_[remap_name(c->getPort("\\A").as_wire()->name)]));
 					cell->setPort("\\Y", RTLIL::SigSpec(module->wires_[remap_name(c->getPort("\\Y").as_wire()->name)]));
@@ -982,23 +987,8 @@ static void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std
 
 	if (cleanup)
 	{
-		log_header("Removing temp directory `%s':\n", tempdir_name);
-
-		struct dirent **namelist;
-		int n = scandir(tempdir_name, &namelist, 0, alphasort);
-		log_assert(n >= 0);
-		for (int i = 0; i < n; i++) {
-			if (strcmp(namelist[i]->d_name, ".") && strcmp(namelist[i]->d_name, "..")) {
-				if (asprintf(&p, "%s/%s", tempdir_name, namelist[i]->d_name) < 0) log_abort();
-				log("Removing `%s'.\n", p);
-				remove(p);
-				free(p);
-			}
-			free(namelist[i]);
-		}
-		free(namelist);
-		log("Removing `%s'.\n", tempdir_name);
-		rmdir(tempdir_name);
+		log_header("Removing temp directory `%s':\n", tempdir_name.c_str());
+		remove_directory(tempdir_name);
 	}
 
 	log_pop();
@@ -1040,6 +1030,22 @@ struct AbcPass : public Pass {
 		log("\n");
 		log("        otherwise:\n");
 		log("%s\n", fold_abc_cmd(ABC_COMMAND_DFL).c_str());
+		log("\n");
+		log("    -fast\n");
+		log("        use different default scripts that are slightly faster (at the cost\n");
+		log("        of output quality):\n");
+		log("\n");
+		log("        for -liberty without -constr:\n");
+		log("%s\n", fold_abc_cmd(ABC_FAST_COMMAND_LIB).c_str());
+		log("\n");
+		log("        for -liberty with -constr:\n");
+		log("%s\n", fold_abc_cmd(ABC_FAST_COMMAND_CTR).c_str());
+		log("\n");
+		log("        for -lut:\n");
+		log("%s\n", fold_abc_cmd(ABC_FAST_COMMAND_LUT).c_str());
+		log("\n");
+		log("        otherwise:\n");
+		log("%s\n", fold_abc_cmd(ABC_FAST_COMMAND_DFL).c_str());
 		log("\n");
 		log("    -liberty <file>\n");
 		log("        generate netlists for the specified cell library (using the liberty\n");
@@ -1097,8 +1103,13 @@ struct AbcPass : public Pass {
 
 		std::string exe_file = proc_self_dirname() + "yosys-abc";
 		std::string script_file, liberty_file, constr_file, clk_str, delay_target;
-		bool dff_mode = false, keepff = false, cleanup = true;
+		bool fast_mode = false, dff_mode = false, keepff = false, cleanup = true;
 		int lut_mode = 0;
+
+#ifdef _WIN32
+		if (!check_file_exists(exe_file + ".exe") && check_file_exists(proc_self_dirname() + "..\\yosys-abc.exe"))
+			exe_file = proc_self_dirname() + "..\\yosys-abc";
+#endif
 
 		size_t argidx;
 		char pwd [PATH_MAX];
@@ -1138,6 +1149,10 @@ struct AbcPass : public Pass {
 				lut_mode = atoi(args[++argidx].c_str());
 				continue;
 			}
+			if (arg == "-fast") {
+				fast_mode = true;
+				continue;
+			}
 			if (arg == "-dff") {
 				dff_mode = true;
 				continue;
@@ -1168,7 +1183,7 @@ struct AbcPass : public Pass {
 				if (mod_it.second->processes.size() > 0)
 					log("Skipping module %s as it contains processes.\n", mod_it.second->name.c_str());
 				else
-					abc_module(design, mod_it.second, script_file, exe_file, liberty_file, constr_file, cleanup, lut_mode, dff_mode, clk_str, keepff, delay_target);
+					abc_module(design, mod_it.second, script_file, exe_file, liberty_file, constr_file, cleanup, lut_mode, dff_mode, clk_str, keepff, delay_target, fast_mode);
 			}
 
 		assign_map.clear();
@@ -1179,3 +1194,4 @@ struct AbcPass : public Pass {
 	}
 } AbcPass;
  
+PRIVATE_NAMESPACE_END

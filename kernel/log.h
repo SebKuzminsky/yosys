@@ -23,8 +23,14 @@
 #define LOG_H
 
 #include <time.h>
-#include <sys/time.h>
-#include <sys/resource.h>
+
+#ifndef _WIN32
+#  include <sys/time.h>
+#  include <sys/resource.h>
+#endif
+
+// from libs/sha1/sha1.h
+class SHA1;
 
 YOSYS_NAMESPACE_BEGIN
 
@@ -37,7 +43,7 @@ struct log_cmd_error_expection { };
 extern std::vector<FILE*> log_files;
 extern std::vector<std::ostream*> log_streams;
 extern FILE *log_errfile;
-extern class SHA1 *log_hasher;
+extern SHA1 *log_hasher;
 
 extern bool log_time;
 extern bool log_cmd_error_throw;
@@ -45,12 +51,12 @@ extern int log_verbose_level;
 
 void logv(const char *format, va_list ap);
 void logv_header(const char *format, va_list ap);
-void logv_error(const char *format, va_list ap) __attribute__ ((noreturn));
 
-void log(const char *format, ...)  __attribute__ ((format (printf, 1, 2)));
-void log_header(const char *format, ...) __attribute__ ((format (printf, 1, 2)));
-void log_error(const char *format, ...) __attribute__ ((format (printf, 1, 2))) __attribute__ ((noreturn));
-void log_cmd_error(const char *format, ...) __attribute__ ((format (printf, 1, 2))) __attribute__ ((noreturn));
+void logv_error(const char *format, va_list ap) __attribute__((noreturn));
+void log(const char *format, ...)  __attribute__((format(printf, 1, 2)));
+void log_header(const char *format, ...) __attribute__((format(printf, 1, 2)));
+_NORETURN_ void log_error(const char *format, ...) __attribute__((format(printf, 1, 2))) __attribute__((noreturn));
+_NORETURN_ void log_cmd_error(const char *format, ...) __attribute__((format(printf, 1, 2))) __attribute__((noreturn));
 
 void log_spacer();
 void log_push();
@@ -68,9 +74,13 @@ template<typename T> static inline const char *log_id(T *obj) {
 
 void log_cell(RTLIL::Cell *cell, std::string indent = "");
 
-#define log_abort() log_error("Abort in %s:%d.\n", __FILE__, __LINE__)
-#define log_assert(_assert_expr_) do { if (_assert_expr_) break; log_error("Assert `%s' failed in %s:%d.\n", #_assert_expr_, __FILE__, __LINE__); } while (0)
-#define log_ping() log("-- %s:%d %s --\n", __FILE__, __LINE__, __PRETTY_FUNCTION__)
+static inline void log_assert_worker(bool cond, const char *expr, const char *file, int line) {
+	if (!cond) log_error("Assert `%s' failed in %s:%d.\n", expr, file, line);
+}
+
+#define log_abort() YOSYS_NAMESPACE_PREFIX log_error("Abort in %s:%d.\n", __FILE__, __LINE__)
+#define log_assert(_assert_expr_) YOSYS_NAMESPACE_PREFIX log_assert_worker(_assert_expr_, #_assert_expr_, __FILE__, __LINE__)
+#define log_ping() YOSYS_NAMESPACE_PREFIX log("-- %s:%d %s --\n", __FILE__, __LINE__, __PRETTY_FUNCTION__)
 
 
 // ---------------------------------------------------
@@ -151,6 +161,8 @@ struct PerformanceTimer
 		t = 1000000000ULL * (int64_t) rusage.ru_utime.tv_sec + (int64_t) rusage.ru_utime.tv_usec * 1000ULL;
 		t += 1000000000ULL * (int64_t) rusage.ru_stime.tv_sec + (int64_t) rusage.ru_stime.tv_usec * 1000ULL;
 		return t;
+#elif _WIN32
+		return 0;
 #else
 	#error Dont know how to measure per-process CPU time. Need alternative method (times()/clocks()/gettimeofday()?).
 #endif
@@ -169,7 +181,7 @@ struct PerformanceTimer
 	}
 
 	float sec() const {
-		return total_ns * 1e-9;
+		return total_ns * 1e-9f;
 	}
 #else
 	static int64_t query() { return 0; }
@@ -188,8 +200,10 @@ static inline void log_dump_val_worker(int v) { log("%d", v); }
 static inline void log_dump_val_worker(unsigned int v) { log("%u", v); }
 static inline void log_dump_val_worker(long int v) { log("%ld", v); }
 static inline void log_dump_val_worker(unsigned long int v) { log("%lu", v); }
+#ifndef _WIN32
 static inline void log_dump_val_worker(long long int v) { log("%lld", v); }
 static inline void log_dump_val_worker(unsigned long long int v) { log("%lld", v); }
+#endif
 static inline void log_dump_val_worker(char c) { log(c >= 32 && c < 127 ? "'%c'" : "'\\x%02x'", c); }
 static inline void log_dump_val_worker(unsigned char c) { log(c >= 32 && c < 127 ? "'%c'" : "'\\x%02x'", c); }
 static inline void log_dump_val_worker(bool v) { log("%s", v ? "true" : "false"); }

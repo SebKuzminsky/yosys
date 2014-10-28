@@ -23,6 +23,9 @@
 #include "kernel/rtlil.h"
 #include "kernel/sigtools.h"
 #include "kernel/celltypes.h"
+#include "kernel/macc.h"
+
+YOSYS_NAMESPACE_BEGIN
 
 struct ConstEval
 {
@@ -71,7 +74,7 @@ struct ConstEval
 		assign_map.apply(sig);
 #ifndef NDEBUG
 		RTLIL::SigSpec current_val = values_map(sig);
-		for (int i = 0; i < SIZE(current_val); i++)
+		for (int i = 0; i < GetSize(current_val); i++)
 			log_assert(current_val[i].wire != NULL || current_val[i] == value.bits[i]);
 #endif
 		values_map.add(sig, RTLIL::SigSpec(value));
@@ -85,6 +88,43 @@ struct ConstEval
 
 	bool eval(RTLIL::Cell *cell, RTLIL::SigSpec &undef)
 	{
+		if (cell->type == "$lcu")
+		{
+			RTLIL::SigSpec sig_p = cell->getPort("\\P");
+			RTLIL::SigSpec sig_g = cell->getPort("\\G");
+			RTLIL::SigSpec sig_ci = cell->getPort("\\CI");
+			RTLIL::SigSpec sig_co = values_map(assign_map(cell->getPort("\\CO")));
+
+			if (sig_co.is_fully_const())
+				return true;
+
+			if (!eval(sig_p, undef, cell))
+				return false;
+
+			if (!eval(sig_g, undef, cell))
+				return false;
+
+			if (!eval(sig_ci, undef, cell))
+				return false;
+
+			if (sig_p.is_fully_def() && sig_g.is_fully_def() && sig_ci.is_fully_def())
+			{
+				RTLIL::Const coval(RTLIL::Sx, GetSize(sig_co));
+				bool carry = sig_ci.as_bool();
+
+				for (int i = 0; i < GetSize(coval); i++) {
+					carry = (sig_g[i] == RTLIL::S1) || (sig_p[i] == RTLIL::S1 && carry);
+					coval.bits[i] = carry ? RTLIL::S1 : RTLIL::S0;
+				}
+
+				set(sig_co, coval);
+			}
+			else
+				set(sig_co, RTLIL::Const(RTLIL::Sx, GetSize(sig_co)));
+
+			return true;
+		}
+
 		RTLIL::SigSpec sig_a, sig_b, sig_s, sig_y;
 
 		log_assert(cell->hasPort("\\Y"));
@@ -154,6 +194,35 @@ struct ConstEval
 			else
 				set(sig_y, y_values.front());
 		}
+		else if (cell->type == "$fa")
+		{
+			RTLIL::SigSpec sig_c = cell->getPort("\\C");
+			RTLIL::SigSpec sig_x = cell->getPort("\\X");
+			int width = GetSize(sig_c);
+
+			if (!eval(sig_a, undef, cell))
+				return false;
+
+			if (!eval(sig_b, undef, cell))
+				return false;
+
+			if (!eval(sig_c, undef, cell))
+				return false;
+
+			RTLIL::Const t1 = const_xor(sig_a.as_const(), sig_b.as_const(), false, false, width);
+			RTLIL::Const val_y = const_xor(t1, sig_c.as_const(), false, false, width);
+
+			RTLIL::Const t2 = const_and(sig_a.as_const(), sig_b.as_const(), false, false, width);
+			RTLIL::Const t3 = const_and(sig_c.as_const(), t1, false, false, width);
+			RTLIL::Const val_x = const_or(t2, t3, false, false, width);
+
+			for (int i = 0; i < GetSize(val_y); i++)
+				if (val_y.bits[i] == RTLIL::Sx)
+					val_x.bits[i] = RTLIL::Sx;
+
+			set(sig_y, val_y);
+			set(sig_x, val_x);
+		}
 		else if (cell->type == "$alu")
 		{
 			bool signed_a = cell->parameters.count("\\A_SIGNED") > 0 && cell->parameters["\\A_SIGNED"].as_bool();
@@ -178,13 +247,13 @@ struct ConstEval
 			RTLIL::SigSpec sig_co = cell->getPort("\\CO");
 
 			bool any_input_undef = !(sig_a.is_fully_def() && sig_b.is_fully_def() && sig_ci.is_fully_def() && sig_bi.is_fully_def());
-			sig_a.extend_u0(SIZE(sig_y), signed_a);
-			sig_b.extend_u0(SIZE(sig_y), signed_b);
+			sig_a.extend_u0(GetSize(sig_y), signed_a);
+			sig_b.extend_u0(GetSize(sig_y), signed_b);
 
 			bool carry = sig_ci[0] == RTLIL::S1;
 			bool b_inv = sig_bi[0] == RTLIL::S1;
 
-			for (int i = 0; i < SIZE(sig_y); i++)
+			for (int i = 0; i < GetSize(sig_y); i++)
 			{
 				RTLIL::SigSpec x_inputs = { sig_a[i], sig_b[i], sig_bi[0] };
 
@@ -209,6 +278,27 @@ struct ConstEval
 					set(sig_co[i], carry ? RTLIL::S1 : RTLIL::S0);
 				}
 			}
+		}
+		else if (cell->type == "$macc")
+		{
+			Macc macc;
+			macc.from_cell(cell);
+
+			if (!eval(macc.bit_ports, undef, cell))
+				return false;
+
+			for (auto &port : macc.ports) {
+				if (!eval(port.in_a, undef, cell))
+					return false;
+				if (!eval(port.in_b, undef, cell))
+					return false;
+			}
+
+			RTLIL::Const result(0, GetSize(cell->getPort("\\Y")));
+			if (!macc.eval(result))
+				log_abort();
+
+			set(cell->getPort("\\Y"), result);
 		}
 		else
 		{
@@ -287,5 +377,7 @@ struct ConstEval
 		return eval(sig, undef);
 	}
 };
+
+YOSYS_NAMESPACE_END
 
 #endif

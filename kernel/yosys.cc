@@ -24,8 +24,25 @@
 #  include <readline/history.h>
 #endif
 
-#include <dlfcn.h>
-#include <unistd.h>
+#ifdef YOSYS_ENABLE_PLUGINS
+#  include <dlfcn.h>
+#endif
+
+#ifdef _WIN32
+#  include <windows.h>
+#  include <io.h>
+#elif defined(__APPLE__)
+#  include <mach-o/dyld.h>
+#  include <unistd.h>
+#  include <dirent.h>
+#  include <sys/stat.h>
+#else
+#  include <unistd.h>
+#  include <dirent.h>
+#  include <sys/types.h>
+#  include <sys/stat.h>
+#endif
+
 #include <limits.h>
 #include <errno.h>
 
@@ -55,8 +72,22 @@ std::string vstringf(const char *fmt, va_list ap)
 	std::string string;
 	char *str = NULL;
 
+#ifdef _WIN32
+	int sz = 64, rc;
+	while (1) {
+		va_list apc;
+		va_copy(apc, ap);
+		str = (char*)realloc(str, sz);
+		rc = vsnprintf(str, sz, fmt, apc);
+		va_end(apc);
+		if (rc >= 0 && rc < sz)
+			break;
+		sz *= 2;
+	}
+#else
 	if (vasprintf(&str, fmt, ap) < 0)
 		str = NULL;
+#endif
 
 	if (str != NULL) {
 		string = str;
@@ -66,7 +97,241 @@ std::string vstringf(const char *fmt, va_list ap)
 	return string;
 }
 
-int SIZE(RTLIL::Wire *wire)
+int readsome(std::istream &f, char *s, int n)
+{
+	int rc = f.readsome(s, n);
+
+	// f.readsome() sometimes returns 0 on a non-empty stream..
+	if (rc == 0) {
+		int c = f.get();
+		if (c != EOF) {
+			*s = c;
+			rc = 1;
+		}
+	}
+
+	return rc;
+}
+
+std::string next_token(std::string &text, const char *sep)
+{
+	size_t pos_begin = text.find_first_not_of(sep);
+
+	if (pos_begin == std::string::npos)
+		pos_begin = text.size();
+
+	size_t pos_end = text.find_first_of(sep, pos_begin);
+
+	if (pos_end == std::string::npos)
+		pos_end = text.size();
+
+	std::string token = text.substr(pos_begin, pos_end-pos_begin);
+	text = text.substr(pos_end);
+	return token;
+}
+
+// this is very similar to fnmatch(). the exact rules used by this
+// function are:
+//
+//    ?        matches any character except
+//    *        matches any sequence of characters
+//    [...]    matches any of the characters in the list
+//    [!..]    matches any of the characters not in the list
+//
+// a backslash may be used to escape the next characters in the
+// pattern. each special character can also simply match itself.
+//
+bool patmatch(const char *pattern, const char *string)
+{
+	if (*pattern == 0)
+		return *string == 0;
+
+	if (*pattern == '\\') {
+		if (pattern[1] == string[0] && patmatch(pattern+2, string+1))
+			return true;
+	}
+
+	if (*pattern == '?') {
+		if (*string == 0)
+			return false;
+		return patmatch(pattern+1, string+1);
+	}
+
+	if (*pattern == '*') {
+		while (*string) {
+			if (patmatch(pattern+1, string++))
+				return true;
+		}
+		return pattern[1] == 0;
+	}
+
+	if (*pattern == '[') {
+		bool found_match = false;
+		bool inverted_list = pattern[1] == '!';
+		const char *p = pattern + (inverted_list ? 1 : 0);
+
+		while (*++p) {
+			if (*p == ']') {
+				if (found_match != inverted_list && patmatch(p+1, string+1))
+					return true;
+				break;
+			}
+
+			if (*p == '\\') {
+				if (*++p == *string)
+					found_match = true;
+			} else
+			if (*p == *string)
+				found_match = true;
+		}
+	}
+
+	if (*pattern == *string)
+		return patmatch(pattern+1, string+1);
+
+	return false;
+}
+
+int run_command(const std::string &command, std::function<void(const std::string&)> process_line)
+{
+	if (!process_line)
+		return system(command.c_str());
+
+	FILE *f = popen(command.c_str(), "r");
+	if (f == nullptr)
+		return -1;
+
+	std::string line;
+	char logbuf[128];
+	while (fgets(logbuf, 128, f) != NULL) {
+		line += logbuf;
+		if (!line.empty() && line.back() == '\n')
+			process_line(line), line.clear();
+	}
+	if (!line.empty())
+		process_line(line);
+
+	int ret = pclose(f);
+	if (ret < 0)
+		return -1;
+#ifdef _WIN32
+	return ret;
+#else
+	return WEXITSTATUS(ret);
+#endif
+}
+
+std::string make_temp_file(std::string template_str)
+{
+#ifdef _WIN32
+	if (template_str.rfind("/tmp/", 0) == 0) {
+#  ifdef __MINGW32__
+		char longpath[MAX_PATH + 1];
+		char shortpath[MAX_PATH + 1];
+#  else
+		WCHAR longpath[MAX_PATH + 1];
+		TCHAR shortpath[MAX_PATH + 1];
+#  endif
+		if (!GetTempPath(MAX_PATH+1, longpath))
+			log_error("GetTempPath() failed.\n");
+		if (!GetShortPathName(longpath, shortpath, MAX_PATH + 1))
+			log_error("GetShortPathName() failed.\n");
+		std::string path;
+		for (int i = 0; shortpath[i]; i++)
+			path += char(shortpath[i]);
+		template_str = stringf("%s\\%s", path.c_str(), template_str.c_str() + 5);
+	}
+
+	size_t pos = template_str.rfind("XXXXXX");
+	log_assert(pos != std::string::npos);
+
+	while (1) {
+		for (int i = 0; i < 6; i++) {
+			static std::string y = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+			static uint32_t x = 314159265 ^ uint32_t(time(NULL));
+			x ^= x << 13, x ^= x >> 17, x ^= x << 5;
+			template_str[pos+i] = y[x % y.size()];
+		}
+		if (_access(template_str.c_str(), 0) != 0)
+			break;
+	}
+#else
+	size_t pos = template_str.rfind("XXXXXX");
+	log_assert(pos != std::string::npos);
+
+	int suffixlen = GetSize(template_str) - pos - 6;
+
+	char *p = strdup(template_str.c_str());
+	close(mkstemps(p, suffixlen));
+	template_str = p;
+	free(p);
+#endif
+
+	return template_str;
+}
+
+std::string make_temp_dir(std::string template_str)
+{
+#ifdef _WIN32
+	template_str = make_temp_file(template_str);
+	mkdir(template_str.c_str());
+	return template_str;
+#else
+	size_t pos = template_str.rfind("XXXXXX");
+	log_assert(pos != std::string::npos);
+
+	int suffixlen = GetSize(template_str) - pos - 6;
+	log_assert(suffixlen == 0);
+
+	char *p = strdup(template_str.c_str());
+	p = mkdtemp(p);
+	log_assert(p != NULL);
+	template_str = p;
+	free(p);
+
+	return template_str;
+#endif
+}
+
+#ifdef _WIN32
+bool check_file_exists(std::string filename, bool)
+{
+	return _access(filename.c_str(), 0) == 0;
+}
+#else
+bool check_file_exists(std::string filename, bool is_exec)
+{
+	return access(filename.c_str(), is_exec ? X_OK : F_OK) == 0;
+}
+#endif
+
+void remove_directory(std::string dirname)
+{
+#ifdef _WIN32
+	run_command(stringf("rmdir /s /q \"%s\"", dirname.c_str()));
+#else
+	struct stat stbuf;
+	struct dirent **namelist;
+	int n = scandir(dirname.c_str(), &namelist, nullptr, alphasort);
+	log_assert(n >= 0);
+	for (int i = 0; i < n; i++) {
+		if (strcmp(namelist[i]->d_name, ".") && strcmp(namelist[i]->d_name, "..")) {
+			std::string buffer = stringf("%s/%s", dirname.c_str(), namelist[i]->d_name);
+			if (!stat(buffer.c_str(), &stbuf) && S_ISREG(stbuf.st_mode)) {
+				log("Removing `%s'.\n", buffer.c_str());
+				remove(buffer.c_str());
+			} else
+				remove_directory(buffer);
+		}
+		free(namelist[i]);
+	}
+	free(namelist);
+	log("Removing `%s'.\n", dirname.c_str());
+	rmdir(dirname.c_str());
+#endif
+}
+
+int GetSize(RTLIL::Wire *wire)
 {
 	return wire->width;
 }
@@ -101,20 +366,30 @@ void yosys_shutdown()
 	}
 #endif
 
+#ifdef YOSYS_ENABLE_PLUGINS
 	for (auto &it : loaded_plugins)
 		dlclose(it.second);
 
 	loaded_plugins.clear();
 	loaded_plugin_aliases.clear();
+#endif
 }
 
 RTLIL::IdString new_id(std::string file, int line, std::string func)
 {
-	std::string str = "$auto$";
+#ifdef _WIN32
+	size_t pos = file.find_last_of("/\\");
+#else
 	size_t pos = file.find_last_of('/');
-	str += pos != std::string::npos ? file.substr(pos+1) : file;
-	str += stringf(":%d:%s$%d", line, func.c_str(), autoidx++);
-	return str;
+#endif
+	if (pos != std::string::npos)
+		file = file.substr(pos+1);
+
+	pos = func.find_last_of(':');
+	if (pos != std::string::npos)
+		func = func.substr(pos+1);
+
+	return stringf("$auto$%s:%d:%s$%d", file.c_str(), line, func.c_str(), autoidx++);
 }
 
 RTLIL::Design *yosys_get_design()
@@ -210,9 +485,9 @@ struct TclPass : public Pass {
 #endif
 
 #if defined(__linux__)
-std::string proc_self_dirname ()
+std::string proc_self_dirname()
 {
-	char path [PATH_MAX];
+	char path[PATH_MAX];
 	ssize_t buflen = readlink("/proc/self/exe", path, sizeof(path));
 	if (buflen < 0) {
 		log_error("readlink(\"/proc/self/exe\") failed: %s\n", strerror(errno));
@@ -222,10 +497,9 @@ std::string proc_self_dirname ()
 	return std::string(path, buflen);
 }
 #elif defined(__APPLE__)
-#include <mach-o/dyld.h>
-std::string proc_self_dirname ()
+std::string proc_self_dirname()
 {
-	char * path = NULL;
+	char *path = NULL;
 	uint32_t buflen = 0;
 	while (_NSGetExecutablePath(path, &buflen) != 0)
 		path = (char *) realloc((void *) path, buflen);
@@ -233,8 +507,32 @@ std::string proc_self_dirname ()
 		buflen--;
 	return std::string(path, buflen);
 }
+#elif defined(_WIN32)
+std::string proc_self_dirname()
+{
+	int i = 0;
+#  ifdef __MINGW32__
+	char longpath[MAX_PATH + 1];
+	char shortpath[MAX_PATH + 1];
+#  else
+	WCHAR longpath[MAX_PATH + 1];
+	TCHAR shortpath[MAX_PATH + 1];
+#  endif
+	if (!GetModuleFileName(0, longpath, MAX_PATH+1))
+		log_error("GetModuleFileName() failed.\n");
+	if (!GetShortPathName(longpath, shortpath, MAX_PATH+1))
+		log_error("GetShortPathName() failed.\n");
+	while (shortpath[i] != 0)
+		i++;
+	while (i > 0 && shortpath[i-1] != '/' && shortpath[i-1] != '\\')
+		shortpath[--i] = 0;
+	std::string path;
+	for (i = 0; shortpath[i]; i++)
+		path += char(shortpath[i]);
+	return path;
+}
 #elif defined(EMSCRIPTEN)
-std::string proc_self_dirname ()
+std::string proc_self_dirname()
 {
 	return "/";
 }
@@ -242,15 +540,24 @@ std::string proc_self_dirname ()
 	#error Dont know how to determine process executable base path!
 #endif
 
-std::string proc_share_dirname ()
+std::string proc_share_dirname()
 {
 	std::string proc_self_path = proc_self_dirname();
+#ifdef _WIN32
+	std::string proc_share_path = proc_self_path + "share\\";
+	if (check_file_exists(proc_share_path, true))
+		return proc_share_path;
+	proc_share_path = proc_self_path + "..\\share\\";
+	if (check_file_exists(proc_share_path, true))
+		return proc_share_path;
+#else
 	std::string proc_share_path = proc_self_path + "share/";
-	if (access(proc_share_path.c_str(), X_OK) == 0)
+	if (check_file_exists(proc_share_path, true))
 		return proc_share_path;
 	proc_share_path = proc_self_path + "../share/yosys/";
-	if (access(proc_share_path.c_str(), X_OK) == 0)
+	if (check_file_exists(proc_share_path, true))
 		return proc_share_path;
+#endif
 	log_error("proc_share_dirname: unable to determine share/ directory!\n");
 }
 
@@ -275,15 +582,15 @@ static void handle_label(std::string &command, bool &from_to_active, const std::
 	int pos = 0;
 	std::string label;
 
-	while (pos < SIZE(command) && (command[pos] == ' ' || command[pos] == '\t'))
+	while (pos < GetSize(command) && (command[pos] == ' ' || command[pos] == '\t'))
 		pos++;
 
-	while (pos < SIZE(command) && command[pos] != ' ' && command[pos] != '\t' && command[pos] != '\r' && command[pos] != '\n')
+	while (pos < GetSize(command) && command[pos] != ' ' && command[pos] != '\t' && command[pos] != '\r' && command[pos] != '\n')
 		label += command[pos++];
 
-	if (label.back() == ':' && SIZE(label) > 1)
+	if (label.back() == ':' && GetSize(label) > 1)
 	{
-		label = label.substr(0, SIZE(label)-1);
+		label = label.substr(0, GetSize(label)-1);
 		command = command.substr(pos);
 
 		if (label == run_from)
@@ -518,11 +825,16 @@ void shell(RTLIL::Design *design)
 	char *command = NULL;
 #ifdef YOSYS_ENABLE_READLINE
 	while ((command = readline(create_prompt(design, recursion_counter))) != NULL)
+	{
 #else
 	char command_buffer[4096];
-	while ((command = fgets(command_buffer, 4096, stdin)) != NULL)
-#endif
+	while (1)
 	{
+		fputs(create_prompt(design, recursion_counter), stdout);
+		fflush(stdout);
+		if ((command = fgets(command_buffer, 4096, stdin)) == NULL)
+			break;
+#endif
 		if (command[strspn(command, " \t\r\n")] == 0)
 			continue;
 #ifdef YOSYS_ENABLE_READLINE

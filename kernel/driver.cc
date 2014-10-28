@@ -27,10 +27,43 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-#include <libgen.h>
 #include <limits.h>
 #include <errno.h>
+
+#if !defined(_WIN32) || defined(__MINGW32__)
+#  include <unistd.h>
+#else
+char *optarg;
+int optind = 1, optcur = 1;
+int getopt(int argc, char **argv, const char *optstring)
+{
+	if (optind >= argc || argv[optind][0] != '-')
+		return -1;
+
+	bool takes_arg = false;
+	int opt = argv[optind][optcur];
+	for (int i = 0; optstring[i]; i++)
+		if (opt == optstring[i] && optstring[i + 1] == ':')
+			takes_arg = true;
+
+	if (!takes_arg) {
+		if (argv[optind][++optcur] == 0)
+			optind++, optcur = 1;
+		return opt;
+	}
+
+	if (argv[optind][++optcur]) {
+		optarg = argv[optind++] + optcur;
+		optcur = 1;
+		return opt;
+	}
+
+	optarg = argv[++optind];
+	optind++, optcur = 1;
+	return opt;
+}
+#endif
+
 
 USING_YOSYS_NAMESPACE
 
@@ -76,13 +109,7 @@ int main(int argc, char **argv)
 			printf("%s\n", yosys_version_str);
 			exit(0);
 		case 'S':
-			passes_commands.push_back("hierarchy");
-			passes_commands.push_back("proc");
-			passes_commands.push_back("opt");
-			passes_commands.push_back("memory");
-			passes_commands.push_back("opt");
-			passes_commands.push_back("techmap");
-			passes_commands.push_back("opt");
+			passes_commands.push_back("synth");
 			break;
 		case 'm':
 			plugin_filenames.push_back(optarg);
@@ -187,10 +214,10 @@ int main(int argc, char **argv)
 			fprintf(stderr, "    -V\n");
 			fprintf(stderr, "        print version information and exit\n");
 			fprintf(stderr, "\n");
-			fprintf(stderr, "The option -S is an alias for the following options that perform a simple\n");
-			fprintf(stderr, "transformation of the input to a gate-level netlist.\n");
+			fprintf(stderr, "The option -S is an shortcut for calling the \"synth\" command, a default\n");
+			fprintf(stderr, "script for transforming the verilog input to a gate-level netlist. For example:\n");
 			fprintf(stderr, "\n");
-			fprintf(stderr, "    -p hierarchy -p proc -p opt -p memory -p opt -p techmap -p opt\n");
+			fprintf(stderr, "    yosys -o output.blif -S input.v\n");
 			fprintf(stderr, "\n");
 			fprintf(stderr, "For more complex synthesis jobs it is recommended to use the read_* and write_*\n");
 			fprintf(stderr, "commands in a script file instead of specifying input and output files on the\n");
@@ -209,25 +236,25 @@ int main(int argc, char **argv)
 
 	if (print_banner) {
 		log("\n");
-		log(" /-----------------------------------------------------------------------------\\\n");
-		log(" |                                                                             |\n");
-		log(" |  yosys -- Yosys Open SYnthesis Suite                                        |\n");
-		log(" |                                                                             |\n");
-		log(" |  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>                   |\n");
-		log(" |                                                                             |\n");
-		log(" |  Permission to use, copy, modify, and/or distribute this software for any   |\n");
-		log(" |  purpose with or without fee is hereby granted, provided that the above     |\n");
-		log(" |  copyright notice and this permission notice appear in all copies.          |\n");
-		log(" |                                                                             |\n");
-		log(" |  THE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES   |\n");
-		log(" |  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF           |\n");
-		log(" |  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR    |\n");
-		log(" |  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES     |\n");
-		log(" |  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN      |\n");
-		log(" |  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF    |\n");
-		log(" |  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.             |\n");
-		log(" |                                                                             |\n");
-		log(" \\-----------------------------------------------------------------------------/\n");
+		log(" /----------------------------------------------------------------------------\\\n");
+		log(" |                                                                            |\n");
+		log(" |  yosys -- Yosys Open SYnthesis Suite                                       |\n");
+		log(" |                                                                            |\n");
+		log(" |  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>                  |\n");
+		log(" |                                                                            |\n");
+		log(" |  Permission to use, copy, modify, and/or distribute this software for any  |\n");
+		log(" |  purpose with or without fee is hereby granted, provided that the above    |\n");
+		log(" |  copyright notice and this permission notice appear in all copies.         |\n");
+		log(" |                                                                            |\n");
+		log(" |  THE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES  |\n");
+		log(" |  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF          |\n");
+		log(" |  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR   |\n");
+		log(" |  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES    |\n");
+		log(" |  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN     |\n");
+		log(" |  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF   |\n");
+		log(" |  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.            |\n");
+		log(" |                                                                            |\n");
+		log(" \\----------------------------------------------------------------------------/\n");
 		log("\n");
 		log(" %s\n", yosys_version_str);
 		log("\n");
@@ -274,12 +301,16 @@ int main(int argc, char **argv)
 		delete log_hasher;
 		log_hasher = nullptr;
 
+		log_spacer();
+#ifdef _WIN32
+		log("End of script. Logfile hash: %s\n", hash.c_str());
+#else
 		struct rusage ru_buffer;
 		getrusage(RUSAGE_SELF, &ru_buffer);
-		log_spacer();
 		log("End of script. Logfile hash: %s, CPU: user %.2fs system %.2fs\n", hash.c_str(),
 				ru_buffer.ru_utime.tv_sec + 1e-6 * ru_buffer.ru_utime.tv_usec,
 				ru_buffer.ru_stime.tv_sec + 1e-6 * ru_buffer.ru_stime.tv_usec);
+#endif
 		log("%s\n", yosys_version_str);
 
 		int64_t total_ns = 0;
