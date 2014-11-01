@@ -6,7 +6,6 @@ Priority: optional
 Build-Depends: debhelper (>= 9),
                tcl8.5-dev,
                libreadline-dev,
-               git,
                bison,
                flex,
                gawk,
