@@ -4,9 +4,9 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2014-10-28 21:25:22.411413201 +0100
-+++ yosys/Makefile	2014-10-28 21:27:48.631415935 +0100
-@@ -130,7 +130,7 @@
+--- yosys.orig/Makefile	2014-11-08 22:45:42.554902177 +0100
++++ yosys/Makefile	2014-11-08 22:45:42.550902177 +0100
+@@ -129,7 +129,7 @@
  
  ifeq ($(ENABLE_ABC),1)
  CXXFLAGS += -DYOSYS_ENABLE_ABC

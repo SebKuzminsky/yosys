@@ -4,9 +4,9 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2014-10-28 21:29:28.995417812 +0100
-+++ yosys/Makefile	2014-10-28 21:29:28.987417812 +0100
-@@ -15,7 +15,7 @@
+--- yosys.orig/Makefile	2014-11-08 22:46:32.514901858 +0100
++++ yosys/Makefile	2014-11-08 22:46:32.510901858 +0100
+@@ -16,7 +16,7 @@
  # other configuration flags
  ENABLE_GPROF := 0
  
@@ -15,7 +15,7 @@ Index: yosys/Makefile
  INSTALL_SUDO :=
  
  EXE =
-@@ -282,10 +282,10 @@
+@@ -285,10 +285,10 @@
  	@echo ""
  
  install: $(TARGETS) $(EXTRA_TARGETS)

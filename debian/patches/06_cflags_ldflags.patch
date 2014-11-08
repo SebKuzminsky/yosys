@@ -4,9 +4,9 @@ Forwarded: will do
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2014-10-28 21:32:11.583420853 +0100
-+++ yosys/Makefile	2014-10-28 21:34:03.899422954 +0100
-@@ -30,8 +30,8 @@
+--- yosys.orig/Makefile	2014-11-08 22:47:08.578901627 +0100
++++ yosys/Makefile	2014-11-08 22:47:08.574901627 +0100
+@@ -31,8 +31,8 @@
  
  all: top-all
  
@@ -15,9 +15,9 @@ Index: yosys/Makefile
 +CXXFLAGS += -Wall -Wextra -ggdb -I"$(shell pwd)" -MD -DYOSYS_SRC='"$(shell pwd)"' -D_YOSYS_ -fPIC -I${DESTDIR}/include
 +LDFLAGS += -L${DESTDIR}/lib
  LDLIBS = -lstdc++ -lm
- QMAKE = qmake-qt4
  SED = sed
-@@ -214,10 +214,10 @@
+ 
+@@ -217,10 +217,10 @@
  	$(P) $(CXX) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
  
  %.o: %.cc
@@ -30,7 +30,7 @@ Index: yosys/Makefile
  
  kernel/version_$(GIT_REV).cc: Makefile
  	$(P) rm -f kernel/version_*.o kernel/version_*.d kernel/version_*.cc
-@@ -225,8 +225,8 @@
+@@ -228,8 +228,8 @@
  			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\"; }" > kernel/version_$(GIT_REV).cc
  
  yosys-config: misc/yosys-config.in
