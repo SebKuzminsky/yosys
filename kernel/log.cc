@@ -194,7 +194,7 @@ void log_cmd_error(const char *format, ...)
 		log("ERROR: ");
 		logv(format, ap);
 		log_flush();
-		throw log_cmd_error_expection();
+		throw log_cmd_error_exception();
 	}
 
 	logv_error(format, ap);
@@ -274,7 +274,7 @@ void log_cell(RTLIL::Cell *cell, std::string indent)
 // ---------------------------------------------------
 // This is the magic behind the code coverage counters
 // ---------------------------------------------------
-#ifdef COVER_ACTIVE
+#ifdef YOSYS_ENABLE_COVER
 
 std::map<std::string, std::pair<std::string, int>> extra_coverage_data;
 

@@ -38,7 +38,7 @@ YOSYS_NAMESPACE_BEGIN
 #define S__LINE__sub1(x) S__LINE__sub2(x)
 #define S__LINE__ S__LINE__sub1(__LINE__)
 
-struct log_cmd_error_expection { };
+struct log_cmd_error_exception { };
 
 extern std::vector<FILE*> log_files;
 extern std::vector<std::ostream*> log_streams;
@@ -87,11 +87,10 @@ static inline void log_assert_worker(bool cond, const char *expr, const char *fi
 // This is the magic behind the code coverage counters
 // ---------------------------------------------------
 
-#if defined(__linux__) && !defined(NDEBUG)
-#define COVER_ACTIVE
+#ifdef YOSYS_ENABLE_COVER
 
 #define cover(_id) do { \
-    static CoverData __d __attribute__((section("yosys_cover_list"), aligned(1))) = { __FILE__, __FUNCTION__, _id, __LINE__, 0 }; \
+    static CoverData __d __attribute__((section("yosys_cover_list"), aligned(1), used)) = { __FILE__, __FUNCTION__, _id, __LINE__, 0 }; \
     __d.counter++; \
 } while (0)
 

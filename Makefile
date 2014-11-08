@@ -11,6 +11,7 @@ ENABLE_ABC := 1
 ENABLE_PLUGINS := 1
 ENABLE_READLINE := 1
 ENABLE_VERIFIC := 0
+ENABLE_COVER := 0
 
 # other configuration flags
 ENABLE_GPROF := 0
@@ -33,21 +34,19 @@ all: top-all
 CXXFLAGS = -Wall -Wextra -ggdb -I"$(shell pwd)" -MD -DYOSYS_SRC='"$(shell pwd)"' -D_YOSYS_ -fPIC -I${DESTDIR}/include
 LDFLAGS = -L${DESTDIR}/lib
 LDLIBS = -lstdc++ -lm
-QMAKE = qmake-qt4
 SED = sed
 
 ifeq (Darwin,$(findstring Darwin,$(shell uname)))
 	# add macports include and library path to search directories, don't use '-rdynamic' and '-lrt':
 	CXXFLAGS += -I/opt/local/include
 	LDFLAGS += -L/opt/local/lib
-	QMAKE = qmake
 	SED = gsed
 else
 	LDFLAGS += -rdynamic
 	LDLIBS += -lrt
 endif
 
-YOSYS_VER := 0.3.0+$(shell test -d .git && { git log --author=clifford@clifford.at --oneline ca125bf41.. | wc -l; })
+YOSYS_VER := 0.4
 GIT_REV := $(shell git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
 OBJS = kernel/version_$(GIT_REV).o
 
@@ -57,7 +56,7 @@ OBJS = kernel/version_$(GIT_REV).o
 # is just a symlink to your actual ABC working directory, as 'make mrproper'
 # will remove the 'abc' directory and you do not want to accidentally
 # delete your work on ABC..
-ABCREV = 930a4de962a1
+ABCREV = 5b5af75f1dda
 ABCPULL = 1
 ABCMKARGS = # CC="$(CXX)" CXX="$(CXX)"
 
@@ -138,6 +137,10 @@ VERIFIC_DIR ?= /usr/local/src/verific_lib_eval
 VERIFIC_COMPONENTS ?= verilog vhdl database util containers
 CXXFLAGS += $(patsubst %,-I$(VERIFIC_DIR)/%,$(VERIFIC_COMPONENTS)) -DYOSYS_ENABLE_VERIFIC
 LDLIBS += $(patsubst %,$(VERIFIC_DIR)/%/*-linux.a,$(VERIFIC_COMPONENTS))
+endif
+
+ifeq ($(ENABLE_COVER),1)
+CXXFLAGS += -DYOSYS_ENABLE_COVER
 endif
 
 ifeq ($(PRETTY), 1)
