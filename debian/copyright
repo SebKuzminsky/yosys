@@ -11,7 +11,7 @@ Copyright: 2012 Clifford Wolf <clifford@clifford.at>
            2014 Ahmed Irfan <irfan@fbk.eu>
 License: ISC
 
-Files: passes/cmds/tee.cc passes/tests/test_cell.cc passes/cmds/log.cc
+Files: passes/cmds/tee.cc passes/tests/test_cell.cc passes/cmds/logcmd.cc
        passes/cmds/write_file.cc passes/cmds/trace.cc 
 Copyright: 2012-2014 Clifford Wolf <clifford@clifford.at>
            2014 Johann Glaser <Johann.Glaser@gmx.at>
