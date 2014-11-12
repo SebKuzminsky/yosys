@@ -1,8 +1,10 @@
 yosys (0.4.0-1) unstable; urgency=medium
 
-  * New upstream version
+  * New upstream release
+  * Few fixes in d/copyright
+  * Removed some strictly not needed dependencies
 
- -- Ruben Undheim <ruben.undheim@gmail.com>  Sat, 08 Nov 2014 18:33:31 +0100
+ -- Ruben Undheim <ruben.undheim@gmail.com>  Wed, 12 Nov 2014 18:35:59 +0100
 
 yosys (0.3.0+20140906git652345c-1) unstable; urgency=low
 
