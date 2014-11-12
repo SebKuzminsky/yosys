@@ -19,7 +19,7 @@ License: ISC
 
 Files: libs/minisat/*
 Copyright: 2003-2006, Niklas Een, Niklas Sorensson
-           2007-2010  Niklas Sorensson
+           2007-2012  Niklas Sorensson
 License: MIT
 
 Files: libs/sha1/*
