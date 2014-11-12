@@ -20,10 +20,8 @@ Package: yosys
 Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         iverilog,
-         graphviz,
-         xdot,
-         berkeley-abc
+         berkeley-abc (>= 1.01),
+         xdot
 Description: Framework for Verilog RTL synthesis
  This is a framework for Verilog RTL synthesis. It currently has extensive
  Verilog-2005 support and provides a basic set of synthesis algorithms for
