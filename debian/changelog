@@ -1,6 +1,8 @@
 yosys (0.4.0+20150201git3cbfa38-1) unstable; urgency=low
 
   * New upstream release
+  * Added d/watch
+  * Updated copyright years in d/copyright
 
  -- Ruben Undheim <ruben.undheim@gmail.com>  Sun, 01 Feb 2015 21:30:48 +0100
 
