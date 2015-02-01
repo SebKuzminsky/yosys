@@ -64,6 +64,10 @@ struct ShowWorker
 	const std::vector<std::pair<std::string, RTLIL::Selection>> &color_selections;
 	const std::vector<std::pair<std::string, RTLIL::Selection>> &label_selections;
 
+	std::map<RTLIL::Const, int> colorattr_cache;
+	RTLIL::IdString colorattr;
+
+
 	static uint32_t xorshift32(uint32_t x) {
 		x ^= x << 13;
 		x ^= x >> 17;
@@ -128,7 +132,25 @@ struct ShowWorker
 				dot_escape_store.push_back(stringf(", color=\"%s\"", s.first.c_str()));
 				return dot_escape_store.back().c_str();
 			}
-		return "";
+
+		RTLIL::Const colorattr_value;
+		RTLIL::Cell *cell = module->cell(member_name);
+		RTLIL::Wire *wire = module->wire(member_name);
+
+		if (cell && cell->attributes.count(colorattr))
+			colorattr_value = cell->attributes.at(colorattr);
+		else if (wire && wire->attributes.count(colorattr))
+			colorattr_value = wire->attributes.at(colorattr);
+		else
+			return "";
+
+		if (colorattr_cache.count(colorattr_value) == 0) {
+			int next_id = GetSize(colorattr_cache);
+			colorattr_cache[colorattr_value] = (next_id % 8) + 1;
+		}
+
+		dot_escape_store.push_back(stringf(", colorscheme=\"dark28\", color=\"%d\", fontcolor=\"%d\"", colorattr_cache.at(colorattr_value), colorattr_cache.at(colorattr_value)));
+		return dot_escape_store.back().c_str();
 	}
 
 	const char *findLabel(std::string member_name)
@@ -460,8 +482,8 @@ struct ShowWorker
 
 			if (left_node[0] == 'x' && right_node[0] == 'x') {
 				currentColor = xorshift32(currentColor);
-			fprintf(f, "%s:e -> %s:w [arrowhead=odiamond, arrowtail=odiamond, dir=both, %s, %s];\n", left_node.c_str(), right_node.c_str(), nextColor(conn).c_str(), widthLabel(conn.first.size()).c_str());
-		} else {
+				fprintf(f, "%s:e -> %s:w [arrowhead=odiamond, arrowtail=odiamond, dir=both, %s, %s];\n", left_node.c_str(), right_node.c_str(), nextColor(conn).c_str(), widthLabel(conn.first.size()).c_str());
+			} else {
 				net_conn_map[right_node].bits = conn.first.size();
 				net_conn_map[right_node].color = nextColor(conn, net_conn_map[right_node].color);
 				net_conn_map[left_node].bits = conn.first.size();
@@ -507,10 +529,10 @@ struct ShowWorker
 	ShowWorker(FILE *f, RTLIL::Design *design, std::vector<RTLIL::Design*> &libs, uint32_t colorSeed, bool genWidthLabels,
 			bool genSignedLabels, bool stretchIO, bool enumerateIds, bool abbreviateIds, bool notitle,
 			const std::vector<std::pair<std::string, RTLIL::Selection>> &color_selections,
-			const std::vector<std::pair<std::string, RTLIL::Selection>> &label_selections) :
+			const std::vector<std::pair<std::string, RTLIL::Selection>> &label_selections, RTLIL::IdString colorattr) :
 			f(f), design(design), currentColor(colorSeed), genWidthLabels(genWidthLabels),
 			genSignedLabels(genSignedLabels), stretchIO(stretchIO), enumerateIds(enumerateIds), abbreviateIds(abbreviateIds),
-			notitle(notitle), color_selections(color_selections), label_selections(label_selections)
+			notitle(notitle), color_selections(color_selections), label_selections(label_selections), colorattr(colorattr)
 	{
 		ct.setup_internals();
 		ct.setup_internals_mem();
@@ -586,6 +608,10 @@ struct ShowPass : public Pass {
 		log("        for the random number generator. Change the seed value if the colored\n");
 		log("        graph still is ambigous. A seed of zero deactivates the coloring.\n");
 		log("\n");
+		log("    -colorattr <attribute_name>\n");
+		log("        Use the specified attribute to assign colors. A unique color is\n");
+		log("        assigned to each unique value of this attribute.\n");
+		log("\n");
 		log("    -width\n");
 		log("        annotate busses with a label indicating the width of the bus.\n");
 		log("\n");
@@ -637,6 +663,7 @@ struct ShowPass : public Pass {
 		bool flag_enum = false;
 		bool flag_abbeviate = true;
 		bool flag_notitle = false;
+		RTLIL::IdString colorattr;
 
 		size_t argidx;
 		for (argidx = 1; argidx < args.size(); argidx++)
@@ -676,6 +703,10 @@ struct ShowPass : public Pass {
 				colorSeed = atoi(args[++argidx].c_str());
 				for (int i = 0; i < 100; i++)
 					colorSeed = ShowWorker::xorshift32(colorSeed);
+				continue;
+			}
+			if (arg == "-colorattr" && argidx+1 < args.size()) {
+				colorattr = RTLIL::escape_id(args[++argidx]);
 				continue;
 			}
 			if (arg == "-format" && argidx+1 < args.size()) {
@@ -753,7 +784,7 @@ struct ShowPass : public Pass {
 				delete lib;
 			log_cmd_error("Can't open dot file `%s' for writing.\n", dot_file.c_str());
 		}
-		ShowWorker worker(f, design, libs, colorSeed, flag_width, flag_signed, flag_stretch, flag_enum, flag_abbeviate, flag_notitle, color_selections, label_selections);
+		ShowWorker worker(f, design, libs, colorSeed, flag_width, flag_signed, flag_stretch, flag_enum, flag_abbeviate, flag_notitle, color_selections, label_selections, colorattr);
 		fclose(f);
 
 		for (auto lib : libs)
@@ -763,7 +794,7 @@ struct ShowPass : public Pass {
 			log_cmd_error("Nothing there to show.\n");
 
 		if (format != "dot" && !format.empty()) {
-			std::string cmd = stringf("dot -T%s -o '%s' '%s'", format.c_str(), out_file.c_str(), dot_file.c_str());
+			std::string cmd = stringf("dot -T%s -o '%s.new' '%s' && mv '%s.new' '%s'", format.c_str(), out_file.c_str(), dot_file.c_str(), dot_file.c_str(), dot_file.c_str());
 			log("Exec: %s\n", cmd.c_str());
 			if (run_command(cmd) != 0)
 				log_cmd_error("Shell command failed!\n");
@@ -776,7 +807,7 @@ struct ShowPass : public Pass {
 				log_cmd_error("Shell command failed!\n");
 		} else
 		if (format.empty()) {
-			std::string cmd = stringf("fuser -s '%s' || xdot '%s' < '%s' &", dot_file.c_str(), dot_file.c_str(), dot_file.c_str());
+			std::string cmd = stringf("{ test -f '%s.pid' && fuser -s '%s.pid'; } || ( echo $$ >&3; exec xdot '%s'; ) 3> '%s.pid' &", dot_file.c_str(), dot_file.c_str(), dot_file.c_str(), dot_file.c_str());
 			log("Exec: %s\n", cmd.c_str());
 			if (run_command(cmd) != 0)
 				log_cmd_error("Shell command failed!\n");

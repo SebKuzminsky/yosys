@@ -3,7 +3,7 @@
  |                                                                             |
  |  yosys -- Yosys Open SYnthesis Suite                                        |
  |                                                                             |
- |  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>                   |
+ |  Copyright (C) 2012 - 2015  Clifford Wolf <clifford@clifford.at>            |
  |                                                                             |
  |  Permission to use, copy, modify, and/or distribute this software for any   |
  |  purpose with or without fee is hereby granted, provided that the above     |
@@ -55,12 +55,13 @@ Xdot (graphviz) is used by the "show" command in yosys to display schematics.
 For example on Ubuntu Linux 14.04 LTS the following commands will install all
 prerequisites for building yosys:
 
-	$ yosys_deps="build-essential clang bison flex libreadline-dev
-	              tcl8.5-dev libffi-dev git mercurial graphviz xdot"
+	$ yosys_deps="build-essential clang bison flex libreadline-dev gawk
+	       tcl8.5-dev libffi-dev git mercurial graphviz xdot pkg-config"
 	$ sudo apt-get install $yosys_deps
 
-There are also pre-compiled packages for Yosys on Ubuntu. Visit the Yosys
-download page to learn more about this:
+There are also pre-compiled Yosys binary packages for Ubuntu and Win32 as well
+as a source distribution for Visual Studio. Visit the Yosys download page for
+more information:
 
 	http://www.clifford.at/yosys/download.html 
 
@@ -294,7 +295,7 @@ Verilog Attributes and non-standard features
   by adding an empty {* *} statement.)
 
 - Modules can be declared with "module mod_name(...);" (with three dots
-  instead of a list of moudle ports). With this syntax it is sufficient
+  instead of a list of module ports). With this syntax it is sufficient
   to simply declare a module port as 'input' or 'output' in the module
   body.
 
@@ -359,39 +360,8 @@ from SystemVerilog:
 
 - The "assert" statement from SystemVerilog is supported in its most basic
   form. In module context: "assert property (<expression>);" and within an
-  always block: "assert(<expression>);". It is transformed to a $assert cell
-  that is supported by the "sat" and "write_btor" commands.
+  always block: "assert(<expression>);". It is transformed to a $assert cell.
 
 - The keywords "always_comb", "always_ff" and "always_latch", "logic" and
   "bit" are supported.
-
-
-Roadmap / Large-scale TODOs
-===========================
-
-- Technology mapping for real-world applications
-   - Improve Xilinx FGPA synthesis (RAMB, CARRY4, SLR, etc.)
-
-- Implement SAT-based formal equivialence checker
-   - Write equiv pass based on hint-based register mapping
-
-- Re-implement Verilog frontend (far future)
-   - cleaner (easier to use, harder to use wrong) AST format
-   - pipeline of well structured AST transformations
-   - true contextual name lookup
-
-
-Other Unsorted TODOs
-====================
-
-- Implement missing Verilog 2005 features:
-
-  - Support for real (float) const. expressions and parameters
-  - Ignore what needs to be ignored (e.g. drive and charge strengths)
-  - Check standard vs. implementation to identify missing features
-
-- Miscellaneous TODO items: 
-
-  - Add brief source code documentation to most passes and kernel code
-  - Implement mux-to-tribuf pass and rebalance mixed mux/tribuf trees
 

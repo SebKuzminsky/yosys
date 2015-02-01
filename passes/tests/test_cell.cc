@@ -36,7 +36,7 @@ static uint32_t xorshift32(uint32_t limit) {
 	return xorshift32_state % limit;
 }
 
-static void create_gold_module(RTLIL::Design *design, RTLIL::IdString cell_type, std::string cell_type_flags, bool constmode)
+static void create_gold_module(RTLIL::Design *design, RTLIL::IdString cell_type, std::string cell_type_flags, bool constmode, bool muxdiv)
 {
 	RTLIL::Module *module = design->addModule("\\gold");
 	RTLIL::Cell *cell = module->addCell("\\UUT", cell_type);
@@ -200,6 +200,13 @@ static void create_gold_module(RTLIL::Design *design, RTLIL::IdString cell_type,
 		wire->width = 1 + xorshift32(8);
 		wire->port_output = true;
 		cell->setPort("\\Y", wire);
+	}
+
+	if (muxdiv && (cell_type == "$div" || cell_type == "$mod")) {
+		auto b_not_zero = module->ReduceBool(NEW_ID, cell->getPort("\\B"));
+		auto div_out = module->addWire(NEW_ID, GetSize(cell->getPort("\\Y")));
+		module->addMux(NEW_ID, RTLIL::SigSpec(0, GetSize(div_out)), div_out, b_not_zero, cell->getPort("\\Y"));
+		cell->setPort("\\Y", div_out);
 	}
 
 	if (cell_type == "$alu")
@@ -508,7 +515,7 @@ struct TestCellPass : public Pass {
 		log("by comparing SAT solver, EVAL and TECHMAP implementations of the cell types..\n");
 		log("\n");
 		log("Run with 'all' instead of a cell type to run the test on all supported\n");
-		log("cell types.\n");
+		log("cell types. Use for example 'all /$add' for all cell types except $add.\n");
 		log("\n");
 		log("    -n {integer}\n");
 		log("        create this number of cell instances and test them (default = 100).\n");
@@ -519,11 +526,19 @@ struct TestCellPass : public Pass {
 		log("    -f {ilang_file}\n");
 		log("        don't generate circuits. instead load the specified ilang file.\n");
 		log("\n");
+		log("    -w {filename_prefix}\n");
+		log("        don't test anything. just generate the circuits and write them\n");
+		log("        to ilang files with the specified prefix\n");
+		log("\n");
 		log("    -map {filename}\n");
 		log("        pass this option to techmap.\n");
 		log("\n");
 		log("    -simlib\n");
 		log("        use \"techmap -map +/simlib.v -max_iter 2 -autoproc\"\n");
+		log("\n");
+		log("    -muxdiv\n");
+		log("        when creating test benches with dividers, create an additional mux\n");
+		log("        to mask out the division-by-zero case\n");
 		log("\n");
 		log("    -script {script_file}\n");
 		log("        instead of calling \"techmap\", call \"script {script_file}\".\n");
@@ -545,9 +560,10 @@ struct TestCellPass : public Pass {
 	{
 		int num_iter = 100;
 		std::string techmap_cmd = "techmap -assert";
-		std::string ilang_file;
+		std::string ilang_file, write_prefix;
 		xorshift32_state = 0;
 		std::ofstream vlog_file;
+		bool muxdiv = false;
 		bool verbose = false;
 		bool constmode = false;
 		bool nosat = false;
@@ -572,12 +588,20 @@ struct TestCellPass : public Pass {
 				num_iter = 1;
 				continue;
 			}
+			if (args[argidx] == "-w" && argidx+1 < GetSize(args)) {
+				write_prefix = args[++argidx];
+				continue;
+			}
 			if (args[argidx] == "-script" && argidx+1 < GetSize(args)) {
 				techmap_cmd = "script " + args[++argidx];
 				continue;
 			}
 			if (args[argidx] == "-simlib") {
 				techmap_cmd = "techmap -map +/simlib.v -max_iter 2 -autoproc";
+				continue;
+			}
+			if (args[argidx] == "-muxdiv") {
+				muxdiv = true;
 				continue;
 			}
 			if (args[argidx] == "-const") {
@@ -675,6 +699,15 @@ struct TestCellPass : public Pass {
 				continue;
 			}
 
+			if (args[argidx].substr(0, 1) == "/") {
+				std::vector<std::string> new_selected_cell_types;
+				for (auto it : selected_cell_types)
+					if (it != args[argidx].substr(1))
+						new_selected_cell_types.push_back(it);
+				new_selected_cell_types.swap(selected_cell_types);
+				continue;
+			}
+
 			if (cell_types.count(args[argidx]) == 0) {
 				std::string cell_type_list;
 				int charcount = 100;
@@ -712,24 +745,28 @@ struct TestCellPass : public Pass {
 				if (cell_type == "ilang")
 					Frontend::frontend_call(design, NULL, std::string(), "ilang " + ilang_file);
 				else
-					create_gold_module(design, cell_type, cell_types.at(cell_type), constmode);
-				Pass::call(design, stringf("copy gold gate; cd gate; %s; cd ..; opt -fast gate", techmap_cmd.c_str()));
-				if (!nosat)
-					Pass::call(design, "miter -equiv -flatten -make_outputs -ignore_gold_x gold gate miter");
-				if (verbose)
-					Pass::call(design, "dump gate");
-				Pass::call(design, "dump gold");
-				if (!nosat)
-					Pass::call(design, "sat -verify -enable_undef -prove trigger 0 -show-inputs -show-outputs miter");
-				std::string uut_name = stringf("uut_%s_%d", cell_type.substr(1).c_str(), i);
-				if (vlog_file.is_open()) {
-					Pass::call(design, stringf("copy gold %s_expr; select %s_expr", uut_name.c_str(), uut_name.c_str()));
-					Backend::backend_call(design, &vlog_file, "<test_cell -vlog>", "verilog -selected");
-					Pass::call(design, stringf("copy gold %s_noexpr; select %s_noexpr", uut_name.c_str(), uut_name.c_str()));
-					Backend::backend_call(design, &vlog_file, "<test_cell -vlog>", "verilog -selected -noexpr");
-					uut_names.push_back(uut_name);
+					create_gold_module(design, cell_type, cell_types.at(cell_type), constmode, muxdiv);
+				if (!write_prefix.empty()) {
+					Pass::call(design, stringf("write_ilang %s_%s_%05d.il", write_prefix.c_str(), cell_type.c_str()+1, i));
+				} else {
+					Pass::call(design, stringf("copy gold gate; cd gate; %s; cd ..; opt -fast gate", techmap_cmd.c_str()));
+					if (!nosat)
+						Pass::call(design, "miter -equiv -flatten -make_outputs -ignore_gold_x gold gate miter");
+					if (verbose)
+						Pass::call(design, "dump gate");
+					Pass::call(design, "dump gold");
+					if (!nosat)
+						Pass::call(design, "sat -verify -enable_undef -prove trigger 0 -show-inputs -show-outputs miter");
+					std::string uut_name = stringf("uut_%s_%d", cell_type.substr(1).c_str(), i);
+					if (vlog_file.is_open()) {
+						Pass::call(design, stringf("copy gold %s_expr; select %s_expr", uut_name.c_str(), uut_name.c_str()));
+						Backend::backend_call(design, &vlog_file, "<test_cell -vlog>", "verilog -selected");
+						Pass::call(design, stringf("copy gold %s_noexpr; select %s_noexpr", uut_name.c_str(), uut_name.c_str()));
+						Backend::backend_call(design, &vlog_file, "<test_cell -vlog>", "verilog -selected -noexpr");
+						uut_names.push_back(uut_name);
+					}
+					run_eval_test(design, verbose, nosat, uut_name, vlog_file);
 				}
-				run_eval_test(design, verbose, nosat, uut_name, vlog_file);
 				delete design;
 			}
 

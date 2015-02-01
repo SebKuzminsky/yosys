@@ -177,12 +177,12 @@ YOSYS_NAMESPACE_END
 "genvar"  { return TOK_GENVAR; }
 "real"    { return TOK_REAL; }
 
-[0-9]+ {
+[0-9][0-9_]* {
 	frontend_verilog_yylval.string = new std::string(yytext);
 	return TOK_CONST;
 }
 
-[0-9]*[ \t]*\'s?[bodh][ \t\r\n]*[0-9a-fA-FzxZX?_]+ {
+[0-9]*[ \t]*\'s?[bodhBODH][ \t\r\n]*[0-9a-fA-FzxZX?_]+ {
 	frontend_verilog_yylval.string = new std::string(yytext);
 	return TOK_CONST;
 }
@@ -240,7 +240,7 @@ and|nand|or|nor|xor|xnor|not|buf|bufif0|bufif1|notif0|notif1 {
 supply0 { return TOK_SUPPLY0; }
 supply1 { return TOK_SUPPLY1; }
 
-"$"(display|time|stop|finish) {
+"$"(display|strobe|monitor|time|stop|finish|dumpfile|dumpvars|dumpon|dumpoff|dumpall) {
 	frontend_verilog_yylval.string = new std::string(yytext);
 	return TOK_ID;
 }
@@ -254,8 +254,12 @@ supply1 { return TOK_SUPPLY1; }
 }
 
 "/*"[ \t]*(synopsys|synthesis)[ \t]*translate_off[ \t]*"*/" {
-	log("Warning: Found one of those horrible `(synopsys|synthesis) translate_off' comments.\n");
-	log("It is strongly suggested to use `ifdef constructs instead!\n");
+	static bool printed_warning = false;
+	if (!printed_warning) {
+		log_warning("Found one of those horrible `(synopsys|synthesis) translate_off' comments.\n"
+				"Yosys does support them but it is recommended to use `ifdef constructs instead!\n");
+		printed_warning = true;
+	}
 	BEGIN(SYNOPSYS_TRANSLATE_OFF);
 }
 <SYNOPSYS_TRANSLATE_OFF>.    /* ignore synopsys translate_off body */
@@ -266,13 +270,21 @@ supply1 { return TOK_SUPPLY1; }
 	BEGIN(SYNOPSYS_FLAGS);
 }
 <SYNOPSYS_FLAGS>full_case {
-	log("Warning: Found one of those horrible `(synopsys|synthesis) full_case' comments.\n");
-	log("It is strongly suggested to use verilog x-values and default branches instead!\n");
+	static bool printed_warning = false;
+	if (!printed_warning) {
+		log_warning("Found one of those horrible `(synopsys|synthesis) full_case' comments.\n"
+				"Yosys does support them but it is recommended to use verilog `full_case' attributes instead!\n");
+		printed_warning = true;
+	}
 	return TOK_SYNOPSYS_FULL_CASE;
 }
 <SYNOPSYS_FLAGS>parallel_case {
-	log("Warning: Found one of those horrible `(synopsys|synthesis) parallel_case' comments.\n");
-	log("It is strongly suggested to use verilog `parallel_case' attributes instead!\n");
+	static bool printed_warning = false;
+	if (!printed_warning) {
+		log_warning("Found one of those horrible `(synopsys|synthesis) parallel_case' comments.\n"
+				"Yosys does support them but it is recommended to use verilog `parallel_case' attributes instead!\n");
+		printed_warning = true;
+	}
 	return TOK_SYNOPSYS_PARALLEL_CASE;
 }
 <SYNOPSYS_FLAGS>. /* ignore everything else */
@@ -342,7 +354,10 @@ import[ \t\r\n]+\"(DPI|DPI-C)\"[ \t\r\n]+function[ \t\r\n]+ {
 [ \t\r\n]		/* ignore whitespaces */
 \\[\r\n]		/* ignore continuation sequence */
 "//"[^\r\n]*		/* ignore one-line comments */
-"#"[$a-zA-Z_0-9\.]+	/* ignore simulation timings */
+
+"#"\ *[0-9][0-9_]*			/* ignore simulation timings */
+"#"\ *[0-9][0-9_]*\.[0-9][0-9_]*	/* ignore simulation timings */
+"#"\ *[$a-zA-Z_\.][$a-zA-Z_0-9\.]*	/* ignore simulation timings */
 
 . { return *yytext; }
 

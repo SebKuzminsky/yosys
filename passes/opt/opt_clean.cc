@@ -53,7 +53,7 @@ void rmunused_module_cells(RTLIL::Module *module, bool verbose)
 	for (auto &it : module->wires_) {
 		RTLIL::Wire *wire = it.second;
 		if (wire->port_output || wire->get_bool_attribute("\\keep")) {
-			std::set<RTLIL::Cell*> cell_list;
+			pool<RTLIL::Cell*> cell_list;
 			wire2driver.find(sigmap(wire), cell_list);
 			for (auto cell : cell_list)
 				queue.insert(cell);
@@ -68,7 +68,7 @@ void rmunused_module_cells(RTLIL::Module *module, bool verbose)
 		for (auto cell : queue) {
 			for (auto &it : cell->connections()) {
 				if (!ct.cell_output(cell->type, it.first)) {
-					std::set<RTLIL::Cell*> cell_list;
+					pool<RTLIL::Cell*> cell_list;
 					wire2driver.find(sigmap(it.second), cell_list);
 					for (auto c : cell_list) {
 						if (unused.count(c))
@@ -97,7 +97,7 @@ int count_nontrivial_wire_attrs(RTLIL::Wire *w)
 	return count;
 }
 
-bool compare_signals(RTLIL::SigBit &s1, RTLIL::SigBit &s2, SigPool &regs, SigPool &conns, std::set<RTLIL::Wire*> &direct_wires)
+bool compare_signals(RTLIL::SigBit &s1, RTLIL::SigBit &s2, SigPool &regs, SigPool &conns, pool<RTLIL::Wire*> &direct_wires)
 {
 	RTLIL::Wire *w1 = s1.wire;
 	RTLIL::Wire *w2 = s2.wire;
@@ -161,8 +161,8 @@ void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool verbos
 		}
 	
 	SigMap assign_map(module);
-	std::set<RTLIL::SigSpec> direct_sigs;
-	std::set<RTLIL::Wire*> direct_wires;
+	pool<RTLIL::SigSpec> direct_sigs;
+	pool<RTLIL::Wire*> direct_wires;
 	for (auto &it : module->cells_) {
 		RTLIL::Cell *cell = it.second;
 		if (ct_all.cell_known(cell->type))
@@ -262,7 +262,7 @@ void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool verbos
 	}
 
 
-	std::set<RTLIL::Wire*> del_wires;
+	pool<RTLIL::Wire*> del_wires;
 
 	int del_wires_count = 0;
 	for (auto wire : maybe_del_wires)
@@ -347,16 +347,16 @@ struct OptCleanPass : public Pass {
 		ct_reg.setup_internals_mem();
 		ct_reg.setup_stdcells_mem();
 
-		for (auto &mod_it : design->modules_) {
-			if (!design->selected_whole_module(mod_it.first)) {
-				if (design->selected(mod_it.second))
-					log("Skipping module %s as it is only partially selected.\n", id2cstr(mod_it.second->name));
+		for (auto mod : design->modules()) {
+			if (!design->selected_whole_module(mod->name)) {
+				if (design->selected(mod))
+					log("Skipping module %s as it is only partially selected.\n", id2cstr(mod->name));
 				continue;
 			}
-			if (mod_it.second->processes.size() > 0) {
-				log("Skipping module %s as it contains processes.\n", mod_it.second->name.c_str());
+			if (!mod->processes.empty()) {
+				log("Skipping module %s as it contains processes.\n", mod->name.c_str());
 			} else {
-				rmunused_module(mod_it.second, purge_mode, true);
+				rmunused_module(mod, purge_mode, true);
 			}
 		}
 
@@ -411,16 +411,20 @@ struct CleanPass : public Pass {
 		count_rm_cells = 0;
 		count_rm_wires = 0;
 
-		for (auto &mod_it : design->modules_) {
-			if (design->selected_whole_module(mod_it.first) && mod_it.second->processes.size() == 0)
+		for (auto mod : design->modules()) {
+			if (design->selected_whole_module(mod->name) && mod->processes.empty())
 				do {
 					design->scratchpad_unset("opt.did_something");
-					rmunused_module(mod_it.second, purge_mode, false);
+					rmunused_module(mod, purge_mode, false);
 				} while (design->scratchpad_get_bool("opt.did_something"));
 		}
 
 		if (count_rm_cells > 0 || count_rm_wires > 0)
 			log("Removed %d unused cells and %d unused wires.\n", count_rm_cells, count_rm_wires);
+
+		design->optimize();
+		design->sort();
+		design->check();
 
 		ct.clear();
 		ct_reg.clear();

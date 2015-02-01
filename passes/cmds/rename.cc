@@ -36,6 +36,8 @@ static void rename_in_module(RTLIL::Module *module, std::string from_name, std::
 		if (it.first == from_name) {
 			log("Renaming wire %s to %s in module %s.\n", log_id(it.second), log_id(to_name), log_id(module));
 			module->rename(it.second, to_name);
+			if (it.second->port_id)
+				module->fixup_ports();
 			return;
 		}
 
@@ -116,7 +118,7 @@ struct RenamePass : public Pass {
 				if (!design->selected(module))
 					continue;
 
-				std::map<RTLIL::IdString, RTLIL::Wire*> new_wires;
+				dict<RTLIL::IdString, RTLIL::Wire*> new_wires;
 				for (auto &it : module->wires_) {
 					if (it.first[0] == '$' && design->selected(module, it.second))
 						do it.second->name = stringf("\\%s%d%s", pattern_prefix.c_str(), counter++, pattern_suffix.c_str());
@@ -124,8 +126,9 @@ struct RenamePass : public Pass {
 					new_wires[it.second->name] = it.second;
 				}
 				module->wires_.swap(new_wires);
+				module->fixup_ports();
 
-				std::map<RTLIL::IdString, RTLIL::Cell*> new_cells;
+				dict<RTLIL::IdString, RTLIL::Cell*> new_cells;
 				for (auto &it : module->cells_) {
 					if (it.first[0] == '$' && design->selected(module, it.second))
 						do it.second->name = stringf("\\%s%d%s", pattern_prefix.c_str(), counter++, pattern_suffix.c_str());
@@ -146,7 +149,7 @@ struct RenamePass : public Pass {
 				if (!design->selected(module))
 					continue;
 
-				std::map<RTLIL::IdString, RTLIL::Wire*> new_wires;
+				dict<RTLIL::IdString, RTLIL::Wire*> new_wires;
 				for (auto &it : module->wires_) {
 					if (design->selected(module, it.second))
 						if (it.first[0] == '\\' && it.second->port_id == 0)
@@ -154,8 +157,9 @@ struct RenamePass : public Pass {
 					new_wires[it.second->name] = it.second;
 				}
 				module->wires_.swap(new_wires);
+				module->fixup_ports();
 
-				std::map<RTLIL::IdString, RTLIL::Cell*> new_cells;
+				dict<RTLIL::IdString, RTLIL::Cell*> new_cells;
 				for (auto &it : module->cells_) {
 					if (design->selected(module, it.second))
 						if (it.first[0] == '\\')

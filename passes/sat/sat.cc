@@ -116,7 +116,7 @@ struct SatHelper
 			}
 
 			if (removed_bits.size())
-				log("Warning: ignoring initial value on non-register: %s\n", log_signal(removed_bits));
+				log_warning("ignoring initial value on non-register: %s\n", log_signal(removed_bits));
 
 			if (lhs.size()) {
 				log("Import set-constraint from init attribute: %s = %s\n", log_signal(lhs), log_signal(rhs));
@@ -327,7 +327,7 @@ struct SatHelper
 							show_drivers.insert(sigmap(p.second), c.second);
 					import_cell_counter++;
 				} else if (ignore_unknown_cells)
-					log("Warning: Failed to import cell %s (type %s) to SAT database.\n", RTLIL::id2cstr(c.first), RTLIL::id2cstr(c.second->type));
+					log_warning("Failed to import cell %s (type %s) to SAT database.\n", RTLIL::id2cstr(c.first), RTLIL::id2cstr(c.second->type));
 				else
 					log_error("Failed to import cell %s (type %s) to SAT database.\n", RTLIL::id2cstr(c.first), RTLIL::id2cstr(c.second->type));
 		}
@@ -850,8 +850,8 @@ struct SatPass : public Pass {
 		log("        show the model for the specified signal. if no -show option is\n");
 		log("        passed then a set of signals to be shown is automatically selected.\n");
 		log("\n");
-		log("    -show-inputs, -show-outputs\n");
-		log("        add all module input (output) ports to the list of shown signals\n");
+		log("    -show-inputs, -show-outputs, -show-ports\n");
+		log("        add all module (input/output) ports to the list of shown signals\n");
 		log("\n");
 		log("    -ignore_div_by_zero\n");
 		log("        ignore all solutions that involve a division by zero\n");
@@ -1130,6 +1130,11 @@ struct SatPass : public Pass {
 				show_outputs = true;
 				continue;
 			}
+			if (args[argidx] == "-show-ports") {
+				show_inputs = true;
+				show_outputs = true;
+				continue;
+			}
 			if (args[argidx] == "-ignore_unknown_cells") {
 				ignore_unknown_cells = true;
 				continue;
@@ -1161,7 +1166,7 @@ struct SatPass : public Pass {
 			log_cmd_error("Got -tempinduct but nothing to prove!\n");
 
 		if (prove_skip && tempinduct)
-			log_cmd_error("Options -prove-skip and -tempinduct don't work with each other.\n");
+			log_cmd_error("Options -prove-skip and -tempinduct don't work with each other. Use -seq instead of -prove-skip.\n");
 
 		if (prove_skip >= seq_len && prove_skip > 0)
 			log_cmd_error("The value of -prove-skip must be smaller than the one of -seq.\n");

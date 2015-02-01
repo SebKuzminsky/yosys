@@ -103,7 +103,7 @@ static bool parse_pin(LibertyAst *cell, LibertyAst *attr, std::string &pin_name,
 	return false;
 }
 
-static void find_cell(LibertyAst *ast, std::string cell_type, bool clkpol, bool has_reset, bool rstpol, bool rstval)
+static void find_cell(LibertyAst *ast, std::string cell_type, bool clkpol, bool has_reset, bool rstpol, bool rstval, bool prepare_mode)
 {
 	LibertyAst *best_cell = NULL;
 	std::map<std::string, char> best_cell_ports;
@@ -193,13 +193,22 @@ static void find_cell(LibertyAst *ast, std::string cell_type, bool clkpol, bool 
 	}
 
 	if (best_cell != NULL) {
-		log("  cell %s (pins=%d, area=%.2f) is a direct match for cell type %s.\n", best_cell->args[0].c_str(), best_cell_pins, best_cell_area, cell_type.substr(1).c_str());
-		cell_mappings[cell_type].cell_name = best_cell->args[0];
-		cell_mappings[cell_type].ports = best_cell_ports;
+		log("  cell %s (pins=%d, area=%.2f) is a direct match for cell type %s.\n", best_cell->args[0].c_str(), best_cell_pins, best_cell_area, cell_type.c_str());
+		if (prepare_mode) {
+			cell_mappings[cell_type].cell_name = cell_type;
+			cell_mappings[cell_type].ports["C"] = 'C';
+			if (has_reset)
+				cell_mappings[cell_type].ports["R"] = 'R';
+			cell_mappings[cell_type].ports["D"] = 'D';
+			cell_mappings[cell_type].ports["Q"] = 'Q';
+		} else {
+			cell_mappings[cell_type].cell_name = best_cell->args[0];
+			cell_mappings[cell_type].ports = best_cell_ports;
+		}
 	}
 }
 
-static void find_cell_sr(LibertyAst *ast, std::string cell_type, bool clkpol, bool setpol, bool clrpol)
+static void find_cell_sr(LibertyAst *ast, std::string cell_type, bool clkpol, bool setpol, bool clrpol, bool prepare_mode)
 {
 	LibertyAst *best_cell = NULL;
 	std::map<std::string, char> best_cell_ports;
@@ -285,9 +294,18 @@ static void find_cell_sr(LibertyAst *ast, std::string cell_type, bool clkpol, bo
 	}
 
 	if (best_cell != NULL) {
-		log("  cell %s (pins=%d, area=%.2f) is a direct match for cell type %s.\n", best_cell->args[0].c_str(), best_cell_pins, best_cell_area, cell_type.substr(1).c_str());
-		cell_mappings[cell_type].cell_name = best_cell->args[0];
-		cell_mappings[cell_type].ports = best_cell_ports;
+		log("  cell %s (pins=%d, area=%.2f) is a direct match for cell type %s.\n", best_cell->args[0].c_str(), best_cell_pins, best_cell_area, cell_type.c_str());
+		if (prepare_mode) {
+			cell_mappings[cell_type].cell_name = cell_type;
+			cell_mappings[cell_type].ports["C"] = 'C';
+			cell_mappings[cell_type].ports["S"] = 'S';
+			cell_mappings[cell_type].ports["R"] = 'R';
+			cell_mappings[cell_type].ports["D"] = 'D';
+			cell_mappings[cell_type].ports["Q"] = 'Q';
+		} else {
+			cell_mappings[cell_type].cell_name = best_cell->args[0];
+			cell_mappings[cell_type].ports = best_cell_ports;
+		}
 	}
 }
 
@@ -347,8 +365,12 @@ static void map_sr_to_arst(const char *from, const char *to)
 	if (!cell_mappings.count(from) || cell_mappings.count(to) > 0)
 		return;
 
-	char from_clk_pol = from[8], from_set_pol = from[9], from_clr_pol = from[10];
-	char to_clk_pol = to[6], to_rst_pol = to[7], to_rst_val = to[8];
+	char from_clk_pol YS_ATTRIBUTE(unused) = from[8];
+	char from_set_pol = from[9];
+	char from_clr_pol = from[10];
+	char to_clk_pol YS_ATTRIBUTE(unused) = to[6];
+	char to_rst_pol YS_ATTRIBUTE(unused) = to[7];
+	char to_rst_val = to[8];
 
 	log_assert(from_clk_pol == to_clk_pol);
 	log_assert(to_rst_pol == from_set_pol && to_rst_pol == from_clr_pol);
@@ -384,7 +406,7 @@ static void map_sr_to_arst(const char *from, const char *to)
 	}
 }
 
-static void dfflibmap(RTLIL::Design *design, RTLIL::Module *module)
+static void dfflibmap(RTLIL::Design *design, RTLIL::Module *module, bool prepare_mode)
 {
 	log("Mapping DFF cells in module `%s':\n", module->name.c_str());
 
@@ -403,7 +425,7 @@ static void dfflibmap(RTLIL::Design *design, RTLIL::Module *module)
 		module->remove(cell);
 
 		cell_mapping &cm = cell_mappings[cell_type];
-		RTLIL::Cell *new_cell = module->addCell(cell_name, "\\" + cm.cell_name);
+		RTLIL::Cell *new_cell = module->addCell(cell_name, prepare_mode ? cm.cell_name : "\\" + cm.cell_name);
 
 		for (auto &port : cm.ports) {
 			RTLIL::SigSpec sig;
@@ -439,7 +461,7 @@ struct DfflibmapPass : public Pass {
 	virtual void help()
 	{
 		log("\n");
-		log("    dfflibmap -liberty <file> [selection]\n");
+		log("    dfflibmap [-prepare] -liberty <file> [selection]\n");
 		log("\n");
 		log("Map internal flip-flop cells to the flip-flop cells in the technology\n");
 		log("library specified in the given liberty file.\n");
@@ -447,12 +469,17 @@ struct DfflibmapPass : public Pass {
 		log("This pass may add inverters as needed. Therefore it is recommended to\n");
 		log("first run this pass and then map the logic paths to the target technology.\n");
 		log("\n");
+		log("When called with -prepare, this command will convert the internal FF cells\n");
+		log("to the internal cell types that best match the cells found in the given\n");
+		log("liberty file.\n");
+		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
 	{
 		log_header("Executing DFFLIBMAP pass (mapping DFF cells to sequential cells from liberty file).\n");
 
 		std::string liberty_file;
+		bool prepare_mode = false;
 
 		size_t argidx;
 		for (argidx = 1; argidx < args.size(); argidx++)
@@ -460,6 +487,10 @@ struct DfflibmapPass : public Pass {
 			std::string arg = args[argidx];
 			if (arg == "-liberty" && argidx+1 < args.size()) {
 				liberty_file = args[++argidx];
+				continue;
+			}
+			if (arg == "-prepare") {
+				prepare_mode = true;
 				continue;
 			}
 			break;
@@ -476,26 +507,26 @@ struct DfflibmapPass : public Pass {
 		LibertyParser libparser(f);
 		f.close();
 
-		find_cell(libparser.ast, "$_DFF_N_", false, false, false, false);
-		find_cell(libparser.ast, "$_DFF_P_", true, false, false, false);
+		find_cell(libparser.ast, "$_DFF_N_", false, false, false, false, prepare_mode);
+		find_cell(libparser.ast, "$_DFF_P_", true, false, false, false, prepare_mode);
 
-		find_cell(libparser.ast, "$_DFF_NN0_", false, true, false, false);
-		find_cell(libparser.ast, "$_DFF_NN1_", false, true, false, true);
-		find_cell(libparser.ast, "$_DFF_NP0_", false, true, true, false);
-		find_cell(libparser.ast, "$_DFF_NP1_", false, true, true, true);
-		find_cell(libparser.ast, "$_DFF_PN0_", true, true, false, false);
-		find_cell(libparser.ast, "$_DFF_PN1_", true, true, false, true);
-		find_cell(libparser.ast, "$_DFF_PP0_", true, true, true, false);
-		find_cell(libparser.ast, "$_DFF_PP1_", true, true, true, true);
+		find_cell(libparser.ast, "$_DFF_NN0_", false, true, false, false, prepare_mode);
+		find_cell(libparser.ast, "$_DFF_NN1_", false, true, false, true, prepare_mode);
+		find_cell(libparser.ast, "$_DFF_NP0_", false, true, true, false, prepare_mode);
+		find_cell(libparser.ast, "$_DFF_NP1_", false, true, true, true, prepare_mode);
+		find_cell(libparser.ast, "$_DFF_PN0_", true, true, false, false, prepare_mode);
+		find_cell(libparser.ast, "$_DFF_PN1_", true, true, false, true, prepare_mode);
+		find_cell(libparser.ast, "$_DFF_PP0_", true, true, true, false, prepare_mode);
+		find_cell(libparser.ast, "$_DFF_PP1_", true, true, true, true, prepare_mode);
 
-		find_cell_sr(libparser.ast, "$_DFFSR_NNN_", false, false, false);
-		find_cell_sr(libparser.ast, "$_DFFSR_NNP_", false, false, true);
-		find_cell_sr(libparser.ast, "$_DFFSR_NPN_", false, true, false);
-		find_cell_sr(libparser.ast, "$_DFFSR_NPP_", false, true, true);
-		find_cell_sr(libparser.ast, "$_DFFSR_PNN_", true, false, false);
-		find_cell_sr(libparser.ast, "$_DFFSR_PNP_", true, false, true);
-		find_cell_sr(libparser.ast, "$_DFFSR_PPN_", true, true, false);
-		find_cell_sr(libparser.ast, "$_DFFSR_PPP_", true, true, true);
+		find_cell_sr(libparser.ast, "$_DFFSR_NNN_", false, false, false, prepare_mode);
+		find_cell_sr(libparser.ast, "$_DFFSR_NNP_", false, false, true, prepare_mode);
+		find_cell_sr(libparser.ast, "$_DFFSR_NPN_", false, true, false, prepare_mode);
+		find_cell_sr(libparser.ast, "$_DFFSR_NPP_", false, true, true, prepare_mode);
+		find_cell_sr(libparser.ast, "$_DFFSR_PNN_", true, false, false, prepare_mode);
+		find_cell_sr(libparser.ast, "$_DFFSR_PNP_", true, false, true, prepare_mode);
+		find_cell_sr(libparser.ast, "$_DFFSR_PPN_", true, true, false, prepare_mode);
+		find_cell_sr(libparser.ast, "$_DFFSR_PPP_", true, true, true, prepare_mode);
 
 		// try to implement as many cells as possible just by inverting
 		// the SET and RESET pins. If necessary, implement cell types
@@ -533,7 +564,7 @@ struct DfflibmapPass : public Pass {
 
 		for (auto &it : design->modules_)
 			if (design->selected(it.second) && !it.second->get_bool_attribute("\\blackbox"))
-				dfflibmap(design, it.second);
+				dfflibmap(design, it.second, prepare_mode);
 
 		cell_mappings.clear();
 	}

@@ -27,9 +27,10 @@
 
 YOSYS_NAMESPACE_BEGIN
 
+RTLIL::IdString::destruct_guard_t RTLIL::IdString::destruct_guard;
 std::vector<int> RTLIL::IdString::global_refcount_storage_;
 std::vector<char*> RTLIL::IdString::global_id_storage_;
-std::map<char*, int, RTLIL::IdString::char_ptr_cmp> RTLIL::IdString::global_id_index_;
+dict<char*, int, hash_cstr_ops> RTLIL::IdString::global_id_index_;
 std::vector<int> RTLIL::IdString::global_free_idx_list_;
 
 RTLIL::Const::Const()
@@ -125,6 +126,21 @@ std::string RTLIL::Const::as_string() const
 			case Sm: ret += "m"; break;
 		}
 	return ret;
+}
+
+RTLIL::Const RTLIL::Const::from_string(std::string str)
+{
+	Const c;
+	for (auto it = str.rbegin(); it != str.rend(); it++)
+		switch (*it) {
+			case '0': c.bits.push_back(State::S0); break;
+			case '1': c.bits.push_back(State::S1); break;
+			case 'x': c.bits.push_back(State::Sx); break;
+			case 'z': c.bits.push_back(State::Sz); break;
+			case 'm': c.bits.push_back(State::Sm); break;
+			default: c.bits.push_back(State::Sa);
+		}
+	return c;
 }
 
 std::string RTLIL::Const::decode_string() const
@@ -235,13 +251,17 @@ void RTLIL::Selection::optimize(RTLIL::Design *design)
 
 RTLIL::Design::Design()
 {
+	static unsigned int hashidx_count = 123456789;
+	hashidx_count = mkhash_xorshift(hashidx_count);
+	hashidx_ = hashidx_count;
+
 	refcount_modules_ = 0;
 	selection_stack.push_back(RTLIL::Selection());
 }
 
 RTLIL::Design::~Design()
 {
-	for (auto it = modules_.begin(); it != modules_.end(); it++)
+	for (auto it = modules_.begin(); it != modules_.end(); ++it)
 		delete it->second;
 }
 
@@ -264,6 +284,11 @@ void RTLIL::Design::add(RTLIL::Module *module)
 
 	for (auto mon : monitors)
 		mon->notify_module_add(module);
+
+	if (yosys_xtrace) {
+		log("#X# New Module: %s\n", log_id(module));
+		log_backtrace("-X- ", yosys_xtrace-1);
+	}
 }
 
 RTLIL::Module *RTLIL::Design::addModule(RTLIL::IdString name)
@@ -278,6 +303,11 @@ RTLIL::Module *RTLIL::Design::addModule(RTLIL::IdString name)
 
 	for (auto mon : monitors)
 		mon->notify_module_add(module);
+
+	if (yosys_xtrace) {
+		log("#X# New Module: %s\n", log_id(module));
+		log_backtrace("-X- ", yosys_xtrace-1);
+	}
 
 	return module;
 }
@@ -348,9 +378,22 @@ void RTLIL::Design::remove(RTLIL::Module *module)
 	for (auto mon : monitors)
 		mon->notify_module_del(module);
 
+	if (yosys_xtrace) {
+		log("#X# Remove Module: %s\n", log_id(module));
+		log_backtrace("-X- ", yosys_xtrace-1);
+	}
+
 	log_assert(modules_.at(module->name) == module);
 	modules_.erase(module->name);
 	delete module;
+}
+
+void RTLIL::Design::sort()
+{
+	scratchpad.sort();
+	modules_.sort(sort_by_id_str());
+	for (auto &it : modules_)
+		it.second->sort();
 }
 
 void RTLIL::Design::check()
@@ -440,12 +483,16 @@ std::vector<RTLIL::Module*> RTLIL::Design::selected_whole_modules_warn() const
 		if (selected_whole_module(it.first))
 			result.push_back(it.second);
 		else if (selected_module(it.first))
-			log("Warning: Ignoring partially selected module %s.\n", log_id(it.first));
+			log_warning("Ignoring partially selected module %s.\n", log_id(it.first));
 	return result;
 }
 
 RTLIL::Module::Module()
 {
+	static unsigned int hashidx_count = 123456789;
+	hashidx_count = mkhash_xorshift(hashidx_count);
+	hashidx_ = hashidx_count;
+
 	design = nullptr;
 	refcount_wires_ = 0;
 	refcount_cells_ = 0;
@@ -453,17 +500,17 @@ RTLIL::Module::Module()
 
 RTLIL::Module::~Module()
 {
-	for (auto it = wires_.begin(); it != wires_.end(); it++)
+	for (auto it = wires_.begin(); it != wires_.end(); ++it)
 		delete it->second;
-	for (auto it = memories.begin(); it != memories.end(); it++)
+	for (auto it = memories.begin(); it != memories.end(); ++it)
 		delete it->second;
-	for (auto it = cells_.begin(); it != cells_.end(); it++)
+	for (auto it = cells_.begin(); it != cells_.end(); ++it)
 		delete it->second;
-	for (auto it = processes.begin(); it != processes.end(); it++)
+	for (auto it = processes.begin(); it != processes.end(); ++it)
 		delete it->second;
 }
 
-RTLIL::IdString RTLIL::Module::derive(RTLIL::Design*, std::map<RTLIL::IdString, RTLIL::Const>)
+RTLIL::IdString RTLIL::Module::derive(RTLIL::Design*, dict<RTLIL::IdString, RTLIL::Const>)
 {
 	log_error("Module `%s' is used with parameters but is not parametric!\n", id2cstr(name));
 }
@@ -479,7 +526,7 @@ namespace {
 	{
 		RTLIL::Module *module;
 		RTLIL::Cell *cell;
-		std::set<RTLIL::IdString> expected_params, expected_ports;
+		pool<RTLIL::IdString> expected_params, expected_ports;
 
 		InternalCellChecker(RTLIL::Module *module, RTLIL::Cell *cell) : module(module), cell(cell) { }
 
@@ -752,6 +799,17 @@ namespace {
 				return;
 			}
 
+			if (cell->type == "$dffe") {
+				param_bool("\\CLK_POLARITY");
+				param_bool("\\EN_POLARITY");
+				port("\\CLK", 1);
+				port("\\EN", 1);
+				port("\\D", param("\\WIDTH"));
+				port("\\Q", param("\\WIDTH"));
+				check_expected();
+				return;
+			}
+
 			if (cell->type == "$dffsr") {
 				param_bool("\\CLK_POLARITY");
 				param_bool("\\SET_POLARITY");
@@ -870,6 +928,14 @@ namespace {
 				return;
 			}
 
+			if (cell->type == "$equiv") {
+				port("\\A", 1);
+				port("\\B", 1);
+				port("\\Y", 1);
+				check_expected();
+				return;
+			}
+
 			if (cell->type == "$_BUF_")  { check_gate("AY"); return; }
 			if (cell->type == "$_NOT_")  { check_gate("AY"); return; }
 			if (cell->type == "$_AND_")  { check_gate("ABY"); return; }
@@ -891,6 +957,11 @@ namespace {
 
 			if (cell->type == "$_DFF_N_") { check_gate("DQC"); return; }
 			if (cell->type == "$_DFF_P_") { check_gate("DQC"); return; }
+
+			if (cell->type == "$_DFFE_NN_") { check_gate("DQCE"); return; }
+			if (cell->type == "$_DFFE_NP_") { check_gate("DQCE"); return; }
+			if (cell->type == "$_DFFE_PN_") { check_gate("DQCE"); return; }
+			if (cell->type == "$_DFFE_PP_") { check_gate("DQCE"); return; }
 
 			if (cell->type == "$_DFF_NN0_") { check_gate("DQCR"); return; }
 			if (cell->type == "$_DFF_NN1_") { check_gate("DQCR"); return; }
@@ -927,6 +998,21 @@ namespace {
 	};
 }
 #endif
+
+void RTLIL::Module::sort()
+{
+	wires_.sort(sort_by_id_str());
+	cells_.sort(sort_by_id_str());
+	avail_parameters.sort(sort_by_id_str());
+	memories.sort(sort_by_id_str());
+	processes.sort(sort_by_id_str());
+	for (auto &it : cells_)
+		it.second->sort();
+	for (auto &it : wires_)
+		it.second->attributes.sort(sort_by_id_str());
+	for (auto &it : memories)
+		it.second->attributes.sort(sort_by_id_str());
+}
 
 void RTLIL::Module::check()
 {
@@ -1007,8 +1093,11 @@ void RTLIL::Module::cloneInto(RTLIL::Module *new_mod) const
 	log_assert(new_mod->refcount_wires_ == 0);
 	log_assert(new_mod->refcount_cells_ == 0);
 
-	new_mod->connections_ = connections_;
-	new_mod->attributes = attributes;
+	for (auto &conn : connections_)
+		new_mod->connect(conn);
+
+	for (auto &attr : attributes)
+		new_mod->attributes[attr.first] = attr.second;
 
 	for (auto &it : wires_)
 		new_mod->addWire(it.first, it.second);
@@ -1062,14 +1151,14 @@ bool RTLIL::Module::has_processes() const
 bool RTLIL::Module::has_memories_warn() const
 {
 	if (!memories.empty())
-		log("Warning: Ignoring module %s because it contains memories (run 'memory' command first).\n", log_id(this));
+		log_warning("Ignoring module %s because it contains memories (run 'memory' command first).\n", log_id(this));
 	return !memories.empty();
 }
 
 bool RTLIL::Module::has_processes_warn() const
 {
 	if (!processes.empty())
-		log("Warning: Ignoring module %s because it contains processes (run 'proc' command first).\n", log_id(this));
+		log_warning("Ignoring module %s because it contains processes (run 'proc' command first).\n", log_id(this));
 	return !processes.empty();
 }
 
@@ -1115,7 +1204,7 @@ namespace {
 	struct DeleteWireWorker
 	{
 		RTLIL::Module *module;
-		const std::set<RTLIL::Wire*> *wires_p;
+		const pool<RTLIL::Wire*> *wires_p;
 
 		void operator()(RTLIL::SigSpec &sig) {
 			std::vector<RTLIL::SigChunk> chunks = sig;
@@ -1129,16 +1218,7 @@ namespace {
 	};
 }
 
-#if 0
-void RTLIL::Module::remove(RTLIL::Wire *wire)
-{
-	std::setPort<RTLIL::Wire*> wires_;
-	wires_.insert(wire);
-	remove(wires_);
-}
-#endif
-
-void RTLIL::Module::remove(const std::set<RTLIL::Wire*> &wires)
+void RTLIL::Module::remove(const pool<RTLIL::Wire*> &wires)
 {
 	log_assert(refcount_wires_ == 0);
 
@@ -1267,6 +1347,11 @@ void RTLIL::Module::connect(const RTLIL::SigSig &conn)
 		for (auto mon : design->monitors)
 			mon->notify_connect(this, conn);
 
+	if (yosys_xtrace) {
+		log("#X# Connect (SigSig) in %s: %s = %s (%d bits)\n", log_id(this), log_signal(conn.first), log_signal(conn.second), GetSize(conn.first));
+		log_backtrace("-X- ", yosys_xtrace-1);
+	}
+
 	connections_.push_back(conn);
 }
 
@@ -1283,6 +1368,13 @@ void RTLIL::Module::new_connections(const std::vector<RTLIL::SigSig> &new_conn)
 	if (design)
 		for (auto mon : design->monitors)
 			mon->notify_connect(this, new_conn);
+
+	if (yosys_xtrace) {
+		log("#X# New connections vector in %s:\n", log_id(this));
+		for (auto &conn: new_conn)
+			log("#X#    %s = %s (%d bits)\n", log_signal(conn.first), log_signal(conn.second), GetSize(conn.first));
+		log_backtrace("-X- ", yosys_xtrace-1);
+	}
 
 	connections_ = new_conn;
 }
@@ -1567,6 +1659,15 @@ RTLIL::Cell* RTLIL::Module::addAssert(RTLIL::IdString name, RTLIL::SigSpec sig_a
 	return cell;
 }
 
+RTLIL::Cell* RTLIL::Module::addEquiv(RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y)
+{
+	RTLIL::Cell *cell = addCell(name, "$equiv");
+	cell->setPort("\\A", sig_a);
+	cell->setPort("\\B", sig_b);
+	cell->setPort("\\Y", sig_y);
+	return cell;
+}
+
 RTLIL::Cell* RTLIL::Module::addSr(RTLIL::IdString name, RTLIL::SigSpec sig_set, RTLIL::SigSpec sig_clr, RTLIL::SigSpec sig_q, bool set_polarity, bool clr_polarity)
 {
 	RTLIL::Cell *cell = addCell(name, "$sr");
@@ -1579,12 +1680,25 @@ RTLIL::Cell* RTLIL::Module::addSr(RTLIL::IdString name, RTLIL::SigSpec sig_set, 
 	return cell;
 }
 
-RTLIL::Cell* RTLIL::Module::addDff(RTLIL::IdString name, RTLIL::SigSpec sig_clk, RTLIL::SigSpec sig_d,   RTLIL::SigSpec sig_q, bool clk_polarity)
+RTLIL::Cell* RTLIL::Module::addDff(RTLIL::IdString name, RTLIL::SigSpec sig_clk, RTLIL::SigSpec sig_d, RTLIL::SigSpec sig_q, bool clk_polarity)
 {
 	RTLIL::Cell *cell = addCell(name, "$dff");
 	cell->parameters["\\CLK_POLARITY"] = clk_polarity;
 	cell->parameters["\\WIDTH"] = sig_q.size();
 	cell->setPort("\\CLK", sig_clk);
+	cell->setPort("\\D", sig_d);
+	cell->setPort("\\Q", sig_q);
+	return cell;
+}
+
+RTLIL::Cell* RTLIL::Module::addDffe(RTLIL::IdString name, RTLIL::SigSpec sig_clk, RTLIL::SigSpec sig_en, RTLIL::SigSpec sig_d, RTLIL::SigSpec sig_q, bool clk_polarity, bool en_polarity)
+{
+	RTLIL::Cell *cell = addCell(name, "$dffe");
+	cell->parameters["\\CLK_POLARITY"] = clk_polarity;
+	cell->parameters["\\EN_POLARITY"] = en_polarity;
+	cell->parameters["\\WIDTH"] = sig_q.size();
+	cell->setPort("\\CLK", sig_clk);
+	cell->setPort("\\EN", sig_en);
 	cell->setPort("\\D", sig_d);
 	cell->setPort("\\Q", sig_q);
 	return cell;
@@ -1657,6 +1771,16 @@ RTLIL::Cell* RTLIL::Module::addDffGate(RTLIL::IdString name, RTLIL::SigSpec sig_
 	return cell;
 }
 
+RTLIL::Cell* RTLIL::Module::addDffeGate(RTLIL::IdString name, RTLIL::SigSpec sig_clk, RTLIL::SigSpec sig_en, RTLIL::SigSpec sig_d, RTLIL::SigSpec sig_q, bool clk_polarity, bool en_polarity)
+{
+	RTLIL::Cell *cell = addCell(name, stringf("$_DFFE_%c%c_", clk_polarity ? 'P' : 'N', en_polarity ? 'P' : 'N'));
+	cell->setPort("\\C", sig_clk);
+	cell->setPort("\\E", sig_en);
+	cell->setPort("\\D", sig_d);
+	cell->setPort("\\Q", sig_q);
+	return cell;
+}
+
 RTLIL::Cell* RTLIL::Module::addDffsrGate(RTLIL::IdString name, RTLIL::SigSpec sig_clk, RTLIL::SigSpec sig_set, RTLIL::SigSpec sig_clr,
 		RTLIL::SigSpec sig_d, RTLIL::SigSpec sig_q, bool clk_polarity, bool set_polarity, bool clr_polarity)
 {
@@ -1704,6 +1828,10 @@ RTLIL::Cell* RTLIL::Module::addDlatchsrGate(RTLIL::IdString name, RTLIL::SigSpec
 
 RTLIL::Wire::Wire()
 {
+	static unsigned int hashidx_count = 123456789;
+	hashidx_count = mkhash_xorshift(hashidx_count);
+	hashidx_ = hashidx_count;
+
 	module = nullptr;
 	width = 1;
 	start_offset = 0;
@@ -1715,12 +1843,22 @@ RTLIL::Wire::Wire()
 
 RTLIL::Memory::Memory()
 {
+	static unsigned int hashidx_count = 123456789;
+	hashidx_count = mkhash_xorshift(hashidx_count);
+	hashidx_ = hashidx_count;
+
 	width = 1;
 	size = 0;
 }
 
 RTLIL::Cell::Cell() : module(nullptr)
 {
+	static unsigned int hashidx_count = 123456789;
+	hashidx_count = mkhash_xorshift(hashidx_count);
+	hashidx_ = hashidx_count;
+
+	// log("#memtrace# %p\n", this);
+	memhasher();
 }
 
 bool RTLIL::Cell::hasPort(RTLIL::IdString portname) const
@@ -1742,6 +1880,11 @@ void RTLIL::Cell::unsetPort(RTLIL::IdString portname)
 			for (auto mon : module->design->monitors)
 				mon->notify_connect(this, conn_it->first, conn_it->second, signal);
 
+		if (yosys_xtrace) {
+			log("#X# Unconnect %s.%s.%s\n", log_id(this->module), log_id(this), log_id(portname));
+			log_backtrace("-X- ", yosys_xtrace-1);
+		}
+
 		connections_.erase(conn_it);
 	}
 }
@@ -1754,7 +1897,9 @@ void RTLIL::Cell::setPort(RTLIL::IdString portname, RTLIL::SigSpec signal)
 		connections_[portname] = RTLIL::SigSpec();
 		conn_it = connections_.find(portname);
 		log_assert(conn_it != connections_.end());
-	}
+	} else
+	if (conn_it->second == signal)
+		return;
 
 	for (auto mon : module->monitors)
 		mon->notify_connect(this, conn_it->first, conn_it->second, signal);
@@ -1762,6 +1907,11 @@ void RTLIL::Cell::setPort(RTLIL::IdString portname, RTLIL::SigSpec signal)
 	if (module->design)
 		for (auto mon : module->design->monitors)
 			mon->notify_connect(this, conn_it->first, conn_it->second, signal);
+
+	if (yosys_xtrace) {
+		log("#X# Connect %s.%s.%s = %s (%d)\n", log_id(this->module), log_id(this), log_id(portname), log_signal(signal), GetSize(signal));
+		log_backtrace("-X- ", yosys_xtrace-1);
+	}
 
 	conn_it->second = signal;
 }
@@ -1771,7 +1921,7 @@ const RTLIL::SigSpec &RTLIL::Cell::getPort(RTLIL::IdString portname) const
 	return connections_.at(portname);
 }
 
-const std::map<RTLIL::IdString, RTLIL::SigSpec> &RTLIL::Cell::connections() const
+const dict<RTLIL::IdString, RTLIL::SigSpec> &RTLIL::Cell::connections() const
 {
 	return connections_;
 }
@@ -1794,6 +1944,13 @@ void RTLIL::Cell::setParam(RTLIL::IdString paramname, RTLIL::Const value)
 const RTLIL::Const &RTLIL::Cell::getParam(RTLIL::IdString paramname) const
 {
 	return parameters.at(paramname);
+}
+
+void RTLIL::Cell::sort()
+{
+	connections_.sort(sort_by_id_str());
+	parameters.sort(sort_by_id_str());
+	attributes.sort(sort_by_id_str());
 }
 
 void RTLIL::Cell::check()
@@ -2138,6 +2295,17 @@ RTLIL::SigSpec::SigSpec(std::vector<RTLIL::SigBit> bits)
 	check();
 }
 
+RTLIL::SigSpec::SigSpec(pool<RTLIL::SigBit> bits)
+{
+	cover("kernel.rtlil.sigspec.init.pool_bits");
+
+	width_ = 0;
+	hash_ = 0;
+	for (auto &bit : bits)
+		append_bit(bit);
+	check();
+}
+
 RTLIL::SigSpec::SigSpec(std::set<RTLIL::SigBit> bits)
 {
 	cover("kernel.rtlil.sigspec.init.stdset_bits");
@@ -2146,6 +2314,16 @@ RTLIL::SigSpec::SigSpec(std::set<RTLIL::SigBit> bits)
 	hash_ = 0;
 	for (auto &bit : bits)
 		append_bit(bit);
+	check();
+}
+
+RTLIL::SigSpec::SigSpec(bool bit)
+{
+	cover("kernel.rtlil.sigspec.init.bool");
+
+	width_ = 0;
+	hash_ = 0;
+	append_bit(bit);
 	check();
 }
 
@@ -2204,9 +2382,7 @@ void RTLIL::SigSpec::unpack() const
 	that->hash_ = 0;
 }
 
-#define DJB2(_hash, _value) (_hash) = (((_hash) << 5) + (_hash)) + (_value)
-
-void RTLIL::SigSpec::hash() const
+void RTLIL::SigSpec::updhash() const
 {
 	RTLIL::SigSpec *that = (RTLIL::SigSpec*)this;
 
@@ -2216,15 +2392,15 @@ void RTLIL::SigSpec::hash() const
 	cover("kernel.rtlil.sigspec.hash");
 	that->pack();
 
-	that->hash_ = 5381;
+	that->hash_ = mkhash_init;
 	for (auto &c : that->chunks_)
 		if (c.wire == NULL) {
 			for (auto &v : c.data)
-				DJB2(that->hash_, v);
+				that->hash_ = mkhash(that->hash_, v);
 		} else {
-			DJB2(that->hash_, c.wire->name.index_);
-			DJB2(that->hash_, c.offset);
-			DJB2(that->hash_, c.width);
+			that->hash_ = mkhash(that->hash_, c.wire->name.index_);
+			that->hash_ = mkhash(that->hash_, c.offset);
+			that->hash_ = mkhash(that->hash_, c.width);
 		}
 
 	if (that->hash_ == 0)
@@ -2256,13 +2432,37 @@ void RTLIL::SigSpec::replace(const RTLIL::SigSpec &pattern, const RTLIL::SigSpec
 	pattern.unpack();
 	with.unpack();
 
-	std::map<RTLIL::SigBit, RTLIL::SigBit> rules;
+	dict<RTLIL::SigBit, RTLIL::SigBit> rules;
 
 	for (int i = 0; i < GetSize(pattern.bits_); i++)
 		if (pattern.bits_[i].wire != NULL)
 			rules[pattern.bits_[i]] = with.bits_[i];
 
 	replace(rules, other);
+}
+
+void RTLIL::SigSpec::replace(const dict<RTLIL::SigBit, RTLIL::SigBit> &rules)
+{
+	replace(rules, this);
+}
+
+void RTLIL::SigSpec::replace(const dict<RTLIL::SigBit, RTLIL::SigBit> &rules, RTLIL::SigSpec *other) const
+{
+	cover("kernel.rtlil.sigspec.replace_dict");
+
+	log_assert(other != NULL);
+	log_assert(width_ == other->width_);
+
+	unpack();
+	other->unpack();
+
+	for (int i = 0; i < GetSize(bits_); i++) {
+		auto it = rules.find(bits_[i]);
+		if (it != rules.end())
+			other->bits_[i] = it->second;
+	}
+
+	other->check();
 }
 
 void RTLIL::SigSpec::replace(const std::map<RTLIL::SigBit, RTLIL::SigBit> &rules)
@@ -2272,7 +2472,7 @@ void RTLIL::SigSpec::replace(const std::map<RTLIL::SigBit, RTLIL::SigBit> &rules
 
 void RTLIL::SigSpec::replace(const std::map<RTLIL::SigBit, RTLIL::SigBit> &rules, RTLIL::SigSpec *other) const
 {
-	cover("kernel.rtlil.sigspec.replace");
+	cover("kernel.rtlil.sigspec.replace_map");
 
 	log_assert(other != NULL);
 	log_assert(width_ == other->width_);
@@ -2302,22 +2502,22 @@ void RTLIL::SigSpec::remove(const RTLIL::SigSpec &pattern, RTLIL::SigSpec *other
 
 void RTLIL::SigSpec::remove2(const RTLIL::SigSpec &pattern, RTLIL::SigSpec *other)
 {
-	std::set<RTLIL::SigBit> pattern_bits = pattern.to_sigbit_set();
+	pool<RTLIL::SigBit> pattern_bits = pattern.to_sigbit_pool();
 	remove2(pattern_bits, other);
 }
 
-void RTLIL::SigSpec::remove(const std::set<RTLIL::SigBit> &pattern)
+void RTLIL::SigSpec::remove(const pool<RTLIL::SigBit> &pattern)
 {
 	remove2(pattern, NULL);
 }
 
-void RTLIL::SigSpec::remove(const std::set<RTLIL::SigBit> &pattern, RTLIL::SigSpec *other) const
+void RTLIL::SigSpec::remove(const pool<RTLIL::SigBit> &pattern, RTLIL::SigSpec *other) const
 {
 	RTLIL::SigSpec tmp = *this;
 	tmp.remove2(pattern, other);
 }
 
-void RTLIL::SigSpec::remove2(const std::set<RTLIL::SigBit> &pattern, RTLIL::SigSpec *other)
+void RTLIL::SigSpec::remove2(const pool<RTLIL::SigBit> &pattern, RTLIL::SigSpec *other)
 {
 	if (other)
 		cover("kernel.rtlil.sigspec.remove_other");
@@ -2363,11 +2563,11 @@ void RTLIL::SigSpec::remove2(const std::set<RTLIL::SigBit> &pattern, RTLIL::SigS
 
 RTLIL::SigSpec RTLIL::SigSpec::extract(const RTLIL::SigSpec &pattern, const RTLIL::SigSpec *other) const
 {
-	std::set<RTLIL::SigBit> pattern_bits = pattern.to_sigbit_set();
+	pool<RTLIL::SigBit> pattern_bits = pattern.to_sigbit_pool();
 	return extract(pattern_bits, other);
 }
 
-RTLIL::SigSpec RTLIL::SigSpec::extract(const std::set<RTLIL::SigBit> &pattern, const RTLIL::SigSpec *other) const
+RTLIL::SigSpec RTLIL::SigSpec::extract(const pool<RTLIL::SigBit> &pattern, const RTLIL::SigSpec *other) const
 {
 	if (other)
 		cover("kernel.rtlil.sigspec.extract_other");
@@ -2540,25 +2740,6 @@ void RTLIL::SigSpec::append_bit(const RTLIL::SigBit &bit)
 	check();
 }
 
-void RTLIL::SigSpec::extend(int width, bool is_signed)
-{
-	cover("kernel.rtlil.sigspec.extend");
-
-	pack();
-
-	if (width_ > width)
-		remove(width, width_ - width);
-	
-	if (width_ < width) {
-		RTLIL::SigSpec padding = width_ > 0 ? extract(width_ - 1, 1) : RTLIL::SigSpec(RTLIL::State::S0);
-		if (!is_signed && padding != RTLIL::SigSpec(RTLIL::State::Sx) && padding != RTLIL::SigSpec(RTLIL::State::Sz) &&
-				padding != RTLIL::SigSpec(RTLIL::State::Sa) && padding != RTLIL::SigSpec(RTLIL::State::Sm))
-			padding = RTLIL::SigSpec(RTLIL::State::S0);
-		while (width_ < width)
-			append(padding);
-	}
-}
-
 void RTLIL::SigSpec::extend_u0(int width, bool is_signed)
 {
 	cover("kernel.rtlil.sigspec.extend_u0");
@@ -2569,9 +2750,9 @@ void RTLIL::SigSpec::extend_u0(int width, bool is_signed)
 		remove(width, width_ - width);
 	
 	if (width_ < width) {
-		RTLIL::SigSpec padding = width_ > 0 ? extract(width_ - 1, 1) : RTLIL::SigSpec(RTLIL::State::S0);
+		RTLIL::SigBit padding = width_ > 0 ? (*this)[width_ - 1] : RTLIL::State::S0;
 		if (!is_signed)
-			padding = RTLIL::SigSpec(RTLIL::State::S0);
+			padding = RTLIL::State::S0;
 		while (width_ < width)
 			append(padding);
 	}
@@ -2646,8 +2827,8 @@ bool RTLIL::SigSpec::operator <(const RTLIL::SigSpec &other) const
 	if (chunks_.size() != other.chunks_.size())
 		return chunks_.size() < other.chunks_.size();
 
-	hash();
-	other.hash();
+	updhash();
+	other.updhash();
 
 	if (hash_ != other.hash_)
 		return hash_ < other.hash_;
@@ -2678,8 +2859,8 @@ bool RTLIL::SigSpec::operator ==(const RTLIL::SigSpec &other) const
 	if (chunks_.size() != chunks_.size())
 		return false;
 
-	hash();
-	other.hash();
+	updhash();
+	other.updhash();
 
 	if (hash_ != other.hash_)
 		return false;
@@ -2868,6 +3049,18 @@ std::set<RTLIL::SigBit> RTLIL::SigSpec::to_sigbit_set() const
 	return sigbits;
 }
 
+pool<RTLIL::SigBit> RTLIL::SigSpec::to_sigbit_pool() const
+{
+	cover("kernel.rtlil.sigspec.to_sigbit_pool");
+
+	pack();
+	pool<RTLIL::SigBit> sigbits;
+	for (auto &c : chunks_)
+		for (int i = 0; i < c.width; i++)
+			sigbits.insert(RTLIL::SigBit(c, i));
+	return sigbits;
+}
+
 std::vector<RTLIL::SigBit> RTLIL::SigSpec::to_sigbit_vector() const
 {
 	cover("kernel.rtlil.sigspec.to_sigbit_vector");
@@ -2886,6 +3079,22 @@ std::map<RTLIL::SigBit, RTLIL::SigBit> RTLIL::SigSpec::to_sigbit_map(const RTLIL
 	log_assert(width_ == other.width_);
 
 	std::map<RTLIL::SigBit, RTLIL::SigBit> new_map;
+	for (int i = 0; i < width_; i++)
+		new_map[bits_[i]] = other.bits_[i];
+
+	return new_map;
+}
+
+dict<RTLIL::SigBit, RTLIL::SigBit> RTLIL::SigSpec::to_sigbit_dict(const RTLIL::SigSpec &other) const
+{
+	cover("kernel.rtlil.sigspec.to_sigbit_dict");
+
+	unpack();
+	other.unpack();
+
+	log_assert(width_ == other.width_);
+
+	dict<RTLIL::SigBit, RTLIL::SigBit> new_map;
 	for (int i = 0; i < width_; i++)
 		new_map[bits_[i]] = other.bits_[i];
 

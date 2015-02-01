@@ -11,10 +11,11 @@ ENABLE_ABC := 1
 ENABLE_PLUGINS := 1
 ENABLE_READLINE := 1
 ENABLE_VERIFIC := 0
-ENABLE_COVER := 0
+ENABLE_COVER := 1
 
 # other configuration flags
 ENABLE_GPROF := 0
+ENABLE_NDEBUG := 0
 
 DESTDIR := /usr/local
 INSTALL_SUDO :=
@@ -31,22 +32,28 @@ SMALL = 0
 
 all: top-all
 
-CXXFLAGS = -Wall -Wextra -ggdb -I"$(shell pwd)" -MD -DYOSYS_SRC='"$(shell pwd)"' -D_YOSYS_ -fPIC -I${DESTDIR}/include
-LDFLAGS = -L${DESTDIR}/lib
+CXXFLAGS = -Wall -Wextra -ggdb -I"$(shell pwd)" -MD -DYOSYS_SRC='"$(shell pwd)"' -D_YOSYS_ -fPIC -I$(DESTDIR)/include
+LDFLAGS = -L$(DESTDIR)/lib
 LDLIBS = -lstdc++ -lm
 SED = sed
+BISON = bison
 
 ifeq (Darwin,$(findstring Darwin,$(shell uname)))
-	# add macports include and library path to search directories, don't use '-rdynamic' and '-lrt':
-	CXXFLAGS += -I/opt/local/include
-	LDFLAGS += -L/opt/local/lib
+	# add macports/homebrew include and library path to search directories, don't use '-rdynamic' and '-lrt':
+	CXXFLAGS += -I/opt/local/include -I/usr/local/opt/readline/include
+	LDFLAGS += -L/opt/local/lib -L/usr/local/opt/readline/lib
+	# add homebrew's libffi include and library path
+	CXXFLAGS += $(shell PKG_CONFIG_PATH=$$(brew list libffi | grep pkgconfig | xargs dirname) pkg-config --silence-errors --cflags libffi)
+	LDFLAGS += $(shell PKG_CONFIG_PATH=$$(brew list libffi | grep pkgconfig | xargs dirname) pkg-config --silence-errors --libs libffi)
+	# use bison installed by homebrew if available
+	BISON = $(shell (brew list bison | grep -m1 "bin/bison") || echo bison)
 	SED = gsed
 else
 	LDFLAGS += -rdynamic
 	LDLIBS += -lrt
 endif
 
-YOSYS_VER := 0.4
+YOSYS_VER := 0.4+$(shell test -d .git && { git log --author=clifford@clifford.at --oneline d5aa0ee158b41.. | wc -l; })
 GIT_REV := $(shell git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
 OBJS = kernel/version_$(GIT_REV).o
 
@@ -56,7 +63,7 @@ OBJS = kernel/version_$(GIT_REV).o
 # is just a symlink to your actual ABC working directory, as 'make mrproper'
 # will remove the 'abc' directory and you do not want to accidentally
 # delete your work on ABC..
-ABCREV = 5b5af75f1dda
+ABCREV = 61ad5f908c03
 ABCPULL = 1
 ABCMKARGS = # CC="$(CXX)" CXX="$(CXX)"
 
@@ -127,6 +134,10 @@ CXXFLAGS += -pg
 LDFLAGS += -pg
 endif
 
+ifeq ($(ENABLE_NDEBUG),1)
+CXXFLAGS := -O3 -DNDEBUG $(filter-out -Os,$(CXXFLAGS))
+endif
+
 ifeq ($(ENABLE_ABC),1)
 CXXFLAGS += -DYOSYS_ENABLE_ABC
 TARGETS += yosys-abc$(EXE)
@@ -142,6 +153,13 @@ endif
 ifeq ($(ENABLE_COVER),1)
 CXXFLAGS += -DYOSYS_ENABLE_COVER
 endif
+
+define add_share_file
+EXTRA_TARGETS += $(1)/$(notdir $(2))
+$(1)/$(notdir $(2)): $(2)
+	$$(P) mkdir -p $(1)
+	$$(Q) cp $(2) $(1)/$(notdir $(2))
+endef
 
 ifeq ($(PRETTY), 1)
 P_STATUS = 0
@@ -240,9 +258,9 @@ ifneq ($(ABCREV),default)
 	fi
 	$(Q) if test "`cd abc 2> /dev/null && hg identify | cut -f1 -d' '`" != "$(ABCREV)"; then \
 		test $(ABCPULL) -ne 0 || { echo 'REEBE: NOP abg hc gb qngr naq NOPCHYY frg gb 0 va Znxrsvyr!' | tr 'A-Za-z' 'N-ZA-Mn-za-m'; exit 1; }; \
-		echo "Pulling ABC from bitbucket.org:"; \
+		echo "Pulling ABC from bitbucket.org:"; set -x; \
 		test -d abc || hg clone https://bitbucket.org/alanmi/abc abc; \
-		cd abc && hg pull && hg update -r $(ABCREV); \
+		cd abc && $(MAKE) DEP= clean && hg pull && hg update -r $(ABCREV); \
 	fi
 endif
 	$(Q) rm -f abc/abc-[0-9a-f]*
@@ -264,6 +282,7 @@ test: $(TARGETS) $(EXTRA_TARGETS)
 	+cd tests/fsm && bash run-test.sh
 	+cd tests/techmap && bash run-test.sh
 	+cd tests/memories && bash run-test.sh
+	+cd tests/bram && bash run-test.sh
 	+cd tests/various && bash run-test.sh
 	+cd tests/sat && bash run-test.sh
 	@echo ""
@@ -303,7 +322,7 @@ clean:
 	rm -f libs/*/*.d frontends/*/*.d passes/*/*.d backends/*/*.d kernel/*.d techlibs/*/*.d
 
 clean-abc:
-	$(MAKE) -C abc clean
+	$(MAKE) -C abc DEP= clean
 	rm -f yosys-abc$(EXE) abc/abc-[0-9a-f]*
 
 mrproper: clean
@@ -316,9 +335,33 @@ qtcreator:
 	{ echo .; find backends frontends kernel libs passes -type f \( -name '*.h' -o -name '*.hh' \) -printf '%h\n' | sort -u; } > qtcreator.includes
 	touch qtcreator.config qtcreator.creator
 
+mklibyosys: $(OBJS) $(GENFILES) $(EXTRA_TARGETS)
+	rm -rf libyosys
+	mkdir -p libyosys/include libyosys/objs
+	set -e; for f in $(wildcard $(filter %.cc %.cpp,$(GENFILES)) $(addsuffix .cc,$(basename $(OBJS))) $(addsuffix .cpp,$(basename $(OBJS))) 2>/dev/null); do \
+		echo "Analyse: $$f" >&2; cpp -std=gnu++0x -MM -I. -D_YOSYS_ $$f; done | sed 's,.*:,,; s,//*,/,g; s,/[^/]*/\.\./,/,g; y, \\,\n\n,;' | \
+		grep '^[^/]' | sort -u | grep -v kernel/version_ | grep '\.\(h\|hh\)$$' | xargs cp -t libyosys/include/
+	sed -i 's/^\(# *include *"\)[^"]*\//\1/' libyosys/include/*
+	{ echo "#ifndef YOSYS_CONFIG_H"; echo "#define YOSYS_CONFIG_H"; for opt in $(CXXFLAGS); do [[ "$$opt" == -D* ]] || continue; V="$${opt#-D}"; N="$${V%=*}"; \
+		V="$${V#*=}"; [ "$$V" = "$$N" ] && echo "#define $$N" || echo "#define $$N $$V"; done; echo "#endif"; } > libyosys/include/config.h
+	sed -i '/^#define YOSYS_H/ { p; s/.*/#include "config.h"/; };' libyosys/include/yosys.h
+	cp $(filter-out kernel/driver.o,$(OBJS)) libyosys/objs/
+	cp tests/simple/fiedler-cooley.v libyosys/example.v
+	cp misc/example.cc libyosys/example.cc
+
+vcxsrc: $(GENFILES) $(EXTRA_TARGETS)
+	rm -rf yosys-win32-vcxsrc-$(YOSYS_VER){,.zip}
+	set -e; for f in $(wildcard $(filter %.cc %.cpp,$(GENFILES)) $(addsuffix .cc,$(basename $(OBJS))) $(addsuffix .cpp,$(basename $(OBJS))) 2>/dev/null); do \
+		echo "Analyse: $$f" >&2; cpp -std=gnu++0x -MM -I. -D_YOSYS_ $$f; done | sed 's,.*:,,; s,//*,/,g; s,/[^/]*/\.\./,/,g; y, \\,\n\n,;' | grep '^[^/]' | sort -u | grep -v kernel/version_ > srcfiles.txt
+	bash misc/create_vcxsrc.sh yosys-win32-vcxsrc $(YOSYS_VER) $(GIT_REV)
+	echo "namespace Yosys { extern const char *yosys_version_str; const char *yosys_version_str=\"Yosys (Version Information Unavailable)\"; }" > kernel/version.cc
+	zip yosys-win32-vcxsrc-$(YOSYS_VER)/genfiles.zip $(GENFILES) kernel/version.cc
+	zip -r yosys-win32-vcxsrc-$(YOSYS_VER).zip yosys-win32-vcxsrc-$(YOSYS_VER)/
+	rm -f srcfiles.txt kernel/version.cc
+
 ifeq ($(CONFIG),mxe)
-dist: $(TARGETS) $(EXTRA_TARGETS)
-	rm -rf yosys-win32-{mxebin,vcxsrc}-$(YOSYS_VER){,.zip}
+mxebin: $(TARGETS) $(EXTRA_TARGETS)
+	rm -rf yosys-win32-mxebin-$(YOSYS_VER){,.zip}
 	mkdir -p yosys-win32-mxebin-$(YOSYS_VER)
 	cp -r yosys.exe share/ yosys-win32-mxebin-$(YOSYS_VER)/
 ifeq ($(ENABLE_ABC),1)
@@ -326,14 +369,7 @@ ifeq ($(ENABLE_ABC),1)
 endif
 	echo -en 'This is Yosys $(YOSYS_VER) for Win32.\r\n' > yosys-win32-mxebin-$(YOSYS_VER)/readme.txt
 	echo -en 'Documentation at http://www.clifford.at/yosys/.\r\n' >> yosys-win32-mxebin-$(YOSYS_VER)/readme.txt
-	sed -e 's,^[^ ]*:,,; s, ,\n,g; s, *\\,,; s,/[^/]*/\.\./,/,g; s,'"$$PWD/"',,' \
-			$(addsuffix .d,$(basename $(OBJS))) | sort -u | grep '^[^/]' | grep -v kernel/version_ > srcfiles.txt
-	bash misc/create_vcxsrc.sh yosys-win32-vcxsrc $(YOSYS_VER) $(GIT_REV)
-	echo "namespace Yosys { extern const char *yosys_version_str; const char *yosys_version_str=\"Yosys (Version Information Unavailable)\"; }" > kernel/version.cc
-	zip yosys-win32-vcxsrc-$(YOSYS_VER)/genfiles.zip $(GENFILES) kernel/version.cc
 	zip -r yosys-win32-mxebin-$(YOSYS_VER).zip yosys-win32-mxebin-$(YOSYS_VER)/
-	zip -r yosys-win32-vcxsrc-$(YOSYS_VER).zip yosys-win32-vcxsrc-$(YOSYS_VER)/
-	rm -f srcfiles.txt kernel/version.cc
 endif
 
 config-clean: clean
@@ -367,6 +403,12 @@ config-gprof: clean
 
 config-sudo:
 	echo "INSTALL_SUDO := sudo" >> Makefile.conf
+
+echo-yosys-ver:
+	@echo "$(YOSYS_VER)"
+
+echo-git-rev:
+	@echo "$(GIT_REV)"
 
 -include libs/*/*.d
 -include frontends/*/*.d

@@ -101,7 +101,7 @@ static bool match_attr_val(const RTLIL::Const &value, std::string pattern, char 
 	log_abort();
 }
 
-static bool match_attr(const std::map<RTLIL::IdString, RTLIL::Const> &attributes, std::string name_pat, std::string value_pat, char match_op)
+static bool match_attr(const dict<RTLIL::IdString, RTLIL::Const> &attributes, std::string name_pat, std::string value_pat, char match_op)
 {
 	if (name_pat.find('*') != std::string::npos || name_pat.find('?') != std::string::npos || name_pat.find('[') != std::string::npos) {
 		for (auto &it : attributes) {
@@ -119,7 +119,7 @@ static bool match_attr(const std::map<RTLIL::IdString, RTLIL::Const> &attributes
 	return false;
 }
 
-static bool match_attr(const std::map<RTLIL::IdString, RTLIL::Const> &attributes, std::string match_expr)
+static bool match_attr(const dict<RTLIL::IdString, RTLIL::Const> &attributes, std::string match_expr)
 {
 	size_t pos = match_expr.find_first_of("<!=>");
 
@@ -376,6 +376,7 @@ static int select_op_expand(RTLIL::Design *design, RTLIL::Selection &lhs, std::v
 
 		RTLIL::Module *mod = mod_it.second;
 		std::set<RTLIL::Wire*> selected_wires;
+		auto selected_members = lhs.selected_members[mod->name];
 
 		for (auto &it : mod->wires_)
 			if (lhs.selected_member(mod_it.first, it.first) && limits.count(it.first) == 0)
@@ -389,9 +390,9 @@ static int select_op_expand(RTLIL::Design *design, RTLIL::Selection &lhs, std::v
 			for (size_t i = 0; i < conn_lhs.size(); i++) {
 				if (conn_lhs[i].wire == NULL || conn_rhs[i].wire == NULL)
 					continue;
-				if (mode != 'i' && selected_wires.count(conn_rhs[i].wire) && lhs.selected_members[mod->name].count(conn_lhs[i].wire->name) == 0)
+				if (mode != 'i' && selected_wires.count(conn_rhs[i].wire) && selected_members.count(conn_lhs[i].wire->name) == 0)
 					lhs.selected_members[mod->name].insert(conn_lhs[i].wire->name), sel_objects++, max_objects--;
-				if (mode != 'o' && selected_wires.count(conn_lhs[i].wire) && lhs.selected_members[mod->name].count(conn_rhs[i].wire->name) == 0)
+				if (mode != 'o' && selected_wires.count(conn_lhs[i].wire) && selected_members.count(conn_rhs[i].wire->name) == 0)
 					lhs.selected_members[mod->name].insert(conn_rhs[i].wire->name), sel_objects++, max_objects--;
 			}
 		}
@@ -418,10 +419,10 @@ static int select_op_expand(RTLIL::Design *design, RTLIL::Selection &lhs, std::v
 			is_output = mode == 'x' || ct.cell_output(cell.second->type, conn.first);
 			for (auto &chunk : conn.second.chunks())
 				if (chunk.wire != NULL) {
-					if (max_objects != 0 && selected_wires.count(chunk.wire) > 0 && lhs.selected_members[mod->name].count(cell.first) == 0)
+					if (max_objects != 0 && selected_wires.count(chunk.wire) > 0 && selected_members.count(cell.first) == 0)
 						if (mode == 'x' || (mode == 'i' && is_output) || (mode == 'o' && is_input))
 							lhs.selected_members[mod->name].insert(cell.first), sel_objects++, max_objects--;
-					if (max_objects != 0 && lhs.selected_members[mod->name].count(cell.first) > 0 && limits.count(cell.first) == 0 && lhs.selected_members[mod->name].count(chunk.wire->name) == 0)
+					if (max_objects != 0 && selected_members.count(cell.first) > 0 && limits.count(cell.first) == 0 && selected_members.count(chunk.wire->name) == 0)
 						if (mode == 'x' || (mode == 'i' && is_input) || (mode == 'o' && is_output))
 							lhs.selected_members[mod->name].insert(chunk.wire->name), sel_objects++, max_objects--;
 				}
@@ -532,7 +533,7 @@ static void select_op_expand(RTLIL::Design *design, std::string arg, char mode)
 	}
 
 	if (rem_objects == 0)
-		log("Warning: reached configured limit at `%s'.\n", arg.c_str());
+		log_warning("reached configured limit at `%s'.\n", arg.c_str());
 }
 
 static void select_filter_active_mod(RTLIL::Design *design, RTLIL::Selection &sel)
@@ -1327,21 +1328,20 @@ struct CdPass : public Pass {
 } CdPass;
 
 template<typename T>
-static int log_matches(const char *title, std::string pattern, T list)
+static void log_matches(const char *title, Module *module, T list)
 {
-	std::vector<RTLIL::IdString> matches;
+	std::vector<IdString> matches;
 
 	for (auto &it : list)
-		if (pattern.empty() || match_ids(it.first, pattern))
+		if (module->selected(it.second))
 			matches.push_back(it.first);
 
-	if (matches.empty())
-		return 0;
-
-	log("\n%d %s:\n", int(matches.size()), title);
-	for (auto &id : matches)
-		log("  %s\n", RTLIL::id2cstr(id));
-	return matches.size();
+	if (!matches.empty()) {
+		log("\n%d %s:\n", int(matches.size()), title);
+		std::sort(matches.begin(), matches.end(), RTLIL::sort_by_id_str());
+		for (auto id : matches)
+			log("  %s\n", RTLIL::id2cstr(id));
+	}
 }
  
 struct LsPass : public Pass {
@@ -1350,44 +1350,41 @@ struct LsPass : public Pass {
 	{
 		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
 		log("\n");
-		log("    ls [pattern]\n");
+		log("    ls [selection]\n");
 		log("\n");
-		log("When no active module is selected, this prints a list of all modules.\n");
+		log("When no active module is selected, this prints a list of modules.\n");
 		log("\n");
 		log("When an active module is selected, this prints a list of objects in the module.\n");
-		log("\n");
-		log("If a pattern is given, the objects matching the pattern are printed\n");
-		log("\n");
-		log("Note that this command does not use the selection mechanism and always operates\n");
-		log("on the whole design or whole active module. Use 'select -list' to show a list\n");
-		log("of currently selected objects.\n");
 		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
 	{
-		std::string pattern;
-		int counter = 0;
-
-		if (args.size() != 1 && args.size() != 2)
-			log_cmd_error("Invalid number of arguments.\n");
-		if (args.size() == 2)
-			pattern = args.at(1);
+		size_t argidx = 1;
+		extra_args(args, argidx, design);
 
 		if (design->selected_active_module.empty())
 		{
-			counter += log_matches("modules", pattern, design->modules_);
+			std::vector<IdString> matches;
+
+			for (auto mod : design->selected_modules())
+				matches.push_back(mod->name);
+
+			if (!matches.empty()) {
+				log("\n%d %s:\n", int(matches.size()), "modules");
+				std::sort(matches.begin(), matches.end(), RTLIL::sort_by_id_str());
+				for (auto id : matches)
+					log("  %s%s\n", log_id(id), design->selected_whole_module(design->module(id)) ? "" : "*");
+			}
 		}
 		else
-		if (design->modules_.count(design->selected_active_module) > 0)
+		if (design->module(design->selected_active_module) != nullptr)
 		{
-			RTLIL::Module *module = design->modules_.at(design->selected_active_module);
-			counter += log_matches("wires", pattern, module->wires_);
-			counter += log_matches("memories", pattern, module->memories);
-			counter += log_matches("cells", pattern, module->cells_);
-			counter += log_matches("processes", pattern, module->processes);
+			RTLIL::Module *module = design->module(design->selected_active_module);
+			log_matches("wires", module, module->wires_);
+			log_matches("memories", module, module->memories);
+			log_matches("cells", module, module->cells_);
+			log_matches("processes", module, module->processes);
 		}
-
-		// log("\nfound %d item%s.\n", counter, counter == 1 ? "" : "s");
 	}
 } LsPass;
  

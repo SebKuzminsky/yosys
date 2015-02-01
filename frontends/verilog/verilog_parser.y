@@ -655,20 +655,32 @@ wire_decl:
 			delete astbuf2;
 		free_attr(albuf);
 	} ';' |
-	attr TOK_SUPPLY0 TOK_ID ';' {
+	attr TOK_SUPPLY0 TOK_ID {
 		ast_stack.back()->children.push_back(new AstNode(AST_WIRE));
 		ast_stack.back()->children.back()->str = *$3;
 		append_attr(ast_stack.back()->children.back(), $1);
 		ast_stack.back()->children.push_back(new AstNode(AST_ASSIGN, new AstNode(AST_IDENTIFIER), AstNode::mkconst_int(0, false, 1)));
 		ast_stack.back()->children.back()->children[0]->str = *$3;
 		delete $3;
-	} |
-	attr TOK_SUPPLY1 TOK_ID ';' {
+	} opt_supply_wires ';' |
+	attr TOK_SUPPLY1 TOK_ID {
 		ast_stack.back()->children.push_back(new AstNode(AST_WIRE));
 		ast_stack.back()->children.back()->str = *$3;
 		append_attr(ast_stack.back()->children.back(), $1);
 		ast_stack.back()->children.push_back(new AstNode(AST_ASSIGN, new AstNode(AST_IDENTIFIER), AstNode::mkconst_int(1, false, 1)));
 		ast_stack.back()->children.back()->children[0]->str = *$3;
+		delete $3;
+	} opt_supply_wires ';';
+
+opt_supply_wires:
+	/* empty */ |
+	opt_supply_wires ',' TOK_ID {
+		AstNode *wire_node = ast_stack.back()->children.at(GetSize(ast_stack.back()->children)-2)->clone();
+		AstNode *assign_node = ast_stack.back()->children.at(GetSize(ast_stack.back()->children)-1)->clone();
+		wire_node->str = *$3;
+		assign_node->children[0]->str = *$3;
+		ast_stack.back()->children.push_back(wire_node);
+		ast_stack.back()->children.push_back(assign_node);
 		delete $3;
 	};
 
@@ -1251,7 +1263,7 @@ basic_expr:
 		if ($4->substr(0, 1) != "'")
 			frontend_verilog_yyerror("Syntax error.");
 		AstNode *bits = $2;
-		AstNode *val = const2ast(*$4, case_type_stack.size() == 0 ? 0 : case_type_stack.back());
+		AstNode *val = const2ast(*$4, case_type_stack.size() == 0 ? 0 : case_type_stack.back(), true);
 		if (val == NULL)
 			log_error("Value conversion failed: `%s'\n", $4->c_str());
 		$$ = new AstNode(AST_TO_BITS, bits, val);
@@ -1262,7 +1274,7 @@ basic_expr:
 			frontend_verilog_yyerror("Syntax error.");
 		AstNode *bits = new AstNode(AST_IDENTIFIER);
 		bits->str = *$1;
-		AstNode *val = const2ast(*$2, case_type_stack.size() == 0 ? 0 : case_type_stack.back());
+		AstNode *val = const2ast(*$2, case_type_stack.size() == 0 ? 0 : case_type_stack.back(), true);
 		if (val == NULL)
 			log_error("Value conversion failed: `%s'\n", $2->c_str());
 		$$ = new AstNode(AST_TO_BITS, bits, val);
@@ -1270,14 +1282,14 @@ basic_expr:
 		delete $2;
 	} |
 	TOK_CONST TOK_CONST {
-		$$ = const2ast(*$1 + *$2, case_type_stack.size() == 0 ? 0 : case_type_stack.back());
+		$$ = const2ast(*$1 + *$2, case_type_stack.size() == 0 ? 0 : case_type_stack.back(), true);
 		if ($$ == NULL || (*$2)[0] != '\'')
 			log_error("Value conversion failed: `%s%s'\n", $1->c_str(), $2->c_str());
 		delete $1;
 		delete $2;
 	} |
 	TOK_CONST {
-		$$ = const2ast(*$1, case_type_stack.size() == 0 ? 0 : case_type_stack.back());
+		$$ = const2ast(*$1, case_type_stack.size() == 0 ? 0 : case_type_stack.back(), true);
 		if ($$ == NULL)
 			log_error("Value conversion failed: `%s'\n", $1->c_str());
 		delete $1;
@@ -1321,7 +1333,7 @@ basic_expr:
 	'{' concat_list '}' {
 		$$ = $2;
 	} |
-	'{' expr '{' expr '}' '}' {
+	'{' expr '{' concat_list '}' '}' {
 		$$ = new AstNode(AST_REPLICATE, $2, $4);
 	} |
 	'~' attr basic_expr %prec UNARY_OPS {

@@ -52,6 +52,12 @@ struct SynthPass : public Pass {
 		log("    -top <module>\n");
 		log("        use the specified module as top module (default='top')\n");
 		log("\n");
+		log("    -encfile <file>\n");
+		log("        passed to 'fsm_recode' via 'fsm'\n");
+		log("\n");
+		log("    -noabc\n");
+		log("        do not run abc (as if yosys was compiled without ABC support)\n");
+		log("\n");
 		log("    -run <from_label>[:<to_label>]\n");
 		log("        only run the commands between the labels (see below). an empty\n");
 		log("        from label is synonymous to 'begin', and empty to label is\n");
@@ -91,14 +97,19 @@ struct SynthPass : public Pass {
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
 	{
-		std::string top_module;
+		std::string top_module, fsm_opts;
 		std::string run_from, run_to;
+		bool noabc = false;
 
 		size_t argidx;
 		for (argidx = 1; argidx < args.size(); argidx++)
 		{
 			if (args[argidx] == "-top" && argidx+1 < args.size()) {
 				top_module = args[++argidx];
+				continue;
+			}
+			if (args[argidx] == "-encfile" && argidx+1 < args.size()) {
+				fsm_opts = " -encfile " + args[++argidx];
 				continue;
 			}
 			if (args[argidx] == "-run" && argidx+1 < args.size()) {
@@ -110,6 +121,10 @@ struct SynthPass : public Pass {
 					run_from = args[++argidx].substr(0, pos);
 					run_to = args[argidx].substr(pos+1);
 				}
+				continue;
+			}
+			if (args[argidx] == "-noabc") {
+				noabc = true;
 				continue;
 			}
 			break;
@@ -140,7 +155,7 @@ struct SynthPass : public Pass {
 			Pass::call(design, "alumacc");
 			Pass::call(design, "share");
 			Pass::call(design, "opt");
-			Pass::call(design, "fsm");
+			Pass::call(design, "fsm" + fsm_opts);
 			Pass::call(design, "opt -fast");
 			Pass::call(design, "memory -nomap");
 			Pass::call(design, "opt_clean");
@@ -156,7 +171,7 @@ struct SynthPass : public Pass {
 		}
 
 	#ifdef YOSYS_ENABLE_ABC
-		if (check_label(active, run_from, run_to, "abc"))
+		if (check_label(active, run_from, run_to, "abc") && !noabc)
 		{
 			Pass::call(design, "abc -fast");
 			Pass::call(design, "opt -fast");

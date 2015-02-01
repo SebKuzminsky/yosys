@@ -73,7 +73,7 @@ static RTLIL::SigSpec uniop2rtlil(AstNode *that, std::string type, int result_wi
 static void widthExtend(AstNode *that, RTLIL::SigSpec &sig, int width, bool is_signed)
 {
 	if (width <= sig.size()) {
-		sig.extend(width, is_signed);
+		sig.extend_u0(width, is_signed);
 		return;
 	}
 
@@ -254,7 +254,7 @@ struct AST_INTERNAL::ProcessGenerator
 
 		// create initial assignments for the temporary signals
 		if ((flag_nolatches || always->get_bool_attribute("\\nolatches") || current_module->get_bool_attribute("\\nolatches")) && !found_clocked_sync) {
-			subst_rvalue_map = subst_lvalue_from.to_sigbit_map(RTLIL::SigSpec(RTLIL::State::Sx, GetSize(subst_lvalue_from)));
+			subst_rvalue_map = subst_lvalue_from.to_sigbit_dict(RTLIL::SigSpec(RTLIL::State::Sx, GetSize(subst_lvalue_from)));
 		} else {
 			addChunkActions(current_case->actions, subst_lvalue_to, subst_lvalue_from);
 		}
@@ -839,13 +839,14 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 			memory->attributes["\\src"] = stringf("%s:%d", filename.c_str(), linenum);
 			memory->name = str;
 			memory->width = children[0]->range_left - children[0]->range_right + 1;
-			memory->start_offset = children[0]->range_right;
-			memory->size = children[1]->range_left - children[1]->range_right;
+			if (children[1]->range_right < children[1]->range_left) {
+				memory->start_offset = children[1]->range_right;
+				memory->size = children[1]->range_left - children[1]->range_right + 1;
+			} else {
+				memory->start_offset = children[1]->range_left;
+				memory->size = children[1]->range_right - children[1]->range_left + 1;
+			}
 			current_module->memories[memory->name] = memory;
-
-			if (memory->size < 0)
-				memory->size *= -1;
-			memory->size += std::min(children[1]->range_left, children[1]->range_right) + 1;
 
 			for (auto &attr : attributes) {
 				if (attr.second->type != AST_CONSTANT)
@@ -869,7 +870,7 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 	case AST_REALVALUE:
 		{
 			RTLIL::SigSpec sig = realAsConst(width_hint);
-			log("Warning: converting real value %e to binary %s at %s:%d.\n",
+			log_warning("converting real value %e to binary %s at %s:%d.\n",
 					realvalue, log_signal(sig), filename.c_str(), linenum);
 			return sig;
 		}
@@ -890,7 +891,7 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 				wire->attributes["\\src"] = stringf("%s:%d", filename.c_str(), linenum);
 				wire->name = str;
 				if (flag_autowire)
-					log("Warning: Identifier `%s' is implicitly declared at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+					log_warning("Identifier `%s' is implicitly declared at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
 				else
 					log_error("Identifier `%s' is implicitly declared at %s:%d and `default_nettype is set to none.\n", str.c_str(), filename.c_str(), linenum);
 			}
@@ -955,10 +956,10 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 						chunk.offset = (id2ast->range_left - id2ast->range_right + 1) - (chunk.offset + chunk.width);
 					if (chunk.offset >= source_width || chunk.offset + chunk.width < 0) {
 						if (chunk.width == 1)
-							log("Warning: Range select out of bounds on signal `%s' at %s:%d: Setting result bit to undef.\n",
+							log_warning("Range select out of bounds on signal `%s' at %s:%d: Setting result bit to undef.\n",
 									str.c_str(), filename.c_str(), linenum);
 						else
-							log("Warning: Range select out of bounds on signal `%s' at %s:%d: Setting all %d result bits to undef.\n",
+							log_warning("Range select out of bounds on signal `%s' at %s:%d: Setting all %d result bits to undef.\n",
 									str.c_str(), filename.c_str(), linenum, chunk.width);
 						chunk = RTLIL::SigChunk(RTLIL::State::Sx, chunk.width);
 					} else {
@@ -972,10 +973,10 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 							chunk.offset += add_undef_bits_lsb;
 						}
 						if (add_undef_bits_lsb)
-							log("Warning: Range select out of bounds on signal `%s' at %s:%d: Setting %d LSB bits to undef.\n",
+							log_warning("Range select out of bounds on signal `%s' at %s:%d: Setting %d LSB bits to undef.\n",
 									str.c_str(), filename.c_str(), linenum, add_undef_bits_lsb);
 						if (add_undef_bits_msb)
-							log("Warning: Range select out of bounds on signal `%s' at %s:%d: Setting %d MSB bits to undef.\n",
+							log_warning("Range select out of bounds on signal `%s' at %s:%d: Setting %d MSB bits to undef.\n",
 									str.c_str(), filename.c_str(), linenum, add_undef_bits_msb);
 					}
 				}
@@ -1391,9 +1392,9 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 // this is a wrapper for AstNode::genRTLIL() when a specific signal width is requested and/or
 // signals must be substituted before beeing used as input values (used by ProcessGenerator)
 // note that this is using some global variables to communicate this special settings to AstNode::genRTLIL().
-RTLIL::SigSpec AstNode::genWidthRTLIL(int width, const std::map<RTLIL::SigBit, RTLIL::SigBit> *new_subst_ptr)
+RTLIL::SigSpec AstNode::genWidthRTLIL(int width, const dict<RTLIL::SigBit, RTLIL::SigBit> *new_subst_ptr)
 {
-	const std::map<RTLIL::SigBit, RTLIL::SigBit> *backup_subst_ptr = genRTLIL_subst_ptr;
+	const dict<RTLIL::SigBit, RTLIL::SigBit> *backup_subst_ptr = genRTLIL_subst_ptr;
 
 	if (new_subst_ptr)
 		genRTLIL_subst_ptr = new_subst_ptr;

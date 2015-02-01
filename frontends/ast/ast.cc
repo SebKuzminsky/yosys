@@ -26,7 +26,7 @@
  *
  */
 
-#include "kernel/log.h"
+#include "kernel/yosys.h"
 #include "libs/sha1/sha1.h"
 #include "ast.h"
 
@@ -56,7 +56,7 @@ namespace AST_INTERNAL {
 	bool flag_dump_ast1, flag_dump_ast2, flag_dump_vlog, flag_nolatches, flag_nomem2reg, flag_mem2reg, flag_lib, flag_noopt, flag_icells, flag_autowire;
 	AstNode *current_ast, *current_ast_mod;
 	std::map<std::string, AstNode*> current_scope;
-	const std::map<RTLIL::SigBit, RTLIL::SigBit> *genRTLIL_subst_ptr = NULL;
+	const dict<RTLIL::SigBit, RTLIL::SigBit> *genRTLIL_subst_ptr = NULL;
 	RTLIL::SigSpec ignoreThisSignalsInInitial;
 	AstNode *current_top_block, *current_block, *current_block_child;
 	AstModule *current_module;
@@ -180,6 +180,10 @@ bool AstNode::get_bool_attribute(RTLIL::IdString id)
 // (the optional child arguments make it easier to create AST trees)
 AstNode::AstNode(AstNodeType type, AstNode *child1, AstNode *child2)
 {
+	static unsigned int hashidx_count = 123456789;
+	hashidx_count = mkhash_xorshift(hashidx_count);
+	hashidx_ = hashidx_count;
+
 	this->type = type;
 	filename = current_filename;
 	linenum = get_line_num();
@@ -1018,7 +1022,7 @@ AstModule::~AstModule()
 }
 
 // create a new parametric module (when needed) and return the name of the generated module
-RTLIL::IdString AstModule::derive(RTLIL::Design *design, std::map<RTLIL::IdString, RTLIL::Const> parameters)
+RTLIL::IdString AstModule::derive(RTLIL::Design *design, dict<RTLIL::IdString, RTLIL::Const> parameters)
 {
 	std::string stripped_name = name.str();
 

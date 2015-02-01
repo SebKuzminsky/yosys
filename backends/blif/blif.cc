@@ -38,11 +38,13 @@ struct BlifDumperConfig
 	bool impltf_mode;
 	bool gates_mode;
 	bool param_mode;
+	bool blackbox_mode;
 
 	std::string buf_type, buf_in, buf_out;
-	std::string true_type, true_out, false_type, false_out;
+	std::map<RTLIL::IdString, std::pair<RTLIL::IdString, RTLIL::IdString>> unbuf_types;
+	std::string true_type, true_out, false_type, false_out, undef_type, undef_out;
 
-	BlifDumperConfig() : icells_mode(false), conn_mode(false), impltf_mode(false), gates_mode(false), param_mode(false) { }
+	BlifDumperConfig() : icells_mode(false), conn_mode(false), impltf_mode(false), gates_mode(false), param_mode(false), blackbox_mode(false) { }
 };
 
 struct BlifDumper
@@ -72,8 +74,11 @@ struct BlifDumper
 
 	const char *cstr(RTLIL::SigBit sig)
 	{
-		if (sig.wire == NULL)
-			return sig == RTLIL::State::S1 ?  "$true" : "$false";
+		if (sig.wire == NULL) {
+			if (sig == RTLIL::State::S0) return config->false_type == "-" ? config->false_out.c_str() : "$false";
+			if (sig == RTLIL::State::S1) return config->true_type == "-" ? config->true_out.c_str() : "$true";
+			return config->undef_type == "-" ? config->undef_out.c_str() : "$undef";
+		}
 
 		std::string str = RTLIL::unescape_id(sig.wire->name);
 		for (size_t i = 0; i < str.size(); i++)
@@ -129,22 +134,43 @@ struct BlifDumper
 		}
 		f << stringf("\n");
 
+		if (module->get_bool_attribute("\\blackbox")) {
+			f << stringf(".blackbox\n");
+			f << stringf(".end\n");
+			return;
+		}
+
 		if (!config->impltf_mode) {
-			if (!config->false_type.empty())
-				f << stringf(".%s %s %s=$false\n", subckt_or_gate(config->false_type),
-						config->false_type.c_str(), config->false_out.c_str());
-			else
+			if (!config->false_type.empty()) {
+				if (config->false_type != "-")
+					f << stringf(".%s %s %s=$false\n", subckt_or_gate(config->false_type),
+							config->false_type.c_str(), config->false_out.c_str());
+			} else
 				f << stringf(".names $false\n");
-			if (!config->true_type.empty())
-				f << stringf(".%s %s %s=$true\n", subckt_or_gate(config->true_type),
-						config->true_type.c_str(), config->true_out.c_str());
-			else
+			if (!config->true_type.empty()) {
+				if (config->true_type != "-")
+					f << stringf(".%s %s %s=$true\n", subckt_or_gate(config->true_type),
+							config->true_type.c_str(), config->true_out.c_str());
+			} else
 				f << stringf(".names $true\n1\n");
+			if (!config->undef_type.empty()) {
+				if (config->undef_type != "-")
+					f << stringf(".%s %s %s=$undef\n", subckt_or_gate(config->undef_type),
+							config->undef_type.c_str(), config->undef_out.c_str());
+			} else
+				f << stringf(".names $undef\n");
 		}
 
 		for (auto &cell_it : module->cells_)
 		{
 			RTLIL::Cell *cell = cell_it.second;
+
+			if (config->unbuf_types.count(cell->type)) {
+				auto portnames = config->unbuf_types.at(cell->type);
+				f << stringf(".names %s %s\n1 1\n",
+						cstr(cell->getPort(portnames.first)), cstr(cell->getPort(portnames.second)));
+				continue;
+			}
 
 			if (!config->icells_mode && cell->type == "$_NOT_") {
 				f << stringf(".names %s %s\n0 1\n",
@@ -194,21 +220,21 @@ struct BlifDumper
 				auto &inputs = cell->getPort("\\A");
 				auto width = cell->parameters.at("\\WIDTH").as_int();
 				log_assert(inputs.size() == width);
-				for (int i = 0; i < inputs.size(); i++) {
+				for (int i = width-1; i >= 0; i--) {
 					f << stringf(" %s", cstr(inputs.extract(i, 1)));
 				}
 				auto &output = cell->getPort("\\Y");
 				log_assert(output.size() == 1);
 				f << stringf(" %s", cstr(output));
 				f << stringf("\n");
-				auto mask = cell->parameters.at("\\LUT").as_string();
-				for (int i = 0; i < (1 << width); i++) {
-					if (mask[i] == '0') continue;
-					for (int j = width-1; j >= 0; j--) {
-						f << ((i>>j)&1 ? '1' : '0');
+				RTLIL::SigSpec mask = cell->parameters.at("\\LUT");
+				for (int i = 0; i < (1 << width); i++)
+					if (mask[i] == RTLIL::S1) {
+						for (int j = width-1; j >= 0; j--) {
+							f << ((i>>j)&1 ? '1' : '0');
+						}
+						f << " 1\n";
 					}
-					f << stringf(" %c\n", mask[i]);
-				}
 				continue;
 			}
 
@@ -279,9 +305,17 @@ struct BlifBackend : public Backend {
 		log("    -buf <cell-type> <in-port> <out-port>\n");
 		log("        use cells of type <cell-type> with the specified port names for buffers\n");
 		log("\n");
+		log("    -unbuf <cell-type> <in-port> <out-port>\n");
+		log("        replace buffer cells with the specified name and port names with\n");
+		log("        a .names statement that models a buffer\n");
+		log("\n");
 		log("    -true <cell-type> <out-port>\n");
 		log("    -false <cell-type> <out-port>\n");
-		log("        use the specified cell types to drive nets that are constant 1 or 0\n");
+		log("    -undef <cell-type> <out-port>\n");
+		log("        use the specified cell types to drive nets that are constant 1, 0, or\n");
+		log("        undefined. when '-' is used as <cell-type>, then <out-port> specifies\n");
+		log("        the wire name to be used for the constant signal and no cell driving\n");
+		log("        that wire is generated.\n");
 		log("\n");
 		log("The following options can be useful when the generated file is not going to be\n");
 		log("read by a BLIF parser but a custom tool. It is recommended to not name the output\n");
@@ -302,8 +336,11 @@ struct BlifBackend : public Backend {
 		log("    -param\n");
 		log("        use the non-standard .param statement to write module parameters\n");
 		log("\n");
+		log("    -blackbox\n");
+		log("        write blackbox cells with .blackbox statement.\n");
+		log("\n");
 		log("    -impltf\n");
-		log("        do not write definitions for the $true and $false wires.\n");
+		log("        do not write definitions for the $true, $false and $undef wires.\n");
 		log("\n");
 	}
 	virtual void execute(std::ostream *&f, std::string filename, std::vector<std::string> args, RTLIL::Design *design)
@@ -329,6 +366,13 @@ struct BlifBackend : public Backend {
 				config.buf_out = args[++argidx];
 				continue;
 			}
+			if (args[argidx] == "-unbuf" && argidx+3 < args.size()) {
+				RTLIL::IdString unbuf_type = RTLIL::escape_id(args[++argidx]);
+				RTLIL::IdString unbuf_in = RTLIL::escape_id(args[++argidx]);
+				RTLIL::IdString unbuf_out = RTLIL::escape_id(args[++argidx]);
+				config.unbuf_types[unbuf_type] = std::pair<RTLIL::IdString, RTLIL::IdString>(unbuf_in, unbuf_out);
+				continue;
+			}
 			if (args[argidx] == "-true" && argidx+2 < args.size()) {
 				config.true_type = args[++argidx];
 				config.true_out = args[++argidx];
@@ -337,6 +381,11 @@ struct BlifBackend : public Backend {
 			if (args[argidx] == "-false" && argidx+2 < args.size()) {
 				config.false_type = args[++argidx];
 				config.false_out = args[++argidx];
+				continue;
+			}
+			if (args[argidx] == "-undef" && argidx+2 < args.size()) {
+				config.undef_type = args[++argidx];
+				config.undef_out = args[++argidx];
 				continue;
 			}
 			if (args[argidx] == "-icells") {
@@ -353,6 +402,10 @@ struct BlifBackend : public Backend {
 			}
 			if (args[argidx] == "-param") {
 				config.param_mode = true;
+				continue;
+			}
+			if (args[argidx] == "-blackbox") {
+				config.blackbox_mode = true;
 				continue;
 			}
 			if (args[argidx] == "-impltf") {
@@ -375,7 +428,7 @@ struct BlifBackend : public Backend {
 		for (auto module_it : design->modules_)
 		{
 			RTLIL::Module *module = module_it.second;
-			if (module->get_bool_attribute("\\blackbox"))
+			if (module->get_bool_attribute("\\blackbox") && !config.blackbox_mode)
 				continue;
 
 			if (module->processes.size() != 0)

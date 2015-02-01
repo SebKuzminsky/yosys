@@ -103,6 +103,20 @@ struct SatGen
 		return importSigSpecWorker(bit, pf, false, false).front();
 	}
 
+	int importDefSigBit(RTLIL::SigBit bit, int timestep = -1)
+	{
+		log_assert(timestep != 0);
+		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
+		return importSigSpecWorker(bit, pf, false, true).front();
+	}
+
+	int importUndefSigBit(RTLIL::SigBit bit, int timestep = -1)
+	{
+		log_assert(timestep != 0);
+		std::string pf = "undef:" + prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
+		return importSigSpecWorker(bit, pf, true, false).front();
+	}
+
 	bool importedSigBit(RTLIL::SigBit bit, int timestep = -1)
 	{
 		log_assert(timestep != 0);
@@ -1159,6 +1173,25 @@ struct SatGen
 					ez->assume(ez->vec_eq(undef_d, undef_q));
 					undefGating(q, qq, undef_q);
 				}
+			}
+			return true;
+		}
+
+		if (cell->type == "$_BUF_" || cell->type == "$equiv")
+		{
+			std::vector<int> a = importDefSigSpec(cell->getPort("\\A"), timestep);
+			std::vector<int> y = importDefSigSpec(cell->getPort("\\Y"), timestep);
+			extendSignalWidthUnary(a, y, cell);
+
+			std::vector<int> yy = model_undef ? ez->vec_var(y.size()) : y;
+			ez->assume(ez->vec_eq(a, yy));
+
+			if (model_undef) {
+				std::vector<int> undef_a = importUndefSigSpec(cell->getPort("\\A"), timestep);
+				std::vector<int> undef_y = importUndefSigSpec(cell->getPort("\\Y"), timestep);
+				extendSignalWidthUnary(undef_a, undef_y, cell, false);
+				ez->assume(ez->vec_eq(undef_a, undef_y));
+				undefGating(y, yy, undef_y);
 			}
 			return true;
 		}

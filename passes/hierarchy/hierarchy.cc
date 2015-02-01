@@ -32,7 +32,7 @@ PRIVATE_NAMESPACE_BEGIN
 
 struct generate_port_decl_t {
 	bool input, output;
-	RTLIL::IdString portname;
+	string portname;
 	int index;
 };
 
@@ -101,7 +101,7 @@ void generate(RTLIL::Design *design, const std::vector<std::string> &celltypes, 
 			for (auto &decl : portdecls)
 				if (decl.index == 0 && patmatch(decl.portname.c_str(), RTLIL::unescape_id(portname).c_str())) {
 					generate_port_decl_t d = decl;
-					d.portname = portname;
+					d.portname = portname.str();
 					d.index = *indices.begin();
 					log_assert(!indices.empty());
 					indices.erase(d.index);
@@ -199,6 +199,19 @@ bool expand_module(RTLIL::Design *design, RTLIL::Module *module, bool flag_check
 			if (design->modules_.count(cell->type) == 0)
 				log_error("File `%s' from libdir does not declare module `%s'.\n", filename.c_str(), cell->type.c_str());
 			did_something = true;
+		} else
+		if (flag_check)
+		{
+			RTLIL::Module *mod = design->module(cell->type);
+			for (auto &conn : cell->connections())
+				if (conn.first[0] == '$' && '0' <= conn.first[1] && conn.first[1] <= '9') {
+					int id = atoi(conn.first.c_str()+1);
+					if (id <= 0 || id > GetSize(mod->ports))
+						log_error("Module `%s' referenced in module `%s' in cell `%s' has only %d ports, requested port %d.\n",
+								log_id(cell->type), log_id(module), log_id(cell), GetSize(mod->ports), id);
+				} else if (mod->wire(conn.first) == nullptr || mod->wire(conn.first)->port_id == 0)
+					log_error("Module `%s' referenced in module `%s' in cell `%s' does not have a port named '%s'.\n",
+							log_id(cell->type), log_id(module), log_id(cell), log_id(conn.first));
 		}
 
 		if (cell->parameters.size() == 0)
@@ -259,9 +272,16 @@ void hierarchy_worker(RTLIL::Design *design, std::set<RTLIL::Module*> &used, RTL
 		log("Used module: %*s%s\n", indent, "", mod->name.c_str());
 	used.insert(mod);
 
-	for (auto &it : mod->cells_) {
-		if (design->modules_.count(it.second->type) > 0)
-			hierarchy_worker(design, used, design->modules_[it.second->type], indent+4);
+	for (auto cell : mod->cells()) {
+		std::string celltype = cell->type.str();
+		if (celltype.substr(0, 7) == "$array:") {
+			int pos_idx = celltype.find_first_of(':');
+			int pos_num = celltype.find_first_of(':', pos_idx + 1);
+			int pos_type = celltype.find_first_of(':', pos_num + 1);
+			celltype = celltype.substr(pos_type + 1);
+		}
+		if (design->module(celltype))
+			hierarchy_worker(design, used, design->module(celltype), indent+4);
 	}
 }
 
@@ -442,7 +462,7 @@ struct HierarchyPass : public Pass {
 					log_cmd_error("Option -top requires an additional argument!\n");
 				top_mod = design->modules_.count(RTLIL::escape_id(args[argidx])) ? design->modules_.at(RTLIL::escape_id(args[argidx])) : NULL;
 				if (top_mod == NULL && design->modules_.count("$abstract" + RTLIL::escape_id(args[argidx]))) {
-					std::map<RTLIL::IdString, RTLIL::Const> empty_parameters;
+					dict<RTLIL::IdString, RTLIL::Const> empty_parameters;
 					design->modules_.at("$abstract" + RTLIL::escape_id(args[argidx]))->derive(design, empty_parameters);
 					top_mod = design->modules_.count(RTLIL::escape_id(args[argidx])) ? design->modules_.at(RTLIL::escape_id(args[argidx])) : NULL;
 				}
@@ -540,7 +560,7 @@ struct HierarchyPass : public Pass {
 				RTLIL::Cell *cell = work.second;
 				log("Mapping positional arguments of cell %s.%s (%s).\n",
 						RTLIL::id2cstr(module->name), RTLIL::id2cstr(cell->name), RTLIL::id2cstr(cell->type));
-				std::map<RTLIL::IdString, RTLIL::SigSpec> new_connections;
+				dict<RTLIL::IdString, RTLIL::SigSpec> new_connections;
 				for (auto &conn : cell->connections())
 					if (conn.first[0] == '$' && '0' <= conn.first[1] && conn.first[1] <= '9') {
 						int id = atoi(conn.first.c_str()+1);

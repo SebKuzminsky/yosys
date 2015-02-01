@@ -150,7 +150,7 @@ void Pass::call(RTLIL::Design *design, std::string command)
 	std::string cmd_buf = command;
 	std::string tok = next_token(cmd_buf, " \t\r\n");
 
-	if (tok.empty() || tok[0] == '#')
+	if (tok.empty())
 		return;
 
 	if (tok[0] == '!') {
@@ -166,8 +166,13 @@ void Pass::call(RTLIL::Design *design, std::string command)
 	}
 
 	while (!tok.empty()) {
-		if (tok == "#")
-			break;
+		if (tok == "#") {
+			int stop;
+			for (stop = 0; stop < GetSize(cmd_buf); stop++)
+				if (cmd_buf[stop] == '\r' || cmd_buf[stop] == '\n')
+					break;
+			cmd_buf = cmd_buf.substr(stop);
+		} else
 		if (tok.back() == ';') {
 			int num_semikolon = 0;
 			while (!tok.empty() && tok.back() == ';')
@@ -182,6 +187,18 @@ void Pass::call(RTLIL::Design *design, std::string command)
 				call(design, "clean -purge");
 		} else
 			args.push_back(tok);
+		bool found_nl = false;
+		for (auto c : cmd_buf) {
+			if (c == ' ' || c == '\t')
+				continue;
+			if (c == '\r' || c == '\n')
+				found_nl = true;
+			break;
+		}
+		if (found_nl) {
+			call(design, args);
+			args.clear();
+		}
 		tok = next_token(cmd_buf, " \t\r\n");
 	}
 

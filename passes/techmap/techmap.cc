@@ -26,12 +26,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "simplemap.h"
 #include "passes/techmap/techmap.inc"
 
 YOSYS_NAMESPACE_BEGIN
-
-// see simplemap.cc
-extern void simplemap_get_mappers(std::map<RTLIL::IdString, void(*)(RTLIL::Module*, RTLIL::Cell*)> &mappers);
 
 // see maccmap.cc
 extern void maccmap(RTLIL::Module *module, RTLIL::Cell *cell, bool unmap = false);
@@ -131,7 +129,7 @@ struct TechmapWorker
 				continue;
 
 			const char *q = strrchr(p+1, '.');
-			p = q ? q : p+1;
+			p = q ? q+1 : p+1;
 
 			if (!strncmp(p, "_TECHMAP_", 9)) {
 				TechmapWireData record;
@@ -155,9 +153,6 @@ struct TechmapWorker
 
 	void techmap_module_worker(RTLIL::Design *design, RTLIL::Module *module, RTLIL::Cell *cell, RTLIL::Module *tpl)
 	{
-		if (tpl->memories.size() != 0)
-			log_error("Technology map yielded memories -> this is not supported.\n");
-
 		if (tpl->processes.size() != 0) {
 			log("Technology map yielded processes:\n");
 			for (auto &it : tpl->processes)
@@ -177,6 +172,22 @@ struct TechmapWorker
 					module->rename(cell, stringf("$techmap%d", autoidx++) + cell->name.str());
 					break;
 				}
+
+		dict<IdString, IdString> memory_renames;
+
+		for (auto &it : tpl->memories) {
+			std::string m_name = it.first.str();
+			apply_prefix(cell->name.str(), m_name);
+			RTLIL::Memory *m = new RTLIL::Memory;
+			m->name = m_name;
+			m->width = it.second->width;
+			m->start_offset = it.second->start_offset;
+			m->size = it.second->size;
+			m->attributes = it.second->attributes;
+			module->memories[m->name] = m;
+			memory_renames[it.first] = m->name;
+			design->select(module, m);
+		}
 
 		std::map<RTLIL::IdString, RTLIL::IdString> positional_ports;
 
@@ -253,6 +264,12 @@ struct TechmapWorker
 			for (auto &it2 : c->connections_) {
 				apply_prefix(cell->name.str(), it2.second, module);
 				port_signal_map.apply(it2.second);
+			}
+
+			if (c->type == "$memrd" || c->type == "$memwr") {
+				IdString memid = c->getParam("\\MEMID").decode_string();
+				log_assert(memory_renames.count(memid));
+				c->setParam("\\MEMID", Const(memory_renames[memid].str()));
 			}
 		}
 
@@ -343,7 +360,7 @@ struct TechmapWorker
 			{
 				RTLIL::IdString derived_name = tpl_name;
 				RTLIL::Module *tpl = map->modules_[tpl_name];
-				std::map<RTLIL::IdString, RTLIL::Const> parameters = cell->parameters;
+				std::map<RTLIL::IdString, RTLIL::Const> parameters(cell->parameters.begin(), cell->parameters.end());
 
 				if (tpl->get_bool_attribute("\\blackbox"))
 					continue;
@@ -531,7 +548,7 @@ struct TechmapWorker
 						tpl = techmap_cache[key];
 					} else {
 						if (cell->parameters.size() != 0) {
-							derived_name = tpl->derive(map, parameters);
+							derived_name = tpl->derive(map, dict<RTLIL::IdString, RTLIL::Const>(parameters.begin(), parameters.end()));
 							tpl = map->module(derived_name);
 							log_continue = true;
 						}
@@ -977,7 +994,7 @@ struct TechmapPass : public Pass {
 					Frontend::frontend_call(map, &f, fn, (fn.size() > 3 && fn.substr(fn.size()-3) == ".il") ? "ilang" : verilog_frontend);
 				}
 
-		std::map<RTLIL::IdString, RTLIL::Module*> modules_new;
+		dict<RTLIL::IdString, RTLIL::Module*> modules_new;
 		for (auto &it : map->modules_) {
 			if (it.first.substr(0, 2) == "\\$")
 				it.second->name = it.first.substr(1);
@@ -1074,7 +1091,7 @@ struct FlattenPass : public Pass {
 		log("No more expansions possible.\n");
 
 		if (top_mod != NULL) {
-			std::map<RTLIL::IdString, RTLIL::Module*> new_modules;
+			dict<RTLIL::IdString, RTLIL::Module*> new_modules;
 			for (auto mod : design->modules())
 				if (mod == top_mod || mod->get_bool_attribute("\\blackbox")) {
 					new_modules[mod->name] = mod;

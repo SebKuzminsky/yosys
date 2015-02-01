@@ -501,7 +501,7 @@ struct AlumaccWorker
 				if (GetSize(sig) > 1)
 					sig = module->ReduceOr(NEW_ID, sig);
 
-				sig.extend(GetSize(cmp_y));
+				sig.extend_u0(GetSize(cmp_y));
 				module->connect(cmp_y, sig);
 			}
 
@@ -538,8 +538,8 @@ struct AlumaccPass : public Pass {
 		log("\n");
 		log("    alumacc [selection]\n");
 		log("\n");
-		log("This pass translates arithmetic operations $add, $mul, $lt, etc. to $alu and\n");
-		log("$macc cells.\n");
+		log("This pass translates arithmetic operations like $add, $mul, $lt, etc. to $alu\n");
+		log("and $macc cells.\n");
 		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)

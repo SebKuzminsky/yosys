@@ -142,6 +142,10 @@ namespace AST
 	// The AST is built using instances of this struct
 	struct AstNode
 	{
+		// for dict<> and pool<>
+		unsigned int hashidx_;
+		unsigned int hash() const { return hashidx_; }
+
 		// this nodes type
 		AstNodeType type;
 
@@ -207,10 +211,10 @@ namespace AST
 		AstNode *readmem(bool is_readmemh, std::string mem_filename, AstNode *memory, int start_addr, int finish_addr);
 		void expand_genblock(std::string index_var, std::string prefix, std::map<std::string, std::string> &name_map);
 		void replace_ids(const std::string &prefix, const std::map<std::string, std::string> &rules);
-		void mem2reg_as_needed_pass1(std::map<AstNode*, std::set<std::string>> &mem2reg_places,
-				std::map<AstNode*, uint32_t> &mem2reg_flags, std::map<AstNode*, uint32_t> &proc_flags, uint32_t &status_flags);
-		void mem2reg_as_needed_pass2(std::set<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block);
-		bool mem2reg_check(std::set<AstNode*> &mem2reg_set);
+		void mem2reg_as_needed_pass1(dict<AstNode*, pool<std::string>> &mem2reg_places,
+				dict<AstNode*, uint32_t> &mem2reg_flags, dict<AstNode*, uint32_t> &proc_flags, uint32_t &status_flags);
+		void mem2reg_as_needed_pass2(pool<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block);
+		bool mem2reg_check(pool<AstNode*> &mem2reg_set);
 		void meminfo(int &mem_width, int &mem_size, int &addr_bits);
 
 		// additional functionality for evaluating constant functions
@@ -231,7 +235,7 @@ namespace AST
 		// for expressions the resulting signal vector is returned
 		// all generated cell instances, etc. are written to the RTLIL::Module pointed to by AST_INTERNAL::current_module
 		RTLIL::SigSpec genRTLIL(int width_hint = -1, bool sign_hint = false);
-		RTLIL::SigSpec genWidthRTLIL(int width, const std::map<RTLIL::SigBit, RTLIL::SigBit> *new_subst_ptr = NULL);
+		RTLIL::SigSpec genWidthRTLIL(int width, const dict<RTLIL::SigBit, RTLIL::SigBit> *new_subst_ptr = NULL);
 
 		// compare AST nodes
 		bool operator==(const AstNode &other) const;
@@ -268,7 +272,7 @@ namespace AST
 		AstNode *ast;
 		bool nolatches, nomem2reg, mem2reg, lib, noopt, icells, autowire;
 		virtual ~AstModule();
-		virtual RTLIL::IdString derive(RTLIL::Design *design, std::map<RTLIL::IdString, RTLIL::Const> parameters);
+		virtual RTLIL::IdString derive(RTLIL::Design *design, dict<RTLIL::IdString, RTLIL::Const> parameters);
 		virtual RTLIL::Module *clone() const;
 	};
 
@@ -293,7 +297,7 @@ namespace AST_INTERNAL
 	extern bool flag_dump_ast1, flag_dump_ast2, flag_nolatches, flag_nomem2reg, flag_mem2reg, flag_lib, flag_noopt, flag_icells, flag_autowire;
 	extern AST::AstNode *current_ast, *current_ast_mod;
 	extern std::map<std::string, AST::AstNode*> current_scope;
-	extern const std::map<RTLIL::SigBit, RTLIL::SigBit> *genRTLIL_subst_ptr;
+	extern const dict<RTLIL::SigBit, RTLIL::SigBit> *genRTLIL_subst_ptr;
 	extern RTLIL::SigSpec ignoreThisSignalsInInitial;
 	extern AST::AstNode *current_top_block, *current_block, *current_block_child;
 	extern AST::AstModule *current_module;

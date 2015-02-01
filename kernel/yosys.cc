@@ -18,6 +18,7 @@
  */
 
 #include "kernel/yosys.h"
+#include "kernel/celltypes.h"
 
 #ifdef YOSYS_ENABLE_READLINE
 #  include <readline/readline.h>
@@ -49,11 +50,79 @@
 YOSYS_NAMESPACE_BEGIN
 
 int autoidx = 1;
+int yosys_xtrace = 0;
 RTLIL::Design *yosys_design = NULL;
+CellTypes yosys_celltypes;
 
 #ifdef YOSYS_ENABLE_TCL
 Tcl_Interp *yosys_tcl_interp = NULL;
 #endif
+
+bool memhasher_active = false;
+uint32_t memhasher_rng = 123456;
+std::vector<void*> memhasher_store;
+
+void memhasher_on()
+{
+#ifdef __linux__
+	memhasher_rng += time(NULL) << 16 ^ getpid();
+#endif
+	memhasher_store.resize(0x10000);
+	memhasher_active = true;
+}
+
+void memhasher_off()
+{
+	for (auto p : memhasher_store)
+		if (p) free(p);
+	memhasher_store.clear();
+	memhasher_active = false;
+}
+
+void memhasher_do()
+{
+	memhasher_rng ^= memhasher_rng << 13;
+	memhasher_rng ^= memhasher_rng >> 17;
+	memhasher_rng ^= memhasher_rng << 5;
+
+	int size, index = (memhasher_rng >> 4) & 0xffff;
+	switch (memhasher_rng & 7) {
+		case 0: size =   16; break;
+		case 1: size =  256; break;
+		case 2: size = 1024; break;
+		case 3: size = 4096; break;
+		default: size = 0;
+	}
+	if (index < 16) size *= 16;
+	memhasher_store[index] = realloc(memhasher_store[index], size);
+}
+
+void yosys_banner()
+{
+	log("\n");
+	log(" /----------------------------------------------------------------------------\\\n");
+	log(" |                                                                            |\n");
+	log(" |  yosys -- Yosys Open SYnthesis Suite                                       |\n");
+	log(" |                                                                            |\n");
+	log(" |  Copyright (C) 2012 - 2015  Clifford Wolf <clifford@clifford.at>           |\n");
+	log(" |                                                                            |\n");
+	log(" |  Permission to use, copy, modify, and/or distribute this software for any  |\n");
+	log(" |  purpose with or without fee is hereby granted, provided that the above    |\n");
+	log(" |  copyright notice and this permission notice appear in all copies.         |\n");
+	log(" |                                                                            |\n");
+	log(" |  THE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES  |\n");
+	log(" |  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF          |\n");
+	log(" |  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR   |\n");
+	log(" |  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES    |\n");
+	log(" |  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN     |\n");
+	log(" |  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF   |\n");
+	log(" |  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.            |\n");
+	log(" |                                                                            |\n");
+	log(" \\----------------------------------------------------------------------------/\n");
+	log("\n");
+	log(" %s\n", yosys_version_str);
+	log("\n");
+}
 
 std::string stringf(const char *fmt, ...)
 {
@@ -277,11 +346,13 @@ std::string make_temp_dir(std::string template_str)
 	mkdir(template_str.c_str());
 	return template_str;
 #else
+#  ifndef NDEBUG
 	size_t pos = template_str.rfind("XXXXXX");
 	log_assert(pos != std::string::npos);
 
 	int suffixlen = GetSize(template_str) - pos - 6;
 	log_assert(suffixlen == 0);
+#  endif
 
 	char *p = strdup(template_str.c_str());
 	p = mkdtemp(p);
@@ -318,7 +389,6 @@ void remove_directory(std::string dirname)
 		if (strcmp(namelist[i]->d_name, ".") && strcmp(namelist[i]->d_name, "..")) {
 			std::string buffer = stringf("%s/%s", dirname.c_str(), namelist[i]->d_name);
 			if (!stat(buffer.c_str(), &stbuf) && S_ISREG(stbuf.st_mode)) {
-				log("Removing `%s'.\n", buffer.c_str());
 				remove(buffer.c_str());
 			} else
 				remove_directory(buffer);
@@ -326,7 +396,6 @@ void remove_directory(std::string dirname)
 		free(namelist[i]);
 	}
 	free(namelist);
-	log("Removing `%s'.\n", dirname.c_str());
 	rmdir(dirname.c_str());
 #endif
 }
@@ -338,8 +407,14 @@ int GetSize(RTLIL::Wire *wire)
 
 void yosys_setup()
 {
+	// if there are already IdString objects then we have a global initialization order bug
+	IdString empty_id;
+	log_assert(empty_id.index_ == 0);
+	IdString::get_reference(empty_id.index_);
+
 	Pass::init_register();
 	yosys_design = new RTLIL::Design;
+	yosys_celltypes.setup();
 	log_push();
 }
 
@@ -357,6 +432,7 @@ void yosys_shutdown()
 	log_files.clear();
 
 	Pass::done_register();
+	yosys_celltypes.clear();
 
 #ifdef YOSYS_ENABLE_TCL
 	if (yosys_tcl_interp != NULL) {
@@ -373,6 +449,9 @@ void yosys_shutdown()
 	loaded_plugins.clear();
 	loaded_plugin_aliases.clear();
 #endif
+
+	IdString empty_id;
+	IdString::put_reference(empty_id.index_);
 }
 
 RTLIL::IdString new_id(std::string file, int line, std::string func)
@@ -600,8 +679,11 @@ static void handle_label(std::string &command, bool &from_to_active, const std::
 	}
 }
 
-void run_frontend(std::string filename, std::string command, RTLIL::Design *design, std::string *backend_command, std::string *from_to_label)
+void run_frontend(std::string filename, std::string command, std::string *backend_command, std::string *from_to_label, RTLIL::Design *design)
 {
+	if (design == nullptr)
+		design = yosys_design;
+
 	if (command == "auto") {
 		if (filename.size() > 2 && filename.substr(filename.size()-2) == ".v")
 			command = "verilog";
@@ -668,9 +750,9 @@ void run_frontend(std::string filename, std::string command, RTLIL::Design *desi
 					Pass::call(design, command);
 			}
 		}
-		catch (log_cmd_error_exception) {
+		catch (...) {
 			Frontend::current_script_file = backup_script_file;
-			throw log_cmd_error_exception();
+			throw;
 		}
 
 		Frontend::current_script_file = backup_script_file;
@@ -693,15 +775,26 @@ void run_frontend(std::string filename, std::string command, RTLIL::Design *desi
 	Frontend::frontend_call(design, NULL, filename, command);
 }
 
+void run_frontend(std::string filename, std::string command, RTLIL::Design *design)
+{
+	run_frontend(filename, command, nullptr, nullptr, design);
+}
+
 void run_pass(std::string command, RTLIL::Design *design)
 {
-	log("\n-- Running pass `%s' --\n", command.c_str());
+	if (design == nullptr)
+		design = yosys_design;
+
+	log("\n-- Running command `%s' --\n", command.c_str());
 
 	Pass::call(design, command);
 }
 
 void run_backend(std::string filename, std::string command, RTLIL::Design *design)
 {
+	if (design == nullptr)
+		design = yosys_design;
+
 	if (command == "auto") {
 		if (filename.size() > 2 && filename.substr(filename.size()-2) == ".v")
 			command = "verilog";
@@ -946,9 +1039,9 @@ struct ScriptPass : public Pass {
 		if (args.size() < 2)
 			log_cmd_error("Missing script file.\n");
 		else if (args.size() == 2)
-			run_frontend(args[1], "script", design, NULL, NULL);
+			run_frontend(args[1], "script", design);
 		else if (args.size() == 3)
-			run_frontend(args[1], "script", design, NULL, &args[2]);
+			run_frontend(args[1], "script", NULL, &args[2], design);
 		else
 			extra_args(args, 2, design, false);
 	}

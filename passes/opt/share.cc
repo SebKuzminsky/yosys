@@ -28,6 +28,7 @@ USING_YOSYS_NAMESPACE
 PRIVATE_NAMESPACE_BEGIN
 
 typedef RTLIL::IdString::compare_ptr_by_name<RTLIL::Cell> cell_ptr_cmp;
+typedef std::pair<RTLIL::SigSpec, RTLIL::Const> ssc_pair_t;
 
 struct ShareWorkerConfig
 {
@@ -35,13 +36,13 @@ struct ShareWorkerConfig
 	bool opt_force;
 	bool opt_aggressive;
 	bool opt_fast;
-	std::set<RTLIL::IdString> generic_uni_ops, generic_bin_ops, generic_cbin_ops, generic_other_ops;
+	pool<RTLIL::IdString> generic_uni_ops, generic_bin_ops, generic_cbin_ops, generic_other_ops;
 };
 
 struct ShareWorker
 {
 	ShareWorkerConfig config;
-	std::set<RTLIL::IdString> generic_ops;
+	pool<RTLIL::IdString> generic_ops;
 
 	RTLIL::Design *design;
 	RTLIL::Module *module;
@@ -50,8 +51,8 @@ struct ShareWorker
 	ModWalker modwalker;
 	ModIndex mi;
 
-	std::set<RTLIL::Cell*> cells_to_remove;
-	std::set<RTLIL::Cell*> recursion_state;
+	pool<RTLIL::Cell*> cells_to_remove;
+	pool<RTLIL::Cell*> recursion_state;
 
 	SigMap topo_sigmap;
 	std::map<RTLIL::Cell*, std::set<RTLIL::Cell*, cell_ptr_cmp>, cell_ptr_cmp> topo_cell_drivers;
@@ -64,18 +65,18 @@ struct ShareWorker
 	// Find terminal bits -- i.e. bits that do not (exclusively) feed into a mux tree
 	// ------------------------------------------------------------------------------
 
-	std::set<RTLIL::SigBit> terminal_bits;
+	pool<RTLIL::SigBit> terminal_bits;
 
 	void find_terminal_bits()
 	{
-		std::set<RTLIL::SigBit> queue_bits;
-		std::set<RTLIL::Cell*> visited_cells;
+		pool<RTLIL::SigBit> queue_bits;
+		pool<RTLIL::Cell*> visited_cells;
 
 		queue_bits.insert(modwalker.signal_outputs.begin(), modwalker.signal_outputs.end());
 
 		for (auto &it : module->cells_)
 			if (!fwd_ct.cell_known(it.second->type)) {
-				std::set<RTLIL::SigBit> &bits = modwalker.cell_inputs[it.second];
+				pool<RTLIL::SigBit> &bits = modwalker.cell_inputs[it.second];
 				queue_bits.insert(bits.begin(), bits.end());
 			}
 
@@ -83,19 +84,19 @@ struct ShareWorker
 
 		while (!queue_bits.empty())
 		{
-			std::set<ModWalker::PortBit> portbits;
+			pool<ModWalker::PortBit> portbits;
 			modwalker.get_drivers(portbits, queue_bits);
 			queue_bits.clear();
 
 			for (auto &pbit : portbits) {
 				if (pbit.cell->type == "$mux" || pbit.cell->type == "$pmux") {
-					std::set<RTLIL::SigBit> bits = modwalker.sigmap(pbit.cell->getPort("\\S")).to_sigbit_set();
+					pool<RTLIL::SigBit> bits = modwalker.sigmap(pbit.cell->getPort("\\S")).to_sigbit_pool();
 					terminal_bits.insert(bits.begin(), bits.end());
 					queue_bits.insert(bits.begin(), bits.end());
 					visited_cells.insert(pbit.cell);
 				}
 				if (fwd_ct.cell_known(pbit.cell->type) && visited_cells.count(pbit.cell) == 0) {
-					std::set<RTLIL::SigBit> &bits = modwalker.cell_inputs[pbit.cell];
+					pool<RTLIL::SigBit> &bits = modwalker.cell_inputs[pbit.cell];
 					terminal_bits.insert(bits.begin(), bits.end());
 					queue_bits.insert(bits.begin(), bits.end());
 					visited_cells.insert(pbit.cell);
@@ -161,7 +162,7 @@ struct ShareWorker
 	}
 
 	int share_macc_ports(Macc::port_t &p1, Macc::port_t &p2, int w1, int w2,
-			RTLIL::SigSpec act = RTLIL::SigSpec(), Macc *supermacc = nullptr, std::set<RTLIL::Cell*> *supercell_aux = nullptr)
+			RTLIL::SigSpec act = RTLIL::SigSpec(), Macc *supermacc = nullptr, pool<RTLIL::Cell*> *supercell_aux = nullptr)
 	{
 		if (p1.do_subtract != p2.do_subtract)
 			return -1;
@@ -237,7 +238,7 @@ struct ShareWorker
 	}
 
 	int share_macc(RTLIL::Cell *c1, RTLIL::Cell *c2,
-			RTLIL::SigSpec act = RTLIL::SigSpec(), RTLIL::Cell *supercell = nullptr, std::set<RTLIL::Cell*> *supercell_aux = nullptr)
+			RTLIL::SigSpec act = RTLIL::SigSpec(), RTLIL::Cell *supercell = nullptr, pool<RTLIL::Cell*> *supercell_aux = nullptr)
 	{
 		Macc m1(c1), m2(c2), supermacc;
 
@@ -345,7 +346,7 @@ struct ShareWorker
 	// Find shareable cells and compatible groups of cells
 	// ---------------------------------------------------
 
-	std::set<RTLIL::Cell*, RTLIL::sort_by_name_str<RTLIL::Cell>> shareable_cells;
+	pool<RTLIL::Cell*> shareable_cells;
 
 	void find_shareable_cells()
 	{
@@ -501,7 +502,7 @@ struct ShareWorker
 	// Create replacement cell
 	// -----------------------
 
-	RTLIL::Cell *make_supercell(RTLIL::Cell *c1, RTLIL::Cell *c2, RTLIL::SigSpec act, std::set<RTLIL::Cell*> &supercell_aux)
+	RTLIL::Cell *make_supercell(RTLIL::Cell *c1, RTLIL::Cell *c2, RTLIL::SigSpec act, pool<RTLIL::Cell*> &supercell_aux)
 	{
 		log_assert(c1->type == c2->type);
 
@@ -718,20 +719,20 @@ struct ShareWorker
 	// Finding forbidden control inputs for a cell
 	// -------------------------------------------
 
-	std::map<RTLIL::Cell*, std::set<RTLIL::SigBit>> forbidden_controls_cache;
+	std::map<RTLIL::Cell*, pool<RTLIL::SigBit>, cell_ptr_cmp> forbidden_controls_cache;
 
-	const std::set<RTLIL::SigBit> &find_forbidden_controls(RTLIL::Cell *cell)
+	const pool<RTLIL::SigBit> &find_forbidden_controls(RTLIL::Cell *cell)
 	{
 		if (recursion_state.count(cell)) {
-			static std::set<RTLIL::SigBit> empty_controls_set;
+			static pool<RTLIL::SigBit> empty_controls_set;
 			return empty_controls_set;
 		}
 
 		if (forbidden_controls_cache.count(cell))
 			return forbidden_controls_cache.at(cell);
 
-		std::set<ModWalker::PortBit> pbits;
-		std::set<RTLIL::Cell*> consumer_cells;
+		pool<ModWalker::PortBit> pbits;
+		pool<RTLIL::Cell*> consumer_cells;
 
 		modwalker.get_consumers(pbits, modwalker.cell_outputs[cell]);
 
@@ -745,7 +746,7 @@ struct ShareWorker
 
 		for (auto c : consumer_cells)
 			if (fwd_ct.cell_known(c->type)) {
-				const std::set<RTLIL::SigBit> &bits = find_forbidden_controls(c);
+				const pool<RTLIL::SigBit> &bits = find_forbidden_controls(c);
 				forbidden_controls_cache[cell].insert(bits.begin(), bits.end());
 			}
 
@@ -760,9 +761,9 @@ struct ShareWorker
 	// Finding control inputs and activation pattern for a cell
 	// --------------------------------------------------------
 
-	std::map<RTLIL::Cell*, std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>>> activation_patterns_cache;
+	std::map<RTLIL::Cell*, pool<ssc_pair_t>, cell_ptr_cmp> activation_patterns_cache;
 
-	bool sort_check_activation_pattern(std::pair<RTLIL::SigSpec, RTLIL::Const> &p)
+	bool sort_check_activation_pattern(ssc_pair_t &p)
 	{
 		std::map<RTLIL::SigBit, RTLIL::State> p_bits;
 
@@ -786,30 +787,30 @@ struct ShareWorker
 		return true;
 	}
 
-	void optimize_activation_patterns(std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> & /* patterns */)
+	void optimize_activation_patterns(pool<ssc_pair_t> & /* patterns */)
 	{
 		// TODO: Remove patterns that are contained in other patterns
 		// TODO: Consolidate pairs of patterns that only differ in the value for one signal bit
 	}
 
-	const std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &find_cell_activation_patterns(RTLIL::Cell *cell, const char *indent)
+	const pool<ssc_pair_t> &find_cell_activation_patterns(RTLIL::Cell *cell, const char *indent)
 	{
 		if (recursion_state.count(cell)) {
-			static std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> empty_patterns_set;
+			static pool<ssc_pair_t> empty_patterns_set;
 			return empty_patterns_set;
 		}
 
 		if (activation_patterns_cache.count(cell))
 			return activation_patterns_cache.at(cell);
 
-		const std::set<RTLIL::SigBit> &cell_out_bits = modwalker.cell_outputs[cell];
-		std::set<RTLIL::Cell*> driven_cells, driven_data_muxes;
+		const pool<RTLIL::SigBit> &cell_out_bits = modwalker.cell_outputs[cell];
+		pool<RTLIL::Cell*> driven_cells, driven_data_muxes;
 
 		for (auto &bit : cell_out_bits)
 		{
 			if (terminal_bits.count(bit)) {
 				// Terminal cells are always active: unconditional activation pattern
-				activation_patterns_cache[cell].insert(std::pair<RTLIL::SigSpec, RTLIL::Const>());
+				activation_patterns_cache[cell].insert(ssc_pair_t());
 				return activation_patterns_cache.at(cell);
 			}
 			for (auto &pbit : modwalker.signal_consumers[bit]) {
@@ -825,7 +826,7 @@ struct ShareWorker
 
 		for (auto c : driven_data_muxes)
 		{
-			const std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &c_patterns = find_cell_activation_patterns(c, indent);
+			const pool<ssc_pair_t> &c_patterns = find_cell_activation_patterns(c, indent);
 
 			bool used_in_a = false;
 			std::set<int> used_in_b_parts;
@@ -860,7 +861,7 @@ struct ShareWorker
 		}
 
 		for (auto c : driven_cells) {
-			const std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &c_patterns = find_cell_activation_patterns(c, indent);
+			const pool<ssc_pair_t> &c_patterns = find_cell_activation_patterns(c, indent);
 			activation_patterns_cache[cell].insert(c_patterns.begin(), c_patterns.end());
 		}
 
@@ -878,7 +879,7 @@ struct ShareWorker
 		return activation_patterns_cache[cell];
 	}
 
-	RTLIL::SigSpec bits_from_activation_patterns(const std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &activation_patterns)
+	RTLIL::SigSpec bits_from_activation_patterns(const pool<ssc_pair_t> &activation_patterns)
 	{
 		std::set<RTLIL::SigBit> all_bits;
 		for (auto &it : activation_patterns) {
@@ -893,13 +894,13 @@ struct ShareWorker
 		return signal;
 	}
 
-	void filter_activation_patterns(std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &out,
-			const std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &in, const std::set<RTLIL::SigBit> &filter_bits)
+	void filter_activation_patterns(pool<ssc_pair_t> &out,
+			const pool<ssc_pair_t> &in, const std::set<RTLIL::SigBit> &filter_bits)
 	{
 		for (auto &p : in)
 		{
 			std::vector<RTLIL::SigBit> p_first = p.first;
-			std::pair<RTLIL::SigSpec, RTLIL::Const> new_p;
+			ssc_pair_t new_p;
 
 			for (int i = 0; i < GetSize(p_first); i++)
 				if (filter_bits.count(p_first[i]) == 0) {
@@ -911,7 +912,7 @@ struct ShareWorker
 		}
 	}
 
-	RTLIL::SigSpec make_cell_activation_logic(const std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &activation_patterns, std::set<RTLIL::Cell*> &supercell_aux)
+	RTLIL::SigSpec make_cell_activation_logic(const pool<ssc_pair_t> &activation_patterns, pool<RTLIL::Cell*> &supercell_aux)
 	{
 		RTLIL::Wire *all_cases_wire = module->addWire(NEW_ID, 0);
 
@@ -945,8 +946,8 @@ struct ShareWorker
 		topo_sigmap.set(module);
 		topo_bit_drivers.clear();
 
-		std::map<RTLIL::Cell*, std::set<RTLIL::SigBit>> cell_to_bits;
-		std::map<RTLIL::SigBit, std::set<RTLIL::Cell*>> bit_to_cells;
+		dict<RTLIL::Cell*, pool<RTLIL::SigBit>> cell_to_bits;
+		dict<RTLIL::SigBit, pool<RTLIL::Cell*>> bit_to_cells;
 
 		for (auto cell : module->cells())
 			if (ct.cell_known(cell->type))
@@ -983,7 +984,7 @@ struct ShareWorker
 		return found_scc;
 	}
 
-	bool find_in_input_cone_worker(RTLIL::Cell *root, RTLIL::Cell *needle, std::set<RTLIL::Cell*> &stop)
+	bool find_in_input_cone_worker(RTLIL::Cell *root, RTLIL::Cell *needle, pool<RTLIL::Cell*> &stop)
 	{
 		if (root == needle)
 			return true;
@@ -1001,7 +1002,7 @@ struct ShareWorker
 
 	bool find_in_input_cone(RTLIL::Cell *root, RTLIL::Cell *needle)
 	{
-		std::set<RTLIL::Cell*> stop;
+		pool<RTLIL::Cell*> stop;
 		return find_in_input_cone_worker(root, needle, stop);
 	}
 
@@ -1011,12 +1012,12 @@ struct ShareWorker
 		ct.setup_internals();
 		ct.setup_stdcells();
 
-		std::set<RTLIL::Cell*> queue, covered;
+		pool<RTLIL::Cell*> queue, covered;
 		queue.insert(cell);
 
 		while (!queue.empty())
 		{
-			std::set<RTLIL::Cell*> new_queue;
+			pool<RTLIL::Cell*> new_queue;
 
 			for (auto c : queue) {
 				if (!ct.cell_known(c->type))
@@ -1049,10 +1050,20 @@ struct ShareWorker
 	// Setup and run
 	// -------------
 
+	void remove_cell(Cell *cell)
+	{
+		shareable_cells.erase(cell);
+		forbidden_controls_cache.erase(cell);
+		activation_patterns_cache.erase(cell);
+		module->remove(cell);
+	}
+
 	ShareWorker(ShareWorkerConfig config, RTLIL::Design *design, RTLIL::Module *module) :
 			config(config), design(design), module(module), mi(module)
 	{
+	#ifndef NDEBUG
 		bool before_scc = module_has_scc();
+	#endif
 
 		generic_ops.insert(config.generic_uni_ops.begin(), config.generic_uni_ops.end());
 		generic_ops.insert(config.generic_bin_ops.begin(), config.generic_bin_ops.end());
@@ -1096,7 +1107,7 @@ struct ShareWorker
 
 			log("  Analyzing resource sharing options for %s:\n", log_id(cell));
 
-			const std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &cell_activation_patterns = find_cell_activation_patterns(cell, "    ");
+			const pool<ssc_pair_t> &cell_activation_patterns = find_cell_activation_patterns(cell, "    ");
 			RTLIL::SigSpec cell_activation_signals = bits_from_activation_patterns(cell_activation_patterns);
 
 			if (cell_activation_patterns.empty()) {
@@ -1105,7 +1116,7 @@ struct ShareWorker
 				continue;
 			}
 
-			if (cell_activation_patterns.count(std::pair<RTLIL::SigSpec, RTLIL::Const>())) {
+			if (cell_activation_patterns.count(ssc_pair_t())) {
 				log("    Cell is always active. Therefore no sharing is possible.\n");
 				continue;
 			}
@@ -1129,7 +1140,7 @@ struct ShareWorker
 			{
 				log("    Analyzing resource sharing with %s:\n", log_id(other_cell));
 
-				const std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> &other_cell_activation_patterns = find_cell_activation_patterns(other_cell, "      ");
+				const pool<ssc_pair_t> &other_cell_activation_patterns = find_cell_activation_patterns(other_cell, "      ");
 				RTLIL::SigSpec other_cell_activation_signals = bits_from_activation_patterns(other_cell_activation_patterns);
 
 				if (other_cell_activation_patterns.empty()) {
@@ -1139,7 +1150,7 @@ struct ShareWorker
 					continue;
 				}
 
-				if (other_cell_activation_patterns.count(std::pair<RTLIL::SigSpec, RTLIL::Const>())) {
+				if (other_cell_activation_patterns.count(ssc_pair_t())) {
 					log("      Cell is always active. Therefore no sharing is possible.\n");
 					shareable_cells.erase(other_cell);
 					continue;
@@ -1148,8 +1159,8 @@ struct ShareWorker
 				log("      Found %d activation_patterns using ctrl signal %s.\n",
 						GetSize(other_cell_activation_patterns), log_signal(other_cell_activation_signals));
 
-				const std::set<RTLIL::SigBit> &cell_forbidden_controls = find_forbidden_controls(cell);
-				const std::set<RTLIL::SigBit> &other_cell_forbidden_controls = find_forbidden_controls(other_cell);
+				const pool<RTLIL::SigBit> &cell_forbidden_controls = find_forbidden_controls(cell);
+				const pool<RTLIL::SigBit> &other_cell_forbidden_controls = find_forbidden_controls(other_cell);
 
 				std::set<RTLIL::SigBit> union_forbidden_controls;
 				union_forbidden_controls.insert(cell_forbidden_controls.begin(), cell_forbidden_controls.end());
@@ -1158,8 +1169,8 @@ struct ShareWorker
 				if (!union_forbidden_controls.empty())
 					log("      Forbidden control signals for this pair of cells: %s\n", log_signal(union_forbidden_controls));
 
-				std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> filtered_cell_activation_patterns;
-				std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> filtered_other_cell_activation_patterns;
+				pool<ssc_pair_t> filtered_cell_activation_patterns;
+				pool<ssc_pair_t> filtered_other_cell_activation_patterns;
 
 				filter_activation_patterns(filtered_cell_activation_patterns, cell_activation_patterns, union_forbidden_controls);
 				filter_activation_patterns(filtered_other_cell_activation_patterns, other_cell_activation_patterns, union_forbidden_controls);
@@ -1170,7 +1181,7 @@ struct ShareWorker
 				ezDefaultSAT ez;
 				SatGen satgen(&ez, &modwalker.sigmap);
 
-				std::set<RTLIL::Cell*> sat_cells;
+				pool<RTLIL::Cell*> sat_cells;
 				std::set<RTLIL::SigBit> bits_queue;
 
 				std::vector<int> cell_active, other_cell_active;
@@ -1196,7 +1207,7 @@ struct ShareWorker
 
 				while (!bits_queue.empty())
 				{
-					std::set<ModWalker::PortBit> portbits;
+					pool<ModWalker::PortBit> portbits;
 					modwalker.get_drivers(portbits, bits_queue);
 					bits_queue.clear();
 
@@ -1217,7 +1228,9 @@ struct ShareWorker
 				for (auto it : exclusive_ctrls)
 					if (satgen.importedSigBit(it.first) && satgen.importedSigBit(it.second)) {
 						log("      Adding exclusive control bits: %s vs. %s\n", log_signal(it.first), log_signal(it.second));
-						ez.assume(ez.NOT(ez.AND(satgen.importSigBit(it.first), satgen.importSigBit(it.second))));
+						int sub1 = satgen.importSigBit(it.first);
+						int sub2 = satgen.importSigBit(it.second);
+						ez.assume(ez.NOT(ez.AND(sub1, sub2)));
 					}
 
 				if (!ez.solve(ez.expression(ez.OpOr, cell_active))) {
@@ -1239,7 +1252,9 @@ struct ShareWorker
 				std::vector<int> sat_model = satgen.importSigSpec(all_ctrl_signals);
 				std::vector<bool> sat_model_values;
 
-				ez.assume(ez.AND(ez.expression(ez.OpOr, cell_active), ez.expression(ez.OpOr, other_cell_active)));
+				int sub1 = ez.expression(ez.OpOr, cell_active);
+				int sub2 = ez.expression(ez.OpOr, other_cell_active);
+				ez.assume(ez.AND(sub1, sub2));
 
 				log("      Size of SAT problem: %d cells, %d variables, %d clauses\n",
 						GetSize(sat_cells), ez.numCnfVariables(), ez.numCnfClauses());
@@ -1277,7 +1292,7 @@ struct ShareWorker
 					other_cell_select_score += p.first.size();
 
 				RTLIL::Cell *supercell;
-				std::set<RTLIL::Cell*> supercell_aux;
+				pool<RTLIL::Cell*> supercell_aux;
 				if (cell_select_score <= other_cell_select_score) {
 					RTLIL::SigSpec act = make_cell_activation_logic(filtered_cell_activation_patterns, supercell_aux);
 					supercell = make_supercell(cell, other_cell, act, supercell_aux);
@@ -1304,11 +1319,11 @@ struct ShareWorker
 					cells_to_remove.erase(other_cell);
 					shareable_cells.insert(other_cell);
 					for (auto cc : supercell_aux)
-						module->remove(cc);
+						remove_cell(cc);
 					continue;
 				}
 
-				std::set<std::pair<RTLIL::SigSpec, RTLIL::Const>> supercell_activation_patterns;
+				pool<ssc_pair_t> supercell_activation_patterns;
 				supercell_activation_patterns.insert(filtered_cell_activation_patterns.begin(), filtered_cell_activation_patterns.end());
 				supercell_activation_patterns.insert(filtered_other_cell_activation_patterns.begin(), filtered_other_cell_activation_patterns.end());
 				optimize_activation_patterns(supercell_activation_patterns);
@@ -1336,14 +1351,16 @@ struct ShareWorker
 			log("Removing %d cells in module %s:\n", GetSize(cells_to_remove), log_id(module));
 			for (auto c : cells_to_remove) {
 				log("  Removing cell %s (%s).\n", log_id(c), log_id(c->type));
-				module->remove(c);
+				remove_cell(c);
 			}
 		}
 
 		log_assert(recursion_state.empty());
 
+	#ifndef NDEBUG
 		bool after_scc = before_scc || module_has_scc();
 		log_assert(before_scc == after_scc);
+	#endif
 	}
 };
 

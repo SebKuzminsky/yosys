@@ -51,6 +51,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 {
 	AstNode *newNode = NULL;
 	bool did_something = false;
+	static pair<string, int> last_blocking_assignment_warn;
 
 #if 0
 	log("-------------\n");
@@ -62,17 +63,18 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 	if (stage == 0)
 	{
 		log_assert(type == AST_MODULE);
+		last_blocking_assignment_warn = pair<string, int>();
 
 		while (simplify(const_fold, at_zero, in_lvalue, 1, width_hint, sign_hint, in_param)) { }
 
 		if (!flag_nomem2reg && !get_bool_attribute("\\nomem2reg"))
 		{
-			std::map<AstNode*, std::set<std::string>> mem2reg_places;
-			std::map<AstNode*, uint32_t> mem2reg_candidates, dummy_proc_flags;
+			dict<AstNode*, pool<std::string>> mem2reg_places;
+			dict<AstNode*, uint32_t> mem2reg_candidates, dummy_proc_flags;
 			uint32_t flags = flag_mem2reg ? AstNode::MEM2REG_FL_ALL : 0;
 			mem2reg_as_needed_pass1(mem2reg_places, mem2reg_candidates, dummy_proc_flags, flags);
 
-			std::set<AstNode*> mem2reg_set;
+			pool<AstNode*> mem2reg_set;
 			for (auto &it : mem2reg_candidates)
 			{
 				AstNode *mem = it.first;
@@ -102,13 +104,13 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 
 			verbose_activate:
 				if (mem2reg_set.count(mem) == 0) {
-					log("Warning: Replacing memory %s with list of registers.", mem->str.c_str());
+					std::string message = stringf("Replacing memory %s with list of registers.", mem->str.c_str());
 					bool first_element = true;
 					for (auto &place : mem2reg_places[it.first]) {
-						log("%s%s", first_element ? " See " : ", ", place.c_str());
+						message += stringf("%s%s", first_element ? " See " : ", ", place.c_str());
 						first_element = false;
 					}
-					log("\n");
+					log_warning("%s\n", message.c_str());
 				}
 
 			silent_activate:
@@ -155,7 +157,9 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 		return false;
 
 	// deactivate all calls to non-synthesis system taks
-	if ((type == AST_FCALL || type == AST_TCALL) && (str == "$display" || str == "$stop" || str == "$finish")) {
+	if ((type == AST_FCALL || type == AST_TCALL) && (str == "$display" || str == "$strobe" || str == "$monitor" || str == "$time" || str == "$stop" || str == "$finish" ||
+			str == "$dumpfile" || str == "$dumpvars" || str == "$dumpon" || str == "$dumpoff" || str == "$dumpall")) {
+		log_warning("Ignoring call to system %s %s at %s:%d.\n", type == AST_FCALL ? "function" : "task", str.c_str(), filename.c_str(), linenum);
 		delete_children();
 		str = std::string();
 	}
@@ -184,6 +188,13 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 					AstNode *first_node = this_wire_scope[node->str];
 					if (!node->is_input && !node->is_output && node->is_reg && node->children.size() == 0)
 						goto wires_are_compatible;
+					if (first_node->children.size() == 0 && node->children.size() == 1 && node->children[0]->type == AST_RANGE) {
+						AstNode *r = node->children[0];
+						if (r->range_valid && r->range_left == 0 && r->range_right == 0) {
+							delete r;
+							node->children.pop_back();
+						}
+					}
 					if (first_node->children.size() != node->children.size())
 						goto wires_are_incompatible;
 					for (size_t j = 0; j < node->children.size(); j++) {
@@ -648,7 +659,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 			int width = children[1]->range_left - children[1]->range_right + 1;
 			if (children[0]->type == AST_REALVALUE) {
 				RTLIL::Const constvalue = children[0]->realAsConst(width);
-				log("Warning: converting real value %e to binary %s at %s:%d.\n",
+				log_warning("converting real value %e to binary %s at %s:%d.\n",
 						children[0]->realvalue, log_signal(constvalue), filename.c_str(), linenum);
 				delete children[0];
 				children[0] = mkconst_bits(constvalue.bits, sign_hint);
@@ -690,7 +701,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 			}
 		}
 		if (current_scope.count(str) == 0) {
-			// log("Warning: Creating auto-wire `%s' in module `%s'.\n", str.c_str(), current_ast_mod->str.c_str());
+			// log_warning("Creating auto-wire `%s' in module `%s'.\n", str.c_str(), current_ast_mod->str.c_str());
 			AstNode *auto_wire = new AstNode(AST_AUTOWIRE);
 			auto_wire->str = str;
 			current_ast_mod->children.push_back(auto_wire);
@@ -1259,9 +1270,13 @@ skip_dynamic_range_lvalue_expansion:;
 		sstr << "$memwr$" << children[0]->str << "$" << filename << ":" << linenum << "$" << (autoidx++);
 		std::string id_addr = sstr.str() + "_ADDR", id_data = sstr.str() + "_DATA", id_en = sstr.str() + "_EN";
 
-		if (type == AST_ASSIGN_EQ)
-			log("Warning: Blocking assignment to memory in line %s:%d is handled like a non-blocking assignment.\n",
-					filename.c_str(), linenum);
+		if (type == AST_ASSIGN_EQ) {
+			pair<string, int> this_blocking_assignment_warn(filename, linenum);
+			if (this_blocking_assignment_warn != last_blocking_assignment_warn)
+				log_warning("Blocking assignment to memory in line %s:%d is handled like a non-blocking assignment.\n",
+						filename.c_str(), linenum);
+			last_blocking_assignment_warn = this_blocking_assignment_warn;
+		}
 
 		int mem_width, mem_size, addr_bits;
 		children[0]->id2ast->meminfo(mem_width, mem_size, addr_bits);
@@ -2184,8 +2199,8 @@ void AstNode::replace_ids(const std::string &prefix, const std::map<std::string,
 }
 
 // helper function for mem2reg_as_needed_pass1
-static void mark_memories_assign_lhs_complex(std::map<AstNode*, std::set<std::string>> &mem2reg_places,
-		std::map<AstNode*, uint32_t> &mem2reg_candidates, AstNode *that)
+static void mark_memories_assign_lhs_complex(dict<AstNode*, pool<std::string>> &mem2reg_places,
+		dict<AstNode*, uint32_t> &mem2reg_candidates, AstNode *that)
 {
 	for (auto &child : that->children)
 		mark_memories_assign_lhs_complex(mem2reg_places, mem2reg_candidates, child);
@@ -2199,8 +2214,8 @@ static void mark_memories_assign_lhs_complex(std::map<AstNode*, std::set<std::st
 }
 
 // find memories that should be replaced by registers
-void AstNode::mem2reg_as_needed_pass1(std::map<AstNode*, std::set<std::string>> &mem2reg_places,
-		std::map<AstNode*, uint32_t> &mem2reg_candidates, std::map<AstNode*, uint32_t> &proc_flags, uint32_t &flags)
+void AstNode::mem2reg_as_needed_pass1(dict<AstNode*, pool<std::string>> &mem2reg_places,
+		dict<AstNode*, uint32_t> &mem2reg_candidates, dict<AstNode*, uint32_t> &proc_flags, uint32_t &flags)
 {
 	uint32_t children_flags = 0;
 	int ignore_children_counter = 0;
@@ -2262,7 +2277,7 @@ void AstNode::mem2reg_as_needed_pass1(std::map<AstNode*, std::set<std::string>> 
 	if (type == AST_MODULE && get_bool_attribute("\\mem2reg"))
 		children_flags |= AstNode::MEM2REG_FL_ALL;
 
-	std::map<AstNode*, uint32_t> *proc_flags_p = NULL;
+	dict<AstNode*, uint32_t> *proc_flags_p = NULL;
 
 	if (type == AST_ALWAYS) {
 		int count_edge_events = 0;
@@ -2271,12 +2286,12 @@ void AstNode::mem2reg_as_needed_pass1(std::map<AstNode*, std::set<std::string>> 
 				count_edge_events++;
 		if (count_edge_events != 1)
 			children_flags |= AstNode::MEM2REG_FL_ASYNC;
-		proc_flags_p = new std::map<AstNode*, uint32_t>;
+		proc_flags_p = new dict<AstNode*, uint32_t>;
 	}
 
 	if (type == AST_INITIAL) {
 		children_flags |= AstNode::MEM2REG_FL_INIT;
-		proc_flags_p = new std::map<AstNode*, uint32_t>;
+		proc_flags_p = new dict<AstNode*, uint32_t>;
 	}
 
 	uint32_t backup_flags = flags;
@@ -2294,13 +2309,15 @@ void AstNode::mem2reg_as_needed_pass1(std::map<AstNode*, std::set<std::string>> 
 	flags &= ~children_flags | backup_flags;
 
 	if (proc_flags_p) {
+#ifndef NDEBUG
 		for (auto it : *proc_flags_p)
 			log_assert((it.second & ~0xff000000) == 0);
+#endif
 		delete proc_flags_p;
 	}
 }
 
-bool AstNode::mem2reg_check(std::set<AstNode*> &mem2reg_set)
+bool AstNode::mem2reg_check(pool<AstNode*> &mem2reg_set)
 {
 	if (type != AST_IDENTIFIER || !id2ast || !mem2reg_set.count(id2ast))
 		return false;
@@ -2312,7 +2329,7 @@ bool AstNode::mem2reg_check(std::set<AstNode*> &mem2reg_set)
 }
 
 // actually replace memories with registers
-void AstNode::mem2reg_as_needed_pass2(std::set<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block)
+void AstNode::mem2reg_as_needed_pass2(pool<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block)
 {
 	if (type == AST_BLOCK)
 		block = this;
