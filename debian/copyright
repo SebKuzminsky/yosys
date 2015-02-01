@@ -3,7 +3,7 @@ Upstream-Name: yosys
 Source: http://www.clifford.at/yosys/
 
 Files: *
-Copyright: 2012-2014 Clifford Wolf <clifford@clifford.at>
+Copyright: 2012-2015 Clifford Wolf <clifford@clifford.at>
 License: ISC
 
 Files: backends/btor/btor.cc
@@ -46,7 +46,7 @@ Copyright: 2010 Conor Santifort <csantifort.amber@gmail.com>
 License: LGPL-2.1+
 
 Files: debian/*
-Copyright: 2014 Ruben Undheim <ruben.undheim@gmail.com>
+Copyright: 2014-2015 Ruben Undheim <ruben.undheim@gmail.com>
 License: GPL-2+
 
 
