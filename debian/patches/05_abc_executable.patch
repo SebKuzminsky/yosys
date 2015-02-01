@@ -6,9 +6,9 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/passes/abc/abc.cc
 ===================================================================
---- yosys.orig/passes/abc/abc.cc	2014-10-28 21:30:10.095418581 +0100
-+++ yosys/passes/abc/abc.cc	2014-10-28 21:30:10.091418581 +0100
-@@ -1101,7 +1101,7 @@
+--- yosys.orig/passes/abc/abc.cc	2015-02-01 21:36:41.681594913 +0100
++++ yosys/passes/abc/abc.cc	2015-02-01 21:36:41.677594913 +0100
+@@ -1190,7 +1190,7 @@
  		log_header("Executing ABC pass (technology mapping using ABC).\n");
  		log_push();
  
@@ -16,4 +16,4 @@ Index: yosys/passes/abc/abc.cc
 +		std::string exe_file = proc_self_dirname() + "berkeley-abc";
  		std::string script_file, liberty_file, constr_file, clk_str, delay_target;
  		bool fast_mode = false, dff_mode = false, keepff = false, cleanup = true;
- 		int lut_mode = 0;
+ 		bool show_tempdir = false;
