@@ -4,15 +4,15 @@ Forwarded: will do
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-02-09 20:41:58.399386062 +0100
-+++ yosys/Makefile	2015-02-09 20:44:50.183387905 +0100
+--- yosys.orig/Makefile	2015-02-09 21:26:15.243414558 +0100
++++ yosys/Makefile	2015-02-09 21:26:50.991414942 +0100
 @@ -36,8 +36,8 @@
  all: top-all
  
  YOSYS_SRC := $(shell pwd)
--CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
+-CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/usr/include
 -LDFLAGS = -L$(DESTDIR)/lib
-+CXXFLAGS += -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
++CXXFLAGS += -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/usr/include
 +LDFLAGS += -L$(DESTDIR)/lib
  LDLIBS = -lstdc++ -lm
  SED = sed
