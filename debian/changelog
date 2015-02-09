@@ -1,10 +1,10 @@
-yosys (0.4.0+20150201git3cbfa38-1) unstable; urgency=low
+yosys (0.5.0-1) unstable; urgency=low
 
   * New upstream release
   * Added d/watch
   * Updated copyright years in d/copyright
 
- -- Ruben Undheim <ruben.undheim@gmail.com>  Sun, 01 Feb 2015 21:30:48 +0100
+ -- Ruben Undheim <ruben.undheim@gmail.com>  Mon, 09 Feb 2015 20:37:38 +0100
 
 yosys (0.4.0-1) unstable; urgency=medium
 
