@@ -4,8 +4,8 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-02-01 21:36:03.889594507 +0100
-+++ yosys/Makefile	2015-02-01 21:36:03.889594507 +0100
+--- yosys.orig/Makefile	2015-02-09 20:40:46.015385286 +0100
++++ yosys/Makefile	2015-02-09 20:40:46.015385286 +0100
 @@ -17,7 +17,7 @@
  ENABLE_GPROF := 0
  ENABLE_NDEBUG := 0
@@ -14,8 +14,8 @@ Index: yosys/Makefile
 +#DESTDIR := /usr/local
  INSTALL_SUDO :=
  
- EXE =
-@@ -304,10 +304,10 @@
+ TARGET_BINDIR := $(DESTDIR)/bin
+@@ -332,10 +332,10 @@
  	@echo ""
  
  install: $(TARGETS) $(EXTRA_TARGETS)
@@ -28,5 +28,5 @@ Index: yosys/Makefile
 +	$(INSTALL_SUDO) mkdir -p $(DESTDIR)/usr/share/yosys
 +	$(INSTALL_SUDO) cp -r share/. $(DESTDIR)/usr/share/yosys/.
  
- manual: $(TARGETS) $(EXTRA_TARGETS)
- 	cd manual && bash appnotes.sh
+ uninstall:
+ 	$(INSTALL_SUDO) rm -vf $(addprefix $(DESTDIR)/bin/,$(notdir $(TARGETS)))

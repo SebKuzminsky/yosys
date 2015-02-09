@@ -4,20 +4,20 @@ Forwarded: will do
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-02-01 21:37:10.281595220 +0100
-+++ yosys/Makefile	2015-02-01 21:38:05.705595814 +0100
-@@ -32,8 +32,8 @@
- 
+--- yosys.orig/Makefile	2015-02-09 20:41:58.399386062 +0100
++++ yosys/Makefile	2015-02-09 20:44:50.183387905 +0100
+@@ -36,8 +36,8 @@
  all: top-all
  
--CXXFLAGS = -Wall -Wextra -ggdb -I"$(shell pwd)" -MD -DYOSYS_SRC='"$(shell pwd)"' -D_YOSYS_ -fPIC -I$(DESTDIR)/include
+ YOSYS_SRC := $(shell pwd)
+-CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
 -LDFLAGS = -L$(DESTDIR)/lib
-+CXXFLAGS += -Wall -Wextra -ggdb -I"$(shell pwd)" -MD -DYOSYS_SRC='"$(shell pwd)"' -D_YOSYS_ -fPIC -I$(DESTDIR)/include
++CXXFLAGS += -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
 +LDFLAGS += -L$(DESTDIR)/lib
  LDLIBS = -lstdc++ -lm
  SED = sed
  BISON = bison
-@@ -235,10 +235,10 @@
+@@ -262,10 +262,10 @@
  	$(P) $(CXX) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
  
  %.o: %.cc
@@ -30,14 +30,16 @@ Index: yosys/Makefile
  
  kernel/version_$(GIT_REV).cc: Makefile
  	$(P) rm -f kernel/version_*.o kernel/version_*.d kernel/version_*.cc
-@@ -246,8 +246,8 @@
+@@ -273,9 +273,9 @@
  			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\"; }" > kernel/version_$(GIT_REV).cc
  
  yosys-config: misc/yosys-config.in
--	$(P) $(SED) -e 's,@CXX@,$(CXX),;' -e 's,@CXXFLAGS@,$(CXXFLAGS),;' -e 's,@LDFLAGS@,$(LDFLAGS),;' -e 's,@LDLIBS@,$(LDLIBS),;' \
--			-e 's,@BINDIR@,$(DESTDIR)/bin,;' -e 's,@DATDIR@,$(DESTDIR)/share/yosys,;' < misc/yosys-config.in > yosys-config
-+	$(P) $(SED) -e 's#@CXX@#$(CXX)#;' -e 's#@CXXFLAGS@#$(CXXFLAGS)#;' -e 's#@LDFLAGS@#$(LDFLAGS)#;' -e 's#@LDLIBS@#$(LDLIBS)#;' \
-+			-e 's#@BINDIR@#$(DESTDIR)/bin#;' -e 's#@DATDIR@#$(DESTDIR)/share/yosys#;' < misc/yosys-config.in > yosys-config
+-	$(P) $(SED) -e 's,@CXXFLAGS@,$(subst -I"$(YOSYS_SRC)",-I"$(TARGET_DATDIR)/include",$(CXXFLAGS)),;' \
+-			-e 's,@CXX@,$(CXX),;' -e 's,@LDFLAGS@,$(LDFLAGS),;' -e 's,@LDLIBS@,$(LDLIBS),;' \
+-			-e 's,@BINDIR@,$(TARGET_BINDIR),;' -e 's,@DATDIR@,$(TARGET_DATDIR),;' < misc/yosys-config.in > yosys-config
++	$(P) $(SED) -e 's#@CXXFLAGS@#$(subst -I"$(YOSYS_SRC)",-I"$(TARGET_DATDIR)/include",$(CXXFLAGS))#;' \
++			-e 's#@CXX@#$(CXX)#;' -e 's#@LDFLAGS@#$(LDFLAGS)#;' -e 's#@LDLIBS@#$(LDLIBS)#;' \
++			-e 's#@BINDIR@#$(TARGET_BINDIR)#;' -e 's#@DATDIR@#$(TARGET_DATDIR)#;' < misc/yosys-config.in > yosys-config
  	$(Q) chmod +x yosys-config
  
  abc/abc-$(ABCREV)$(EXE):
