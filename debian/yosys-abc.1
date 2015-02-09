@@ -1,0 +1,23 @@
+.\"                                      Hey, EMACS: -*- nroff -*-
+.\" First parameter, NAME, should be all caps
+.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
+.\" other parameters are allowed: see man(7), man(1)
+.TH YOSYS-ABC 1 "February 09, 2015"
+.SH NAME
+yosys-abc \- symlink to berkeley-abc
+.SH SYNOPSIS
+.B yosys-abc
+.br
+.SH DESCRIPTION
+This manual page documents briefly the
+.B yosys-abc
+command.
+.PP
+\fByosys-abc\fP is simply a symbolic link to berkeley-abc which is provided by another package but which is a dependency for yosys. This is necessary since yosys-abc is the name used for berkeley-abc upstream for yosys and some yosys scripts may depend on it. For more information see the manual page for berkeley-abc(1)
+.SH SEE ALSO
+berkeley-abc(1), yosys(1)
+.\".SH AUTHOR
+.\"yosys-config was written by Clifford Wolf <clifford@clifford.at>.
+.PP
+This manual page was written by Ruben Undheim <ruben.undheim@gmail.com>,
+for the Debian project (and may be used by others).
