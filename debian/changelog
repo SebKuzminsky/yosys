@@ -4,6 +4,7 @@ yosys (0.5.0-1) unstable; urgency=low
   * Added d/watch
   * Updated copyright years in d/copyright
   * Changed dependency from tcl8.5-dev to tcl-dev
+  * Added d/gbp.conf
 
  -- Ruben Undheim <ruben.undheim@gmail.com>  Mon, 09 Feb 2015 20:37:38 +0100
 
