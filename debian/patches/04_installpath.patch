@@ -4,8 +4,8 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-02-09 21:02:20.979399175 +0100
-+++ yosys/Makefile	2015-02-09 21:02:45.515399438 +0100
+--- yosys.orig/Makefile	2015-02-09 21:16:12.307408092 +0100
++++ yosys/Makefile	2015-02-09 21:16:26.955408249 +0100
 @@ -17,11 +17,11 @@
  ENABLE_GPROF := 0
  ENABLE_NDEBUG := 0
@@ -21,6 +21,15 @@ Index: yosys/Makefile
  
  EXE =
  OBJS =
+@@ -36,7 +36,7 @@
+ all: top-all
+ 
+ YOSYS_SRC := $(shell pwd)
+-CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
++CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/usr/include
+ LDFLAGS = -L$(DESTDIR)/lib
+ LDLIBS = -lstdc++ -lm
+ SED = sed
 @@ -332,10 +332,10 @@
  	@echo ""
  
