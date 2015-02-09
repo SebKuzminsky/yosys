@@ -4,7 +4,7 @@ Uploaders: Ruben Undheim <ruben.undheim@gmail.com>
 Section: electronics
 Priority: optional
 Build-Depends: debhelper (>= 9),
-               tcl8.5-dev,
+               tcl-dev,
                libreadline-dev,
                bison,
                flex,
