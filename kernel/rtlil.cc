@@ -19,6 +19,7 @@
 
 #include "kernel/yosys.h"
 #include "kernel/macc.h"
+#include "kernel/celltypes.h"
 #include "frontends/verilog/verilog_frontend.h"
 #include "backends/ilang/ilang_backend.h"
 
@@ -460,7 +461,7 @@ std::vector<RTLIL::Module*> RTLIL::Design::selected_modules() const
 	std::vector<RTLIL::Module*> result;
 	result.reserve(modules_.size());
 	for (auto &it : modules_)
-		if (selected_module(it.first))
+		if (selected_module(it.first) && !it.second->get_bool_attribute("\\blackbox"))
 			result.push_back(it.second);
 	return result;
 }
@@ -470,7 +471,7 @@ std::vector<RTLIL::Module*> RTLIL::Design::selected_whole_modules() const
 	std::vector<RTLIL::Module*> result;
 	result.reserve(modules_.size());
 	for (auto &it : modules_)
-		if (selected_whole_module(it.first))
+		if (selected_whole_module(it.first) && !it.second->get_bool_attribute("\\blackbox"))
 			result.push_back(it.second);
 	return result;
 }
@@ -480,7 +481,9 @@ std::vector<RTLIL::Module*> RTLIL::Design::selected_whole_modules_warn() const
 	std::vector<RTLIL::Module*> result;
 	result.reserve(modules_.size());
 	for (auto &it : modules_)
-		if (selected_whole_module(it.first))
+		if (it.second->get_bool_attribute("\\blackbox"))
+			continue;
+		else if (selected_whole_module(it.first))
 			result.push_back(it.second);
 		else if (selected_module(it.first))
 			log_warning("Ignoring partially selected module %s.\n", log_id(it.first));
@@ -1075,6 +1078,7 @@ void RTLIL::Module::check()
 
 	for (auto &it : connections_) {
 		log_assert(it.first.size() == it.second.size());
+		log_assert(!it.first.has_const());
 		it.first.check();
 		it.second.check();
 	}
@@ -1924,6 +1928,39 @@ const RTLIL::SigSpec &RTLIL::Cell::getPort(RTLIL::IdString portname) const
 const dict<RTLIL::IdString, RTLIL::SigSpec> &RTLIL::Cell::connections() const
 {
 	return connections_;
+}
+
+bool RTLIL::Cell::known() const
+{
+	if (yosys_celltypes.cell_known(type))
+		return true;
+	if (module && module->design && module->design->module(type))
+		return true;
+	return false;
+}
+
+bool RTLIL::Cell::input(RTLIL::IdString portname) const
+{
+	if (yosys_celltypes.cell_known(type))
+		return yosys_celltypes.cell_input(type, portname);
+	if (module && module->design) {
+		RTLIL::Module *m = module->design->module(type);
+		RTLIL::Wire *w = m ? m->wire(portname) : nullptr;
+		return w && w->port_input;
+	}
+	return false;
+}
+
+bool RTLIL::Cell::output(RTLIL::IdString portname) const
+{
+	if (yosys_celltypes.cell_known(type))
+		return yosys_celltypes.cell_output(type, portname);
+	if (module && module->design) {
+		RTLIL::Module *m = module->design->module(type);
+		RTLIL::Wire *w = m ? m->wire(portname) : nullptr;
+		return w && w->port_output;
+	}
+	return false;
 }
 
 bool RTLIL::Cell::hasParam(RTLIL::IdString paramname) const
@@ -2930,6 +2967,17 @@ bool RTLIL::SigSpec::is_fully_undef() const
 				return false;
 	}
 	return true;
+}
+
+bool RTLIL::SigSpec::has_const() const
+{
+	cover("kernel.rtlil.sigspec.has_const");
+
+	pack();
+	for (auto it = chunks_.begin(); it != chunks_.end(); it++)
+		if (it->width > 0 && it->wire == NULL)
+			return true;
+	return false;
 }
 
 bool RTLIL::SigSpec::has_marked_bits() const

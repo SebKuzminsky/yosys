@@ -672,6 +672,7 @@ public:
 	bool is_fully_const() const;
 	bool is_fully_def() const;
 	bool is_fully_undef() const;
+	bool has_const() const;
 	bool has_marked_bits() const;
 
 	bool as_bool() const;
@@ -1139,6 +1140,11 @@ public:
 	void setPort(RTLIL::IdString portname, RTLIL::SigSpec signal);
 	const RTLIL::SigSpec &getPort(RTLIL::IdString portname) const;
 	const dict<RTLIL::IdString, RTLIL::SigSpec> &connections() const;
+
+	// information about cell ports
+	bool known() const;
+	bool input(RTLIL::IdString portname) const;
+	bool output(RTLIL::IdString portname) const;
 
 	// access cell parameters
 	bool hasParam(RTLIL::IdString paramname) const;

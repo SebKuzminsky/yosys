@@ -20,6 +20,9 @@ ENABLE_NDEBUG := 0
 DESTDIR := /usr/local
 INSTALL_SUDO :=
 
+TARGET_BINDIR := $(DESTDIR)/bin
+TARGET_DATDIR := $(DESTDIR)/share/yosys
+
 EXE =
 OBJS =
 GENFILES =
@@ -32,7 +35,8 @@ SMALL = 0
 
 all: top-all
 
-CXXFLAGS = -Wall -Wextra -ggdb -I"$(shell pwd)" -MD -DYOSYS_SRC='"$(shell pwd)"' -D_YOSYS_ -fPIC -I$(DESTDIR)/include
+YOSYS_SRC := $(shell pwd)
+CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
 LDFLAGS = -L$(DESTDIR)/lib
 LDLIBS = -lstdc++ -lm
 SED = sed
@@ -53,7 +57,7 @@ else
 	LDLIBS += -lrt
 endif
 
-YOSYS_VER := 0.4+$(shell test -d .git && { git log --author=clifford@clifford.at --oneline d5aa0ee158b41.. | wc -l; })
+YOSYS_VER := 0.5
 GIT_REV := $(shell git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
 OBJS = kernel/version_$(GIT_REV).o
 
@@ -123,7 +127,7 @@ LDLIBS += $(shell pkg-config --silence-errors --libs libffi || echo -lffi) -ldl
 endif
 
 ifeq ($(ENABLE_TCL),1)
-TCL_VERSION ?= tcl8.5
+TCL_VERSION ?= tcl$(shell echo 'puts [info tclversion]' | tclsh)
 TCL_INCLUDE ?= /usr/include/$(TCL_VERSION)
 CXXFLAGS += -I$(TCL_INCLUDE) -DYOSYS_ENABLE_TCL
 LDLIBS += -l$(TCL_VERSION)
@@ -155,10 +159,14 @@ CXXFLAGS += -DYOSYS_ENABLE_COVER
 endif
 
 define add_share_file
-EXTRA_TARGETS += $(1)/$(notdir $(2))
-$(1)/$(notdir $(2)): $(2)
+EXTRA_TARGETS += $(subst //,/,$(1)/$(notdir $(2)))
+$(subst //,/,$(1)/$(notdir $(2))): $(2)
 	$$(P) mkdir -p $(1)
-	$$(Q) cp $(2) $(1)/$(notdir $(2))
+	$$(Q) cp $(2) $(subst //,/,$(1)/$(notdir $(2)))
+endef
+
+define add_include_file
+$(eval $(call add_share_file,$(dir share/include/$(1)),$(1)))
 endef
 
 ifeq ($(PRETTY), 1)
@@ -176,7 +184,26 @@ Q =
 S =
 endif
 
+$(eval $(call add_include_file,kernel/yosys.h))
+$(eval $(call add_include_file,kernel/hashlib.h))
+$(eval $(call add_include_file,kernel/log.h))
+$(eval $(call add_include_file,kernel/rtlil.h))
+$(eval $(call add_include_file,kernel/register.h))
+$(eval $(call add_include_file,kernel/celltypes.h))
+$(eval $(call add_include_file,kernel/consteval.h))
+$(eval $(call add_include_file,kernel/sigtools.h))
+$(eval $(call add_include_file,kernel/modtools.h))
+$(eval $(call add_include_file,kernel/macc.h))
+$(eval $(call add_include_file,kernel/utils.h))
+$(eval $(call add_include_file,kernel/satgen.h))
+$(eval $(call add_include_file,libs/ezsat/ezsat.h))
+$(eval $(call add_include_file,libs/ezsat/ezminisat.h))
+$(eval $(call add_include_file,libs/sha1/sha1.h))
+$(eval $(call add_include_file,passes/fsm/fsmdata.h))
+$(eval $(call add_include_file,backends/ilang/ilang_backend.h))
+
 OBJS += kernel/driver.o kernel/register.o kernel/rtlil.o kernel/log.o kernel/calc.o kernel/yosys.o
+kernel/log.o: CXXFLAGS += -DYOSYS_SRC='"$(YOSYS_SRC)"'
 
 OBJS += libs/bigint/BigIntegerAlgorithms.o libs/bigint/BigInteger.o libs/bigint/BigIntegerUtils.o
 OBJS += libs/bigint/BigUnsigned.o libs/bigint/BigUnsignedInABase.o
@@ -246,8 +273,9 @@ kernel/version_$(GIT_REV).cc: Makefile
 			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\"; }" > kernel/version_$(GIT_REV).cc
 
 yosys-config: misc/yosys-config.in
-	$(P) $(SED) -e 's,@CXX@,$(CXX),;' -e 's,@CXXFLAGS@,$(CXXFLAGS),;' -e 's,@LDFLAGS@,$(LDFLAGS),;' -e 's,@LDLIBS@,$(LDLIBS),;' \
-			-e 's,@BINDIR@,$(DESTDIR)/bin,;' -e 's,@DATDIR@,$(DESTDIR)/share/yosys,;' < misc/yosys-config.in > yosys-config
+	$(P) $(SED) -e 's,@CXXFLAGS@,$(subst -I"$(YOSYS_SRC)",-I"$(TARGET_DATDIR)/include",$(CXXFLAGS)),;' \
+			-e 's,@CXX@,$(CXX),;' -e 's,@LDFLAGS@,$(LDFLAGS),;' -e 's,@LDLIBS@,$(LDLIBS),;' \
+			-e 's,@BINDIR@,$(TARGET_BINDIR),;' -e 's,@DATDIR@,$(TARGET_DATDIR),;' < misc/yosys-config.in > yosys-config
 	$(Q) chmod +x yosys-config
 
 abc/abc-$(ABCREV)$(EXE):
@@ -292,7 +320,7 @@ test: $(TARGETS) $(EXTRA_TARGETS)
 VALGRIND ?= valgrind --error-exitcode=1 --leak-check=full --show-reachable=yes --errors-for-leak-kinds=all
 
 vgtest: $(TARGETS) $(EXTRA_TARGETS)
-	$(VALGRIND) ./yosys -p 'setattr -mod -unset top; hierarchy; proc; opt; memory -nomap; opt -fine; techmap; opt' $$( ls tests/simple/*.v | grep -v repwhile.v )
+	$(VALGRIND) ./yosys -p 'setattr -mod -unset top; synth' $$( ls tests/simple/*.v | grep -v repwhile.v )
 	@echo ""
 	@echo "  Passed \"make vgtest\"."
 	@echo ""
@@ -308,6 +336,10 @@ install: $(TARGETS) $(EXTRA_TARGETS)
 	$(INSTALL_SUDO) install $(TARGETS) $(DESTDIR)/bin/
 	$(INSTALL_SUDO) mkdir -p $(DESTDIR)/share/yosys
 	$(INSTALL_SUDO) cp -r share/. $(DESTDIR)/share/yosys/.
+
+uninstall:
+	$(INSTALL_SUDO) rm -vf $(addprefix $(DESTDIR)/bin/,$(notdir $(TARGETS)))
+	$(INSTALL_SUDO) rm -rvf $(DESTDIR)/share/yosys/
 
 manual: $(TARGETS) $(EXTRA_TARGETS)
 	cd manual && bash appnotes.sh
@@ -335,23 +367,9 @@ qtcreator:
 	{ echo .; find backends frontends kernel libs passes -type f \( -name '*.h' -o -name '*.hh' \) -printf '%h\n' | sort -u; } > qtcreator.includes
 	touch qtcreator.config qtcreator.creator
 
-mklibyosys: $(OBJS) $(GENFILES) $(EXTRA_TARGETS)
-	rm -rf libyosys
-	mkdir -p libyosys/include libyosys/objs
-	set -e; for f in $(wildcard $(filter %.cc %.cpp,$(GENFILES)) $(addsuffix .cc,$(basename $(OBJS))) $(addsuffix .cpp,$(basename $(OBJS))) 2>/dev/null); do \
-		echo "Analyse: $$f" >&2; cpp -std=gnu++0x -MM -I. -D_YOSYS_ $$f; done | sed 's,.*:,,; s,//*,/,g; s,/[^/]*/\.\./,/,g; y, \\,\n\n,;' | \
-		grep '^[^/]' | sort -u | grep -v kernel/version_ | grep '\.\(h\|hh\)$$' | xargs cp -t libyosys/include/
-	sed -i 's/^\(# *include *"\)[^"]*\//\1/' libyosys/include/*
-	{ echo "#ifndef YOSYS_CONFIG_H"; echo "#define YOSYS_CONFIG_H"; for opt in $(CXXFLAGS); do [[ "$$opt" == -D* ]] || continue; V="$${opt#-D}"; N="$${V%=*}"; \
-		V="$${V#*=}"; [ "$$V" = "$$N" ] && echo "#define $$N" || echo "#define $$N $$V"; done; echo "#endif"; } > libyosys/include/config.h
-	sed -i '/^#define YOSYS_H/ { p; s/.*/#include "config.h"/; };' libyosys/include/yosys.h
-	cp $(filter-out kernel/driver.o,$(OBJS)) libyosys/objs/
-	cp tests/simple/fiedler-cooley.v libyosys/example.v
-	cp misc/example.cc libyosys/example.cc
-
 vcxsrc: $(GENFILES) $(EXTRA_TARGETS)
 	rm -rf yosys-win32-vcxsrc-$(YOSYS_VER){,.zip}
-	set -e; for f in $(wildcard $(filter %.cc %.cpp,$(GENFILES)) $(addsuffix .cc,$(basename $(OBJS))) $(addsuffix .cpp,$(basename $(OBJS))) 2>/dev/null); do \
+	set -e; for f in `ls $(filter %.cc %.cpp,$(GENFILES)) $(addsuffix .cc,$(basename $(OBJS))) $(addsuffix .cpp,$(basename $(OBJS))) 2> /dev/null`; do \
 		echo "Analyse: $$f" >&2; cpp -std=gnu++0x -MM -I. -D_YOSYS_ $$f; done | sed 's,.*:,,; s,//*,/,g; s,/[^/]*/\.\./,/,g; y, \\,\n\n,;' | grep '^[^/]' | sort -u | grep -v kernel/version_ > srcfiles.txt
 	bash misc/create_vcxsrc.sh yosys-win32-vcxsrc $(YOSYS_VER) $(GIT_REV)
 	echo "namespace Yosys { extern const char *yosys_version_str; const char *yosys_version_str=\"Yosys (Version Information Unavailable)\"; }" > kernel/version.cc
