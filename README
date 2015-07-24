@@ -56,14 +56,14 @@ For example on Ubuntu Linux 14.04 LTS the following commands will install all
 prerequisites for building yosys:
 
 	$ yosys_deps="build-essential clang bison flex libreadline-dev gawk
-	       tcl-dev libffi-dev git mercurial graphviz xdot pkg-config"
+	       tcl-dev libffi-dev git mercurial graphviz xdot pkg-config python"
 	$ sudo apt-get install $yosys_deps
 
 There are also pre-compiled Yosys binary packages for Ubuntu and Win32 as well
 as a source distribution for Visual Studio. Visit the Yosys download page for
 more information:
 
-	http://www.clifford.at/yosys/download.html 
+	http://www.clifford.at/yosys/download.html
 
 To configure the build system to use a specific compiler, use one of
 
@@ -257,6 +257,11 @@ Verilog Attributes and non-standard features
 - The "mem2reg" attribute on modules or arrays forces the early
   conversion of arrays to separate registers.
 
+- The "nomeminit" attribute on modules or arrays prohibits the
+  creation of initialized memories. This effectively puts "mem2reg"
+  on all memories that are written to in an "initial" block and
+  are not ROMs.
+
 - The "nolatches" attribute on modules or always-blocks
   prohibits the generation of logic-loops for latches. Instead
   all not explicitly assigned values default to x-bits. This does
@@ -283,6 +288,9 @@ Verilog Attributes and non-standard features
   Setting the "keep" attribute on a module has the same effect as setting it
   on all instances of the module.
 
+- The "keep_hierarchy" attribute on cells and modules keeps the "flatten"
+  command from flattening the indicated cells and modules.
+
 - The "init" attribute on wires is set by the frontend when a register is
   initialized "FPGA-style" with 'reg foo = val'. It can be used during synthesis
   to add the necessary reset logic.
@@ -291,6 +299,11 @@ Verilog Attributes and non-standard features
   design hierarchy. The "hierarchy" command sets this attribute when called
   with "-top". Other commands, such as "flatten" and various backends
   use this attribute to determine the top module.
+
+- The "src" attribute is set on cells and wires created by to the string
+  "<hdl-file-name>:<line-number>" by the HDL front-end and is then carried
+  through the synthesis. When entities are combined, a new |-separated
+  string is created that contains all the string from the original entities.
 
 - In addition to the (* ... *) attribute syntax, yosys supports
   the non-standard {* ... *} attribute syntax to set default attributes

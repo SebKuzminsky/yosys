@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -32,6 +32,7 @@ struct rules_t
 		SigSpec sig_addr, sig_data, sig_en;
 		bool effective_clkpol;
 		bool make_transp;
+		bool make_outreg;
 		int mapped_port;
 	};
 
@@ -85,6 +86,7 @@ struct rules_t
 				pi.clkpol = clkpol[i];
 				pi.mapped_port = -1;
 				pi.make_transp = false;
+				pi.make_outreg = false;
 				pi.effective_clkpol = false;
 				portinfos.push_back(pi);
 			}
@@ -126,7 +128,7 @@ struct rules_t
 	struct match_t {
 		IdString name;
 		dict<string, int> min_limits, max_limits;
-		bool or_next_if_better, make_transp;
+		bool or_next_if_better, make_transp, make_outreg;
 		char shuffle_enable;
 	};
 
@@ -277,6 +279,7 @@ struct rules_t
 		data.name = RTLIL::escape_id(tokens[1]);
 		data.or_next_if_better = false;
 		data.make_transp = false;
+		data.make_outreg = false;
 		data.shuffle_enable = 0;
 
 		while (next_line())
@@ -309,6 +312,12 @@ struct rules_t
 				continue;
 			}
 
+			if (GetSize(tokens) == 1 && tokens[0] == "make_outreg") {
+				data.make_transp = true;
+				data.make_outreg = true;
+				continue;
+			}
+
 			if (GetSize(tokens) == 1 && tokens[0] == "or_next_if_better") {
 				data.or_next_if_better = true;
 				continue;
@@ -320,9 +329,7 @@ struct rules_t
 
 	void parse(string filename)
 	{
-		if (filename.substr(0, 2) == "+/")
-			filename = proc_share_dirname() + filename.substr(1);
-
+		rewrite_filename(filename);
 		infile.open(filename);
 		linecount = 0;
 
@@ -392,6 +399,16 @@ bool replace_cell(Cell *cell, const rules_t &rules, const rules_t::bram_t &bram,
 	int mem_abits = cell->getParam("\\ABITS").as_int();
 	int mem_width = cell->getParam("\\WIDTH").as_int();
 	// int mem_offset = cell->getParam("\\OFFSET").as_int();
+
+	bool cell_init = !SigSpec(cell->getParam("\\INIT")).is_fully_undef();
+	vector<Const> initdata;
+
+	if (cell_init) {
+		Const initparam = cell->getParam("\\INIT");
+		initdata.reserve(mem_size);
+		for (int i=0; i < mem_size; i++)
+			initdata.push_back(initparam.extract(mem_width*i, mem_width, State::Sx));
+	}
 
 	int wr_ports = cell->getParam("\\WR_PORTS").as_int();
 	auto wr_clken = SigSpec(cell->getParam("\\WR_CLK_ENABLE"));
@@ -656,6 +673,10 @@ grow_read_ports:;
 
 			if (clken) {
 				if (pi.clocks == 0) {
+					if (match.make_outreg) {
+						pi.make_outreg = true;
+						goto skip_bram_rport_clkcheck;
+					}
 					log("        Bram port %c%d.%d has incompatible clock type.\n", pi.group + 'A', pi.index + 1, pi.dupidx + 1);
 					goto skip_bram_rport;
 				}
@@ -667,6 +688,7 @@ grow_read_ports:;
 					log("        Bram port %c%d.%d has incompatible clock polarity.\n", pi.group + 'A', pi.index + 1, pi.dupidx + 1);
 					goto skip_bram_rport;
 				}
+			skip_bram_rport_clkcheck:
 				if (read_transp.count(pi.transp) && read_transp.at(pi.transp) != transp) {
 					if (match.make_transp && wr_ports <= 1) {
 						pi.make_transp = true;
@@ -789,6 +811,22 @@ grow_read_ports:;
 			for (auto &vp : variant_params)
 				c->setParam(vp.first, vp.second);
 
+			if (cell_init) {
+				int init_offset = grid_a*(1 << bram.abits);
+				int init_shift = grid_d*bram.dbits;
+				int init_size = (1 << bram.abits);
+				Const initparam(State::Sx, init_size*bram.dbits);
+				for (int i = 0; i < init_size; i++) {
+					State padding = State::Sx;
+					for (int j = 0; j < bram.dbits; j++)
+						if (init_offset+i < GetSize(initdata) && init_shift+j < GetSize(initdata[init_offset+i]))
+							padding = initparam[i*bram.dbits+j] = initdata[init_offset+i][init_shift+j];
+						else
+							initparam[i*bram.dbits+j] = padding;
+				}
+				c->setParam("\\INIT", initparam);
+			}
+
 			for (auto &pi : portinfos)
 			{
 				if (pi.dupidx != dupidx)
@@ -846,6 +884,12 @@ grow_read_ports:;
 					SigSpec bram_dout = module->addWire(NEW_ID, bram.dbits);
 					c->setPort(stringf("\\%sDATA", pf), bram_dout);
 
+					if (pi.make_outreg) {
+						SigSpec bram_dout_q = module->addWire(NEW_ID, bram.dbits);
+						module->addDff(NEW_ID, pi.sig_clock, bram_dout, bram_dout_q, pi.effective_clkpol);
+						bram_dout = bram_dout_q;
+					}
+
 					if (pi.make_transp)
 					{
 						log("        Adding extra logic for transparent port %c%d.%d.\n", pi.group + 'A', pi.index + 1, pi.dupidx + 1);
@@ -871,7 +915,7 @@ grow_read_ports:;
 						}
 
 					SigSpec addr_ok_q = addr_ok;
-					if (pi.clocks && !addr_ok.empty()) {
+					if ((pi.clocks || pi.make_outreg) && !addr_ok.empty()) {
 						addr_ok_q = module->addWire(NEW_ID);
 						module->addDff(NEW_ID, pi.sig_clock, addr_ok, addr_ok_q, pi.effective_clkpol);
 					}
@@ -904,6 +948,8 @@ grow_read_ports:;
 void handle_cell(Cell *cell, const rules_t &rules)
 {
 	log("Processing %s.%s:\n", log_id(cell->module), log_id(cell));
+
+	bool cell_init = !SigSpec(cell->getParam("\\INIT")).is_fully_undef();
 
 	dict<string, int> match_properties;
 	match_properties["words"]  = cell->getParam("\\SIZE").as_int();
@@ -975,6 +1021,12 @@ void handle_cell(Cell *cell, const rules_t &rules)
 			log("    Metrics for %s: awaste=%d dwaste=%d bwaste=%d waste=%d efficiency=%d\n",
 					log_id(match.name), awaste, dwaste, bwaste, waste, efficiency);
 
+			if (cell_init && bram.init == 0) {
+				log("    Rule #%d for bram type %s (variant %d) rejected: cannot be initialized.\n",
+						i+1, log_id(bram.name), bram.variant);
+				goto next_match_rule;
+			}
+
 			for (auto it : match.min_limits) {
 				if (it.first == "waste" || it.first == "dups" || it.first == "acells" || it.first == "dcells" || it.first == "cells")
 					continue;
@@ -987,6 +1039,7 @@ void handle_cell(Cell *cell, const rules_t &rules)
 						i+1, log_id(bram.name), bram.variant, it.first.c_str(), it.second);
 				goto next_match_rule;
 			}
+
 			for (auto it : match.max_limits) {
 				if (it.first == "acells" || it.first == "dcells" || it.first == "cells")
 					continue;
@@ -1015,9 +1068,6 @@ void handle_cell(Cell *cell, const rules_t &rules)
 
 				log("      Storing for later selection.\n");
 				best_rule_cache[pair<int, int>(i, vi)] = std::tuple<int, int, int>(match_properties["efficiency"], -match_properties["cells"], -match_properties["acells"]);
-
-				if (or_next_if_better)
-					goto next_match_rule;
 
 		next_match_rule:
 				if (or_next_if_better || best_rule_cache.empty())
@@ -1070,7 +1120,7 @@ struct MemoryBramPass : public Pass {
 		log("rules. A block ram description looks like this:\n");
 		log("\n");
 		log("    bram RAMB1024X32     # name of BRAM cell\n");
-		// log("      init 1             # set to '1' if BRAM can be initialized\n");
+		log("      init 1             # set to '1' if BRAM can be initialized\n");
 		log("      abits 10           # number of address bits\n");
 		log("      dbits 32           # number of data bits\n");
 		log("      groups 2           # number of port groups\n");
@@ -1138,6 +1188,9 @@ struct MemoryBramPass : public Pass {
 		log("\n");
 		log("A match containing the command 'make_transp' will add external circuitry\n");
 		log("to simulate 'transparent read', if necessary.\n");
+		log("\n");
+		log("A match containing the command 'make_outreg' will add external flip-flops\n");
+		log("to implement synchronous read ports, if necessary.\n");
 		log("\n");
 		log("A match containing the command 'shuffle_enable A' will re-organize\n");
 		log("the data bits to accommodate the enable pattern of port A.\n");

@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -31,11 +31,11 @@ struct MemoryPass : public Pass {
 	{
 		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
 		log("\n");
-		log("    memory [-nomap] [-bram <bram_rules>] [selection]\n");
+		log("    memory [-nomap] [-nordff] [-bram <bram_rules>] [selection]\n");
 		log("\n");
 		log("This pass calls all the other memory_* passes in a useful order:\n");
 		log("\n");
-		log("    memory_dff\n");
+		log("    memory_dff [-nordff]\n");
 		log("    opt_clean\n");
 		log("    memory_share\n");
 		log("    opt_clean\n");
@@ -50,6 +50,7 @@ struct MemoryPass : public Pass {
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
 	{
 		bool flag_nomap = false;
+		bool flag_nordff = false;
 		string memory_bram_opts;
 
 		log_header("Executing MEMORY pass.\n");
@@ -61,6 +62,10 @@ struct MemoryPass : public Pass {
 				flag_nomap = true;
 				continue;
 			}
+			if (args[argidx] == "-nordff") {
+				flag_nordff = true;
+				continue;
+			}
 			if (argidx+1 < args.size() && args[argidx] == "-bram") {
 				memory_bram_opts += " -rules " + args[++argidx];
 				continue;
@@ -69,7 +74,7 @@ struct MemoryPass : public Pass {
 		}
 		extra_args(args, argidx, design);
 
-		Pass::call(design, "memory_dff");
+		Pass::call(design, flag_nordff ? "memory_dff -nordff" : "memory_dff");
 		Pass::call(design, "opt_clean");
 		Pass::call(design, "memory_share");
 		Pass::call(design, "opt_clean");
@@ -84,5 +89,5 @@ struct MemoryPass : public Pass {
 		log_pop();
 	}
 } MemoryPass;
- 
+
 PRIVATE_NAMESPACE_END

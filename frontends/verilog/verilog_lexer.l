@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -85,6 +85,10 @@ YOSYS_NAMESPACE_END
 	fn_stack.push_back(current_filename);
 	ln_stack.push_back(frontend_verilog_yyget_lineno());
 	current_filename = yytext+11;
+	if (!current_filename.empty() && current_filename.front() == '"')
+		current_filename = current_filename.substr(1);
+	if (!current_filename.empty() && current_filename.back() == '"')
+		current_filename = current_filename.substr(0, current_filename.size()-1);
 	frontend_verilog_yyset_lineno(0);
 }
 
@@ -111,6 +115,9 @@ YOSYS_NAMESPACE_END
 }
 
 "`timescale"[ \t]+[^ \t\r\n/]+[ \t]*"/"[ \t]*[^ \t\r\n]* /* ignore timescale directive */
+
+"`celldefine"[^\n]* /* ignore `celldefine */
+"`endcelldefine"[^\n]* /* ignore `endcelldefine */
 
 "`default_nettype"[ \t]+[^ \t\r\n/]+ {
 	char *p = yytext;
@@ -162,8 +169,9 @@ YOSYS_NAMESPACE_END
 "always_ff"    { SV_KEYWORD(TOK_ALWAYS); }
 "always_latch" { SV_KEYWORD(TOK_ALWAYS); }
 
-"assert"   { SV_KEYWORD(TOK_ASSERT); }
-"property" { SV_KEYWORD(TOK_PROPERTY); }
+"assert"   { if (formal_mode) return TOK_ASSERT; SV_KEYWORD(TOK_ASSERT); }
+"assume"   { if (formal_mode) return TOK_ASSUME; return TOK_ID; }
+"property" { if (formal_mode) return TOK_PROPERTY; SV_KEYWORD(TOK_PROPERTY); }
 "logic"    { SV_KEYWORD(TOK_REG); }
 "bit"      { SV_KEYWORD(TOK_REG); }
 

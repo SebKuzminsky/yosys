@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -66,6 +66,11 @@ struct TechmapWorker
 	std::map<std::pair<RTLIL::IdString, std::map<RTLIL::IdString, RTLIL::Const>>, RTLIL::Module*> techmap_cache;
 	std::map<RTLIL::Module*, bool> techmap_do_cache;
 	std::set<RTLIL::Module*, RTLIL::IdString::compare_ptr_by_name<RTLIL::Module>> module_queue;
+	dict<Module*, SigMap> sigmaps;
+
+	pool<IdString> flatten_do_list;
+	pool<IdString> flatten_done_list;
+	pool<Cell*> flatten_keep_list;
 
 	struct TechmapWireData {
 		RTLIL::Wire *wire;
@@ -154,9 +159,10 @@ struct TechmapWorker
 	void techmap_module_worker(RTLIL::Design *design, RTLIL::Module *module, RTLIL::Cell *cell, RTLIL::Module *tpl)
 	{
 		if (tpl->processes.size() != 0) {
-			log("Technology map yielded processes:\n");
+			log("Technology map yielded processes:");
 			for (auto &it : tpl->processes)
-				log("  %s",RTLIL::id2cstr(it.first));
+				log(" %s",RTLIL::id2cstr(it.first));
+			log("\n");
 			if (autoproc_mode) {
 				Pass::call_on_module(tpl->design, tpl, "proc");
 				log_assert(GetSize(tpl->processes) == 0);
@@ -165,13 +171,19 @@ struct TechmapWorker
 		}
 
 		std::string orig_cell_name;
+		pool<string> extra_src_attrs;
+
 		if (!flatten_mode)
+		{
 			for (auto &it : tpl->cells_)
 				if (it.first == "\\_TECHMAP_REPLACE_") {
 					orig_cell_name = cell->name.str();
 					module->rename(cell, stringf("$techmap%d", autoidx++) + cell->name.str());
 					break;
 				}
+
+			extra_src_attrs = cell->get_strpool_attribute("\\src");
+		}
 
 		dict<IdString, IdString> memory_renames;
 
@@ -184,6 +196,8 @@ struct TechmapWorker
 			m->start_offset = it.second->start_offset;
 			m->size = it.second->size;
 			m->attributes = it.second->attributes;
+			if (m->attributes.count("\\src"))
+				m->add_strpool_attribute("\\src", extra_src_attrs);
 			module->memories[m->name] = m;
 			memory_renames[it.first] = m->name;
 			design->select(module, m);
@@ -202,8 +216,22 @@ struct TechmapWorker
 			w->port_id = 0;
 			if (it.second->get_bool_attribute("\\_techmap_special_"))
 				w->attributes.clear();
+			if (w->attributes.count("\\src"))
+				w->add_strpool_attribute("\\src", extra_src_attrs);
 			design->select(module, w);
 		}
+
+		SigMap tpl_sigmap(tpl);
+		pool<SigBit> tpl_written_bits;
+
+		for (auto &it1 : tpl->cells_)
+		for (auto &it2 : it1.second->connections_)
+			if (it1.second->output(it2.first))
+				for (auto bit : tpl_sigmap(it2.second))
+					tpl_written_bits.insert(bit);
+		for (auto &it1 : tpl->connections_)
+			for (auto bit : tpl_sigmap(it1.first))
+				tpl_written_bits.insert(bit);
 
 		SigMap port_signal_map;
 
@@ -218,14 +246,26 @@ struct TechmapWorker
 			}
 			RTLIL::Wire *w = tpl->wires_.at(portname);
 			RTLIL::SigSig c;
-			if (w->port_output) {
+			if (w->port_output && !w->port_input) {
 				c.first = it.second;
 				c.second = RTLIL::SigSpec(w);
 				apply_prefix(cell->name.str(), c.second, module);
-			} else {
+			} else if (!w->port_output && w->port_input) {
 				c.first = RTLIL::SigSpec(w);
 				c.second = it.second;
 				apply_prefix(cell->name.str(), c.first, module);
+			} else {
+				SigSpec sig_tpl = w, sig_tpl_pf = w, sig_mod = it.second;
+				apply_prefix(cell->name.str(), sig_tpl_pf, module);
+				for (int i = 0; i < GetSize(sig_tpl); i++) {
+					if (tpl_written_bits.count(tpl_sigmap(sig_tpl[i]))) {
+						c.first.append(sig_mod[i]);
+						c.second.append(sig_tpl_pf[i]);
+					} else {
+						c.first.append(sig_tpl_pf[i]);
+						c.second.append(sig_mod[i]);
+					}
+				}
 			}
 			if (c.second.size() > c.first.size())
 				c.second.remove(c.first.size(), c.second.size() - c.first.size());
@@ -235,6 +275,11 @@ struct TechmapWorker
 			if (flatten_mode) {
 				// more conservative approach:
 				// connect internal and external wires
+				if (sigmaps.count(module) == 0)
+					sigmaps[module].set(module);
+				if (sigmaps.at(module)(c.first).has_const())
+					log_error("Mismatch in directionality for cell port %s.%s.%s: %s <= %s\n",
+						log_id(module), log_id(cell), log_id(it.first), log_signal(c.first), log_signal(c.second));
 				module->connect(c);
 			} else {
 				// approach that yields nicer outputs:
@@ -271,6 +316,9 @@ struct TechmapWorker
 				log_assert(memory_renames.count(memid));
 				c->setParam("\\MEMID", Const(memory_renames[memid].str()));
 			}
+
+			if (c->attributes.count("\\src"))
+				c->add_strpool_attribute("\\src", extra_src_attrs);
 		}
 
 		for (auto &it : tpl->connections()) {
@@ -315,6 +363,22 @@ struct TechmapWorker
 				if (assert_mode && cell_type.back() != '_')
 					log_error("(ASSERT MODE) No matching template cell for type %s found.\n", log_id(cell_type));
 				continue;
+			}
+
+			if (flatten_mode) {
+				bool keepit = cell->get_bool_attribute("\\keep_hierarchy");
+				for (auto &tpl_name : celltypeMap.at(cell_type))
+					if (map->modules_[tpl_name]->get_bool_attribute("\\keep_hierarchy"))
+						keepit = true;
+				if (keepit) {
+					if (!flatten_keep_list[cell]) {
+						log("Keeping %s.%s (found keep_hierarchy property).\n", log_id(module), log_id(cell));
+						flatten_keep_list.insert(cell);
+					}
+					if (!flatten_done_list[cell->type])
+						flatten_do_list.insert(cell->type);
+					continue;
+				}
 			}
 
 			for (auto &conn : cell->connections())
@@ -798,11 +862,6 @@ struct TechmapPass : public Pass {
 		log("    -map %%<design-name>\n");
 		log("        like -map above, but with an in-memory design instead of a file.\n");
 		log("\n");
-		log("    -share_map filename\n");
-		log("        like -map, but look for the file in the share directory (where the\n");
-		log("        yosys data files are). this is mainly used internally when techmap\n");
-		log("        is called from other commands.\n");
-		log("\n");
 		log("    -extern\n");
 		log("        load the cell implementations as separate modules into the design\n");
 		log("        instead of inlining them.\n");
@@ -930,14 +989,7 @@ struct TechmapPass : public Pass {
 		size_t argidx;
 		for (argidx = 1; argidx < args.size(); argidx++) {
 			if (args[argidx] == "-map" && argidx+1 < args.size()) {
-				if (args[argidx+1].substr(0, 2) == "+/")
-					map_files.push_back(proc_share_dirname() + args[++argidx].substr(2));
-				else
-					map_files.push_back(args[++argidx]);
-				continue;
-			}
-			if (args[argidx] == "-share_map" && argidx+1 < args.size()) {
-				map_files.push_back(proc_share_dirname() + args[++argidx]);
+				map_files.push_back(args[++argidx]);
 				continue;
 			}
 			if (args[argidx] == "-max_iter" && argidx+1 < args.size()) {
@@ -988,19 +1040,12 @@ struct TechmapPass : public Pass {
 							map->add(mod->clone());
 				} else {
 					std::ifstream f;
+					rewrite_filename(fn);
 					f.open(fn.c_str());
 					if (f.fail())
 						log_cmd_error("Can't open map file `%s'\n", fn.c_str());
 					Frontend::frontend_call(map, &f, fn, (fn.size() > 3 && fn.substr(fn.size()-3) == ".il") ? "ilang" : verilog_frontend);
 				}
-
-		dict<RTLIL::IdString, RTLIL::Module*> modules_new;
-		for (auto &it : map->modules_) {
-			if (it.first.substr(0, 2) == "\\$")
-				it.second->name = it.first.substr(1);
-			modules_new[it.second->name] = it.second;
-		}
-		map->modules_.swap(modules_new);
 
 		std::map<RTLIL::IdString, std::set<RTLIL::IdString, RTLIL::sort_by_id_str>> celltypeMap;
 		for (auto &it : map->modules_) {
@@ -1009,8 +1054,12 @@ struct TechmapPass : public Pass {
 				for (char *q = strtok(p, " \t\r\n"); q; q = strtok(NULL, " \t\r\n"))
 					celltypeMap[RTLIL::escape_id(q)].insert(it.first);
 				free(p);
-			} else
-				celltypeMap[it.first].insert(it.first);
+			} else {
+				string module_name = it.first.str();
+				if (module_name.substr(0, 2) == "\\$")
+					module_name = module_name.substr(1);
+				celltypeMap[module_name].insert(it.first);
+			}
 		}
 
 		for (auto module : design->modules())
@@ -1040,7 +1089,7 @@ struct TechmapPass : public Pass {
 		log_pop();
 	}
 } TechmapPass;
- 
+
 struct FlattenPass : public Pass {
 	FlattenPass() : Pass("flatten", "flatten design") { }
 	virtual void help()
@@ -1052,6 +1101,9 @@ struct FlattenPass : public Pass {
 		log("This pass flattens the design by replacing cells by their implementation. This\n");
 		log("pass is very simmilar to the 'techmap' pass. The only difference is that this\n");
 		log("pass is using the current design as mapping library.\n");
+		log("\n");
+		log("Cells and/or modules with the 'keep_hiearchy' attribute set will not be\n");
+		log("flattened by this command.\n");
 		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
@@ -1065,8 +1117,8 @@ struct FlattenPass : public Pass {
 		worker.flatten_mode = true;
 
 		std::map<RTLIL::IdString, std::set<RTLIL::IdString, RTLIL::sort_by_id_str>> celltypeMap;
-		for (auto &it : design->modules_)
-			celltypeMap[it.first].insert(it.first);
+		for (auto module : design->modules())
+			celltypeMap[module->name].insert(module->name);
 
 		RTLIL::Module *top_mod = NULL;
 		if (design->full_selection())
@@ -1074,26 +1126,40 @@ struct FlattenPass : public Pass {
 				if (mod->get_bool_attribute("\\top"))
 					top_mod = mod;
 
-		bool did_something = true;
 		std::set<RTLIL::Cell*> handled_cells;
-		while (did_something) {
-			did_something = false;
-			if (top_mod != NULL) {
-				if (worker.techmap_module(design, top_mod, design, handled_cells, celltypeMap, false))
-					did_something = true;
-			} else {
-				for (auto mod : design->modules())
-					if (worker.techmap_module(design, mod, design, handled_cells, celltypeMap, false))
-						did_something = true;
+		if (top_mod != NULL) {
+			worker.flatten_do_list.insert(top_mod->name);
+			while (!worker.flatten_do_list.empty()) {
+				auto mod = design->module(*worker.flatten_do_list.begin());
+				while (worker.techmap_module(design, mod, design, handled_cells, celltypeMap, false)) { }
+				worker.flatten_done_list.insert(mod->name);
+				worker.flatten_do_list.erase(mod->name);
 			}
+		} else {
+			for (auto mod : vector<Module*>(design->modules()))
+				while (worker.techmap_module(design, mod, design, handled_cells, celltypeMap, false)) { }
 		}
 
 		log("No more expansions possible.\n");
 
-		if (top_mod != NULL) {
+		if (top_mod != NULL)
+		{
+			pool<RTLIL::IdString> used_modules, new_used_modules;
+			new_used_modules.insert(top_mod->name);
+			while (!new_used_modules.empty()) {
+				pool<RTLIL::IdString> queue;
+				queue.swap(new_used_modules);
+				for (auto modname : queue)
+					used_modules.insert(modname);
+				for (auto modname : queue)
+					for (auto cell : design->module(modname)->cells())
+						if (design->module(cell->type) && !used_modules[cell->type])
+							new_used_modules.insert(cell->type);
+			}
+
 			dict<RTLIL::IdString, RTLIL::Module*> new_modules;
-			for (auto mod : design->modules())
-				if (mod == top_mod || mod->get_bool_attribute("\\blackbox")) {
+			for (auto mod : vector<Module*>(design->modules()))
+				if (used_modules[mod->name] || mod->get_bool_attribute("\\blackbox")) {
 					new_modules[mod->name] = mod;
 				} else {
 					log("Deleting now unused module %s.\n", log_id(mod));

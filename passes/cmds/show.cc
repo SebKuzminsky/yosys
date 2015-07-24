@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -41,7 +41,7 @@ struct ShowWorker
 {
 	CellTypes ct;
 
-	std::vector<std::string> dot_escape_store;
+	vector<shared_str> dot_escape_store;
 	std::map<RTLIL::IdString, int> dot_id2num_store;
 	std::map<RTLIL::IdString, int> autonames;
 	int single_idx_count;
@@ -590,6 +590,10 @@ struct ShowPass : public Pass {
 		log("        inputs or outputs. This option can be used multiple times to specify\n");
 		log("        more than one library.\n");
 		log("\n");
+		log("        note: in most cases it is better to load the library before calling\n");
+		log("        show with 'read_verilog -lib <filename>'. it is also possible to\n");
+		log("        load liberty files with 'read_liberty -lib <filename>'.\n");
+		log("\n");
 		log("    -prefix <prefix>\n");
 		log("        generate <prefix>.* instead of ~/.yosys_show.*\n");
 		log("\n");
@@ -641,6 +645,9 @@ struct ShowPass : public Pass {
 		log("The generated output files are '~/.yosys_show.dot' and '~/.yosys_show.<format>',\n");
 		log("unless another prefix is specified using -prefix <prefix>.\n");
 		log("\n");
+		log("Yosys on Windows and YosysJS use different defaults: The output is written\n");
+		log("to 'show.dot' in the current directory and new viewer is launched.\n");
+		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
 	{
@@ -650,9 +657,14 @@ struct ShowPass : public Pass {
 		std::vector<std::pair<std::string, RTLIL::Selection>> color_selections;
 		std::vector<std::pair<std::string, RTLIL::Selection>> label_selections;
 
+#if defined(EMSCRIPTEN) || defined(_WIN32)
+		std::string format = "dot";
+		std::string prefix = "show";
+#else
 		std::string format;
-		std::string viewer_exe;
 		std::string prefix = stringf("%s/.yosys_show", getenv("HOME") ? getenv("HOME") : ".");
+#endif
+		std::string viewer_exe;
 		std::vector<std::string> libfiles;
 		std::vector<RTLIL::Design*> libs;
 		uint32_t colorSeed = 0;
@@ -833,5 +845,5 @@ struct ShowPass : public Pass {
 		log_pop();
 	}
 } ShowPass;
- 
+
 PRIVATE_NAMESPACE_END

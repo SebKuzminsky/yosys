@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -114,18 +114,11 @@ struct IopadmapPass : public Pass {
 		}
 		extra_args(args, argidx, design);
 
-		for (auto &it : design->modules_)
+		for (auto module : design->selected_modules())
 		{
-			RTLIL::Module *module = it.second;
-
-			if (!design->selected(module) || module->get_bool_attribute("\\blackbox"))
-				continue;
-
-			for (auto &it2 : module->wires_)
+			for (auto wire : module->selected_wires())
 			{
-				RTLIL::Wire *wire = it2.second;
-
-				if (!wire->port_id || !design->selected(module, wire))
+				if (!wire->port_id)
 					continue;
 
 				std::string celltype, portname, portname2;
@@ -209,5 +202,5 @@ struct IopadmapPass : public Pass {
 		}
 	}
 } IopadmapPass;
- 
+
 PRIVATE_NAMESPACE_END

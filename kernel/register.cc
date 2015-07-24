@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -18,6 +18,8 @@
  */
 
 #include "kernel/yosys.h"
+#include "kernel/satgen.h"
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -148,7 +150,7 @@ void Pass::call(RTLIL::Design *design, std::string command)
 	std::vector<std::string> args;
 
 	std::string cmd_buf = command;
-	std::string tok = next_token(cmd_buf, " \t\r\n");
+	std::string tok = next_token(cmd_buf, " \t\r\n", true);
 
 	if (tok.empty())
 		return;
@@ -199,7 +201,7 @@ void Pass::call(RTLIL::Design *design, std::string command)
 			call(design, args);
 			args.clear();
 		}
-		tok = next_token(cmd_buf, " \t\r\n");
+		tok = next_token(cmd_buf, " \t\r\n", true);
 	}
 
 	call(design, args);
@@ -357,8 +359,7 @@ void Frontend::extra_args(std::istream *&f, std::string &filename, std::vector<s
 			}
 			f = new std::istringstream(last_here_document);
 		} else {
-			if (filename.substr(0, 2) == "+/")
-				filename = proc_share_dirname() + filename.substr(1);
+			rewrite_filename(filename);
 			std::ifstream *ff = new std::ifstream;
 			ff->open(filename.c_str());
 			if (ff->fail())
@@ -545,11 +546,10 @@ struct HelpPass : public Pass {
 	}
 	void escape_tex(std::string &tex)
 	{
-		size_t pos = 0;
-		while ((pos = tex.find('_', pos)) != std::string::npos) {
+		for (size_t pos = 0; (pos = tex.find('_', pos)) != std::string::npos; pos += 2)
 			tex.replace(pos, 1, "\\_");
-			pos += 2;
-		}
+		for (size_t pos = 0; (pos = tex.find('$', pos)) != std::string::npos; pos += 2)
+			tex.replace(pos, 1, "\\$");
 	}
 	void write_tex(FILE *f, std::string cmd, std::string title, std::string text)
 	{
@@ -659,7 +659,7 @@ struct HelpPass : public Pass {
 		help();
 	}
 } HelpPass;
- 
+
 struct EchoPass : public Pass {
 	EchoPass() : Pass("echo", "turning echoing back of commands on and off") { }
 	virtual void help()
@@ -692,6 +692,18 @@ struct EchoPass : public Pass {
 		log("echo %s\n", echo_mode ? "on" : "off");
 	}
 } EchoPass;
- 
+
+SatSolver *yosys_satsolver_list;
+SatSolver *yosys_satsolver;
+
+struct MinisatSatSolver : public SatSolver {
+	MinisatSatSolver() : SatSolver("minisat") {
+		yosys_satsolver = this;
+	}
+	virtual ezSAT *create() YS_OVERRIDE {
+		return new ezMiniSAT();
+	}
+} MinisatSatSolver;
+
 YOSYS_NAMESPACE_END
 

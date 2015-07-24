@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -567,9 +567,11 @@ void AstNode::detectSignWidthWorker(int &width_hint, bool &sign_hint, bool *foun
 			if (id_ast->children.size() > 1 && id_ast->children[1]->range_valid) {
 				this_width = id_ast->children[1]->range_left - id_ast->children[1]->range_right + 1;
 			} else
-			if (id_ast->children[0]->type == AST_CONSTANT) {
+			if (id_ast->children[0]->type != AST_CONSTANT)
+				while (id_ast->simplify(true, false, false, 1, -1, false, true)) { }
+			if (id_ast->children[0]->type == AST_CONSTANT)
 				this_width = id_ast->children[0]->bits.size();
-			} else
+			else
 				log_error("Failed to detect width for parameter %s at %s:%d!\n", str.c_str(), filename.c_str(), linenum);
 			if (children.size() != 0)
 				range = children[0];
@@ -1214,9 +1216,8 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 			RTLIL::Wire *wire = current_module->addWire(cell->name.str() + "_DATA", current_module->memories[str]->width);
 			wire->attributes["\\src"] = stringf("%s:%d", filename.c_str(), linenum);
 
-			int addr_bits = 1;
-			while ((1 << addr_bits) < current_module->memories[str]->size)
-				addr_bits++;
+			int mem_width, mem_size, addr_bits;
+			id2ast->meminfo(mem_width, mem_size, addr_bits);
 
 			cell->setPort("\\CLK", RTLIL::SigSpec(RTLIL::State::Sx, 1));
 			cell->setPort("\\ADDR", children[0]->genWidthRTLIL(addr_bits));
@@ -1235,28 +1236,30 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 
 	// generate $memwr cells for memory write ports
 	case AST_MEMWR:
+	case AST_MEMINIT:
 		{
 			std::stringstream sstr;
-			sstr << "$memwr$" << str << "$" << filename << ":" << linenum << "$" << (autoidx++);
+			sstr << (type == AST_MEMWR ? "$memwr$" : "$meminit$") << str << "$" << filename << ":" << linenum << "$" << (autoidx++);
 
-			RTLIL::Cell *cell = current_module->addCell(sstr.str(), "$memwr");
+			RTLIL::Cell *cell = current_module->addCell(sstr.str(), type == AST_MEMWR ? "$memwr" : "$meminit");
 			cell->attributes["\\src"] = stringf("%s:%d", filename.c_str(), linenum);
 
-			int addr_bits = 1;
-			while ((1 << addr_bits) < current_module->memories[str]->size)
-				addr_bits++;
+			int mem_width, mem_size, addr_bits;
+			id2ast->meminfo(mem_width, mem_size, addr_bits);
 
-			cell->setPort("\\CLK", RTLIL::SigSpec(RTLIL::State::Sx, 1));
 			cell->setPort("\\ADDR", children[0]->genWidthRTLIL(addr_bits));
 			cell->setPort("\\DATA", children[1]->genWidthRTLIL(current_module->memories[str]->width));
-			cell->setPort("\\EN", children[2]->genRTLIL());
 
 			cell->parameters["\\MEMID"] = RTLIL::Const(str);
 			cell->parameters["\\ABITS"] = RTLIL::Const(addr_bits);
 			cell->parameters["\\WIDTH"] = RTLIL::Const(current_module->memories[str]->width);
 
-			cell->parameters["\\CLK_ENABLE"] = RTLIL::Const(0);
-			cell->parameters["\\CLK_POLARITY"] = RTLIL::Const(0);
+			if (type == AST_MEMWR) {
+				cell->setPort("\\CLK", RTLIL::SigSpec(RTLIL::State::Sx, 1));
+				cell->setPort("\\EN", children[2]->genRTLIL());
+				cell->parameters["\\CLK_ENABLE"] = RTLIL::Const(0);
+				cell->parameters["\\CLK_POLARITY"] = RTLIL::Const(0);
+			}
 
 			cell->parameters["\\PRIORITY"] = RTLIL::Const(autoidx-1);
 		}
@@ -1264,19 +1267,22 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 
 	// generate $assert cells
 	case AST_ASSERT:
+	case AST_ASSUME:
 		{
 			log_assert(children.size() == 2);
 
 			RTLIL::SigSpec check = children[0]->genRTLIL();
-			log_assert(check.size() == 1);
+			if (GetSize(check) != 1)
+				check = current_module->ReduceBool(NEW_ID, check);
 
 			RTLIL::SigSpec en = children[1]->genRTLIL();
-			log_assert(en.size() == 1);
+			if (GetSize(en) != 1)
+				en = current_module->ReduceBool(NEW_ID, en);
 
 			std::stringstream sstr;
-			sstr << "$assert$" << filename << ":" << linenum << "$" << (autoidx++);
+			sstr << (type == AST_ASSERT ? "$assert$" : "$assume$") << filename << ":" << linenum << "$" << (autoidx++);
 
-			RTLIL::Cell *cell = current_module->addCell(sstr.str(), "$assert");
+			RTLIL::Cell *cell = current_module->addCell(sstr.str(), type == AST_ASSERT ? "$assert" : "$assume");
 			cell->attributes["\\src"] = stringf("%s:%d", filename.c_str(), linenum);
 
 			for (auto &attr : attributes) {
@@ -1335,16 +1341,19 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 					continue;
 				}
 				if (child->type == AST_PARASET) {
-					if (child->children[0]->type != AST_CONSTANT)
-						log_error("Parameter `%s' with non-constant value at %s:%d!\n",
-								child->str.c_str(), filename.c_str(), linenum);
-					if (child->str.size() == 0) {
-						char buf[100];
-						snprintf(buf, 100, "$%d", ++para_counter);
-						cell->parameters[buf] = child->children[0]->asParaConst();
-					} else {
-						cell->parameters[child->str] = child->children[0]->asParaConst();
+					IdString paraname = child->str.empty() ? stringf("$%d", ++para_counter) : child->str;
+					if (child->children[0]->type == AST_REALVALUE) {
+						log_warning("Replacing floating point parameter %s.%s = %f with string at %s:%d.\n",
+							log_id(cell), log_id(paraname), child->children[0]->realvalue,
+							filename.c_str(), linenum);
+						auto strnode = AstNode::mkconst_str(stringf("%f", child->children[0]->realvalue));
+						strnode->cloneInto(child->children[0]);
+						delete strnode;
 					}
+					if (child->children[0]->type != AST_CONSTANT)
+						log_error("Parameter %s.%s with non-constant value at %s:%d!\n",
+								log_id(cell), log_id(paraname), filename.c_str(), linenum);
+					cell->parameters[paraname] = child->children[0]->asParaConst();
 					continue;
 				}
 				if (child->type == AST_ARGUMENT) {

@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -28,6 +28,33 @@ PRIVATE_NAMESPACE_BEGIN
 
 SigMap assign_map, dff_init_map;
 SigSet<RTLIL::Cell*> mux_drivers;
+
+bool handle_dlatch(RTLIL::Module *mod, RTLIL::Cell *dlatch)
+{
+	SigSpec sig_e = dlatch->getPort("\\EN");
+
+	if (sig_e == State::S0)
+	{
+		RTLIL::Const val_init;
+		for (auto bit : dff_init_map(dlatch->getPort("\\Q")))
+			val_init.bits.push_back(bit.wire == NULL ? bit.data : State::Sx);
+		mod->connect(dlatch->getPort("\\Q"), val_init);
+		goto delete_dlatch;
+	}
+
+	if (sig_e == State::S1)
+	{
+		mod->connect(dlatch->getPort("\\Q"), dlatch->getPort("\\D"));
+		goto delete_dlatch;
+	}
+
+	return false;
+
+delete_dlatch:
+	log("Removing %s (%s) from module %s.\n", dlatch->name.c_str(), dlatch->type.c_str(), mod->name.c_str());
+	mod->remove(dlatch);
+	return true;
+}
 
 bool handle_dff(RTLIL::Module *mod, RTLIL::Cell *dff)
 {
@@ -83,26 +110,24 @@ bool handle_dff(RTLIL::Module *mod, RTLIL::Cell *dff)
 		val_init.bits.push_back(bit.wire == NULL ? bit.data : RTLIL::State::Sx);
 	}
 
-	if (dff->type == "$dff" && mux_drivers.has(sig_d) && !has_init) {
+	if (dff->type == "$dff" && mux_drivers.has(sig_d)) {
 		std::set<RTLIL::Cell*> muxes;
 		mux_drivers.find(sig_d, muxes);
 		for (auto mux : muxes) {
 			RTLIL::SigSpec sig_a = assign_map(mux->getPort("\\A"));
 			RTLIL::SigSpec sig_b = assign_map(mux->getPort("\\B"));
-			if (sig_a == sig_q && sig_b.is_fully_const()) {
-				RTLIL::SigSig conn(sig_q, sig_b);
-				mod->connect(conn);
+			if (sig_a == sig_q && sig_b.is_fully_const() && (!has_init || val_init == sig_b.as_const())) {
+				mod->connect(sig_q, sig_b);
 				goto delete_dff;
 			}
-			if (sig_b == sig_q && sig_a.is_fully_const()) {
-				RTLIL::SigSig conn(sig_q, sig_a);
-				mod->connect(conn);
+			if (sig_b == sig_q && sig_a.is_fully_const() && (!has_init || val_init == sig_a.as_const())) {
+				mod->connect(sig_q, sig_a);
 				goto delete_dff;
 			}
 		}
 	}
 
-	if (sig_c.is_fully_const() && (!sig_r.size() || !has_init)) {
+	if (sig_c.is_fully_const() && (!sig_r.size() || !has_init || val_init == val_rv)) {
 		if (val_rv.bits.size() == 0)
 			val_rv = val_init;
 		RTLIL::SigSig conn(sig_q, val_rv);
@@ -110,7 +135,7 @@ bool handle_dff(RTLIL::Module *mod, RTLIL::Cell *dff)
 		goto delete_dff;
 	}
 
-	if (sig_d.is_fully_undef() && sig_r.size() && !has_init) {
+	if (sig_d.is_fully_undef() && sig_r.size() && (!has_init || val_init == val_rv)) {
 		RTLIL::SigSig conn(sig_q, val_rv);
 		mod->connect(conn);
 		goto delete_dff;
@@ -122,13 +147,13 @@ bool handle_dff(RTLIL::Module *mod, RTLIL::Cell *dff)
 		goto delete_dff;
 	}
 
-	if (sig_d.is_fully_const() && !sig_r.size() && !has_init) {
+	if (sig_d.is_fully_const() && !sig_r.size() && (!has_init || val_init == sig_d.as_const())) {
 		RTLIL::SigSig conn(sig_q, sig_d);
 		mod->connect(conn);
 		goto delete_dff;
 	}
 
-	if (sig_d == sig_q && !(sig_r.size() && has_init)) {
+	if (sig_d == sig_q && (!sig_r.size() || !has_init || val_init == val_rv)) {
 		if (sig_r.size()) {
 			RTLIL::SigSig conn(sig_q, val_rv);
 			mod->connect(conn);
@@ -180,6 +205,7 @@ struct OptRmdffPass : public Pass {
 			mux_drivers.clear();
 
 			std::vector<RTLIL::IdString> dff_list;
+			std::vector<RTLIL::IdString> dlatch_list;
 			for (auto &it : mod_it.second->cells_) {
 				if (it.second->type == "$mux" || it.second->type == "$pmux") {
 					if (it.second->getPort("\\A").size() == it.second->getPort("\\B").size())
@@ -200,11 +226,18 @@ struct OptRmdffPass : public Pass {
 				if (it.second->type == "$_DFF_PP1_") dff_list.push_back(it.first);
 				if (it.second->type == "$dff") dff_list.push_back(it.first);
 				if (it.second->type == "$adff") dff_list.push_back(it.first);
+				if (it.second->type == "$dlatch") dlatch_list.push_back(it.first);
 			}
 
 			for (auto &id : dff_list) {
 				if (mod_it.second->cells_.count(id) > 0 &&
 						handle_dff(mod_it.second, mod_it.second->cells_[id]))
+					total_count++;
+			}
+
+			for (auto &id : dlatch_list) {
+				if (mod_it.second->cells_.count(id) > 0 &&
+						handle_dlatch(mod_it.second, mod_it.second->cells_[id]))
 					total_count++;
 			}
 		}
@@ -217,5 +250,5 @@ struct OptRmdffPass : public Pass {
 		log("Replaced %d DFF cells.\n", total_count);
 	}
 } OptRmdffPass;
- 
+
 PRIVATE_NAMESPACE_END

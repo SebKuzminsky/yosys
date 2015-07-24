@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -21,7 +21,7 @@
 
 YOSYS_NAMESPACE_BEGIN
 
-static bool read_next_line(char *&buffer, size_t &buffer_size, int &line_count, FILE *f)
+static bool read_next_line(char *&buffer, size_t &buffer_size, int &line_count, std::istream &f)
 {
 	int buffer_len = 0;
 	buffer[0] = 0;
@@ -42,23 +42,21 @@ static bool read_next_line(char *&buffer, size_t &buffer_size, int &line_count, 
 			if (buffer_len > 0 && buffer[buffer_len-1] == '\\')
 				buffer[--buffer_len] = 0;
 			line_count++;
-			if (fgets(buffer+buffer_len, buffer_size-buffer_len, f) == NULL)
+			if (!f.getline(buffer+buffer_len, buffer_size-buffer_len))
 				return false;
 		} else
 			return true;
 	}
 }
 
-RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
+void parse_blif(RTLIL::Design *design, std::istream &f, std::string dff_name)
 {
-	RTLIL::Design *design = new RTLIL::Design;
-	RTLIL::Module *module = new RTLIL::Module;
-
+	RTLIL::Module *module = nullptr;
 	RTLIL::Const *lutptr = NULL;
 	RTLIL::State lut_default_state = RTLIL::State::Sx;
 
-	module->name = "\\netlist";
-	design->add(module);
+	dict<RTLIL::IdString, RTLIL::Const> *obj_attributes = nullptr;
+	dict<RTLIL::IdString, RTLIL::Const> *obj_parameters = nullptr;
 
 	size_t buffer_size = 4096;
 	char *buffer = (char*)malloc(buffer_size);
@@ -66,8 +64,12 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 
 	while (1)
 	{
-		if (!read_next_line(buffer, buffer_size, line_count, f))
-			goto error;
+		if (!read_next_line(buffer, buffer_size, line_count, f)) {
+			if (module != nullptr)
+				goto error;
+			free(buffer);
+			return;
+		}
 
 	continue_without_read:
 		if (buffer[0] == '#')
@@ -85,13 +87,28 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 
 			char *cmd = strtok(buffer, " \t\r\n");
 
-			if (!strcmp(cmd, ".model"))
+			if (!strcmp(cmd, ".model")) {
+				if (module != nullptr)
+					goto error;
+				module = new RTLIL::Module;
+				module->name = RTLIL::escape_id(strtok(NULL, " \t\r\n"));
+				obj_attributes = &module->attributes;
+				obj_parameters = nullptr;
+				if (design->module(module->name))
+					log_error("Duplicate definition of module %s in line %d!\n", log_id(module->name), line_count);
+				design->add(module);
 				continue;
+			}
+
+			if (module == nullptr)
+				goto error;
 
 			if (!strcmp(cmd, ".end")) {
 				module->fixup_ports();
-				free(buffer);
-				return design;
+				module = nullptr;
+				obj_attributes = nullptr;
+				obj_parameters = nullptr;
+				continue;
 			}
 
 			if (!strcmp(cmd, ".inputs") || !strcmp(cmd, ".outputs")) {
@@ -103,6 +120,36 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 					else
 						wire->port_output = true;
 				}
+				obj_attributes = nullptr;
+				obj_parameters = nullptr;
+				continue;
+			}
+
+			if (!strcmp(cmd, ".attr") || !strcmp(cmd, ".param")) {
+				char *n = strtok(NULL, " \t\r\n");
+				char *v = strtok(NULL, "\r\n");
+				IdString id_n = RTLIL::escape_id(n);
+				Const const_v;
+				if (v[0] == '"') {
+					std::string str(v+1);
+					if (str.back() == '"')
+						str.pop_back();
+					const_v = Const(str);
+				} else {
+					int n = strlen(v);
+					const_v.bits.resize(n);
+					for (int i = 0; i < n; i++)
+						const_v.bits[i] = v[n-i-1] != '0' ? State::S1 : State::S0;
+				}
+				if (!strcmp(cmd, ".attr")) {
+					if (obj_attributes == nullptr)
+						goto error;
+					(*obj_attributes)[id_n] = const_v;
+				} else {
+					if (obj_parameters == nullptr)
+						goto error;
+					(*obj_parameters)[id_n] = const_v;
+				}
 				continue;
 			}
 
@@ -110,6 +157,10 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 			{
 				char *d = strtok(NULL, " \t\r\n");
 				char *q = strtok(NULL, " \t\r\n");
+				char *edge = strtok(NULL, " \t\r\n");
+				char *clock = strtok(NULL, " \t\r\n");
+				char *init = strtok(NULL, " \t\r\n");
+				RTLIL::Cell *cell = nullptr;
 
 				if (module->wires_.count(RTLIL::escape_id(d)) == 0)
 					module->addWire(RTLIL::escape_id(d));
@@ -117,13 +168,39 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 				if (module->wires_.count(RTLIL::escape_id(q)) == 0)
 					module->addWire(RTLIL::escape_id(q));
 
-				RTLIL::Cell *cell = module->addCell(NEW_ID, dff_name);
-				cell->setPort("\\D", module->wires_.at(RTLIL::escape_id(d)));
-				cell->setPort("\\Q", module->wires_.at(RTLIL::escape_id(q)));
+				if (clock == nullptr && edge != nullptr) {
+					init = edge;
+					edge = nullptr;
+				}
+
+				if (init != nullptr && (init[0] == '0' || init[0] == '1'))
+					module->wire(RTLIL::escape_id(d))->attributes["\\init"] = Const(init[0] == '1' ? 1 : 0, 1);
+
+				if (clock == nullptr)
+					goto no_latch_clock;
+
+				if (module->wires_.count(RTLIL::escape_id(clock)) == 0)
+					module->addWire(RTLIL::escape_id(clock));
+
+				if (!strcmp(edge, "re"))
+					cell = module->addDff(NEW_ID, module->wire(RTLIL::escape_id(clock)),
+							module->wire(RTLIL::escape_id(d)), module->wire(RTLIL::escape_id(q)));
+				else if (!strcmp(edge, "fe"))
+					cell = module->addDff(NEW_ID, module->wire(RTLIL::escape_id(clock)),
+							module->wire(RTLIL::escape_id(d)), module->wire(RTLIL::escape_id(q)), false);
+				else {
+			no_latch_clock:
+					cell = module->addCell(NEW_ID, dff_name);
+					cell->setPort("\\D", module->wires_.at(RTLIL::escape_id(d)));
+					cell->setPort("\\Q", module->wires_.at(RTLIL::escape_id(q)));
+				}
+
+				obj_attributes = &cell->attributes;
+				obj_parameters = &cell->parameters;
 				continue;
 			}
 
-			if (!strcmp(cmd, ".gate"))
+			if (!strcmp(cmd, ".gate") || !strcmp(cmd, ".subckt"))
 			{
 				char *p = strtok(NULL, " \t\r\n");
 				if (p == NULL)
@@ -141,6 +218,32 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 						module->addWire(RTLIL::escape_id(q));
 					cell->setPort(RTLIL::escape_id(p), module->wires_.at(RTLIL::escape_id(q)));
 				}
+
+				obj_attributes = &cell->attributes;
+				obj_parameters = &cell->parameters;
+				continue;
+			}
+
+			obj_attributes = nullptr;
+			obj_parameters = nullptr;
+
+			if (!strcmp(cmd, ".barbuf"))
+			{
+				char *p = strtok(NULL, " \t\r\n");
+				if (p == NULL)
+					goto error;
+
+				char *q = strtok(NULL, " \t\r\n");
+				if (q == NULL)
+					goto error;
+
+				if (module->wires_.count(RTLIL::escape_id(p)) == 0)
+					module->addWire(RTLIL::escape_id(p));
+
+				if (module->wires_.count(RTLIL::escape_id(q)) == 0)
+					module->addWire(RTLIL::escape_id(q));
+
+				module->connect(module->wires_.at(RTLIL::escape_id(q)), module->wires_.at(RTLIL::escape_id(p)));
 				continue;
 			}
 
@@ -150,10 +253,10 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 				RTLIL::SigSpec input_sig, output_sig;
 				while ((p = strtok(NULL, " \t\r\n")) != NULL) {
 					RTLIL::Wire *wire;
-					if (module->wires_.count(stringf("\\%s", p)) > 0) {
-						wire = module->wires_.at(stringf("\\%s", p));
+					if (module->wires_.count(RTLIL::escape_id(p)) > 0) {
+						wire = module->wires_.at(RTLIL::escape_id(p));
 					} else {
-						wire = module->addWire(stringf("\\%s", p));
+						wire = module->addWire(RTLIL::escape_id(p));
 					}
 					input_sig.append(wire);
 				}
@@ -187,7 +290,7 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 					}
 				finished_parsing_constval:
 					if (state == RTLIL::State::Sa)
-						state = RTLIL::State::S1;
+						state = RTLIL::State::S0;
 					module->connect(RTLIL::SigSig(output_sig, state));
 					goto continue_without_read;
 				}
@@ -236,9 +339,37 @@ RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name)
 
 error:
 	log_error("Syntax error in line %d!\n", line_count);
-	// delete design;
-	// return NULL;
 }
+
+struct BlifFrontend : public Frontend {
+	BlifFrontend() : Frontend("blif", "read BLIF file") { }
+	virtual void help()
+	{
+		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
+		log("\n");
+		log("    read_blif [filename]\n");
+		log("\n");
+		log("Load modules from a BLIF file into the current design.\n");
+		log("\n");
+	}
+	virtual void execute(std::istream *&f, std::string filename, std::vector<std::string> args, RTLIL::Design *design)
+	{
+		log_header("Executing BLIF frontend.\n");
+
+		size_t argidx;
+		for (argidx = 1; argidx < args.size(); argidx++) {
+			std::string arg = args[argidx];
+			// if (arg == "-lib") {
+			// 	flag_lib = true;
+			// 	continue;
+			// }
+			break;
+		}
+		extra_args(f, filename, args, argidx);
+
+		parse_blif(design, *f, "\\DFF");
+	}
+} BlifFrontend;
 
 YOSYS_NAMESPACE_END
 

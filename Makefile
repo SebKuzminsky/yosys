@@ -57,7 +57,7 @@ else
 	LDLIBS += -lrt
 endif
 
-YOSYS_VER := 0.5
+YOSYS_VER := 0.5+$(shell test -d .git && { git log --author=clifford@clifford.at --oneline c3c9fbfb8c678.. | wc -l; })
 GIT_REV := $(shell git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
 OBJS = kernel/version_$(GIT_REV).o
 
@@ -67,9 +67,9 @@ OBJS = kernel/version_$(GIT_REV).o
 # is just a symlink to your actual ABC working directory, as 'make mrproper'
 # will remove the 'abc' directory and you do not want to accidentally
 # delete your work on ABC..
-ABCREV = 61ad5f908c03
+ABCREV = c3698e053a7a
 ABCPULL = 1
-ABCMKARGS = # CC="$(CXX)" CXX="$(CXX)"
+ABCMKARGS = CC="$(CXX)" CXX="$(CXX)"
 
 define newline
 
@@ -95,9 +95,32 @@ CXXFLAGS += -std=gnu++0x -Os
 
 else ifeq ($(CONFIG),emcc)
 CXX = emcc
-CXXFLAGS += -std=c++11 -Os -Wno-warn-absolute-paths
-CXXFLAGS := $(filter-out -ggdb,$(CXXFLAGS))
-EXE = .html
+CXXFLAGS := -std=c++11 $(filter-out -fPIC -ggdb,$(CXXFLAGS))
+EMCCFLAGS := -Os -Wno-warn-absolute-paths
+EMCCFLAGS += --memory-init-file 0 --embed-file share -s NO_EXIT_RUNTIME=1
+EMCCFLAGS += -s EXPORTED_FUNCTIONS="['_main','_run','_prompt','_errmsg']"
+EMCCFLAGS += -s TOTAL_MEMORY=128*1024*1024
+# https://github.com/kripken/emscripten/blob/master/src/settings.js
+CXXFLAGS += $(EMCCFLAGS)
+LDFLAGS += $(EMCCFLAGS)
+LDLIBS =
+EXE = .js
+
+TARGETS := $(filter-out yosys-config,$(TARGETS))
+EXTRA_TARGETS += yosysjs-$(YOSYS_VER).zip
+
+viz.js:
+	wget -O viz.js.part https://github.com/mdaines/viz.js/releases/download/0.0.3/viz.js
+	mv viz.js.part viz.js
+
+yosysjs-$(YOSYS_VER).zip: yosys.js viz.js misc/yosysjs/*
+	rm -rf yosysjs-$(YOSYS_VER) yosysjs-$(YOSYS_VER).zip
+	mkdir -p yosysjs-$(YOSYS_VER)
+	cp viz.js misc/yosysjs/* yosys.js yosysjs-$(YOSYS_VER)/
+	zip -r yosysjs-$(YOSYS_VER).zip yosysjs-$(YOSYS_VER)
+
+yosys.html: misc/yosys.html
+	$(P) cp misc/yosys.html yosys.html
 
 else ifeq ($(CONFIG),mxe)
 CXX = /usr/local/src/mxe/usr/bin/i686-pc-mingw32-gcc
@@ -202,7 +225,7 @@ $(eval $(call add_include_file,libs/sha1/sha1.h))
 $(eval $(call add_include_file,passes/fsm/fsmdata.h))
 $(eval $(call add_include_file,backends/ilang/ilang_backend.h))
 
-OBJS += kernel/driver.o kernel/register.o kernel/rtlil.o kernel/log.o kernel/calc.o kernel/yosys.o
+OBJS += kernel/driver.o kernel/register.o kernel/rtlil.o kernel/log.o kernel/calc.o kernel/yosys.o kernel/cellaigs.o
 kernel/log.o: CXXFLAGS += -DYOSYS_SRC='"$(YOSYS_SRC)"'
 
 OBJS += libs/bigint/BigIntegerAlgorithms.o libs/bigint/BigInteger.o libs/bigint/BigIntegerUtils.o
@@ -232,6 +255,7 @@ else
 include frontends/verilog/Makefile.inc
 include frontends/ilang/Makefile.inc
 include frontends/ast/Makefile.inc
+include frontends/blif/Makefile.inc
 
 OBJS += passes/hierarchy/hierarchy.o
 OBJS += passes/cmds/select.o
@@ -244,7 +268,6 @@ OBJS += passes/cmds/plugin.o
 include passes/proc/Makefile.inc
 include passes/opt/Makefile.inc
 include passes/techmap/Makefile.inc
-include passes/abc/Makefile.inc
 
 include backends/verilog/Makefile.inc
 include backends/ilang/Makefile.inc
@@ -257,6 +280,10 @@ top-all: $(TARGETS) $(EXTRA_TARGETS)
 	@echo ""
 	@echo "  Build successful."
 	@echo ""
+
+ifeq ($(CONFIG),emcc)
+yosys.js: $(filter-out yosysjs-$(YOSYS_VER).zip,$(EXTRA_TARGETS))
+endif
 
 yosys$(EXE): $(OBJS)
 	$(P) $(CXX) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
@@ -340,6 +367,9 @@ install: $(TARGETS) $(EXTRA_TARGETS)
 uninstall:
 	$(INSTALL_SUDO) rm -vf $(addprefix $(DESTDIR)/bin/,$(notdir $(TARGETS)))
 	$(INSTALL_SUDO) rm -rvf $(DESTDIR)/share/yosys/
+
+update-manual: $(TARGETS) $(EXTRA_TARGETS)
+	cd manual && ../yosys -p 'help -write-tex-command-reference-manual'
 
 manual: $(TARGETS) $(EXTRA_TARGETS)
 	cd manual && bash appnotes.sh

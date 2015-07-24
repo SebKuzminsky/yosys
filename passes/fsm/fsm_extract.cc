@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -56,6 +56,17 @@ static bool find_states(RTLIL::SigSpec sig, const RTLIL::SigSpec &dff_out, RTLIL
 
 	std::set<sig2driver_entry_t> cellport_list;
 	sig2driver.find(sig, cellport_list);
+
+	if (GetSize(cellport_list) > 1) {
+		log("  found %d combined drivers for state signal %s.\n", GetSize(cellport_list), log_signal(sig));
+		return false;
+	}
+
+	if (GetSize(cellport_list) < 1) {
+		log("  found no driver for state signal %s.\n", log_signal(sig));
+		return false;
+	}
+
 	for (auto &cellport : cellport_list)
 	{
 		RTLIL::Cell *cell = module->cells_.at(cellport.first);
@@ -90,9 +101,11 @@ static bool find_states(RTLIL::SigSpec sig, const RTLIL::SigSpec &dff_out, RTLIL
 				log("  found reset state: %s (guessed from mux tree)\n", log_signal(*reset_state));
 			} while (0);
 
-		if (ctrl.extract(sig_s).size() == 0) {
-			log("  found ctrl input: %s\n", log_signal(sig_s));
-			ctrl.append(sig_s);
+		for (auto sig_s_bit : sig_s) {
+			if (ctrl.extract(sig_s_bit).empty()) {
+				log("  found ctrl input: %s\n", log_signal(sig_s_bit));
+				ctrl.append(sig_s_bit);
+			}
 		}
 
 		if (!find_states(sig_aa, dff_out, ctrl, states))
@@ -241,7 +254,7 @@ static void extract_fsm(RTLIL::Wire *wire)
 {
 	log("Extracting FSM `%s' from module `%s'.\n", wire->name.c_str(), module->name.c_str());
 
-	// get input and output signals for state ff 
+	// get input and output signals for state ff
 
 	RTLIL::SigSpec dff_out = assign_map(RTLIL::SigSpec(wire));
 	RTLIL::SigSpec dff_in(RTLIL::State::Sm, wire->width);
@@ -305,7 +318,9 @@ static void extract_fsm(RTLIL::Wire *wire)
 	for (auto &cellport : cellport_list) {
 		RTLIL::Cell *cell = module->cells_.at(cellport.first);
 		RTLIL::SigSpec sig_a = assign_map(cell->getPort("\\A"));
-		RTLIL::SigSpec sig_b = assign_map(cell->getPort("\\B"));
+		RTLIL::SigSpec sig_b;
+		if (cell->hasPort("\\B"))
+			sig_b = assign_map(cell->getPort("\\B"));
 		RTLIL::SigSpec sig_y = assign_map(cell->getPort("\\Y"));
 		if (cellport.second == "\\A" && !sig_b.is_fully_const())
 			continue;
@@ -458,5 +473,5 @@ struct FsmExtractPass : public Pass {
 		sig2trigger.clear();
 	}
 } FsmExtractPass;
- 
+
 PRIVATE_NAMESPACE_END

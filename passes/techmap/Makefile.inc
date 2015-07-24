@@ -5,12 +5,20 @@ OBJS += passes/techmap/dfflibmap.o
 OBJS += passes/techmap/maccmap.o
 OBJS += passes/techmap/libparse.o
 
+ifeq ($(ENABLE_ABC),1)
+OBJS += passes/techmap/abc.o
+endif
+
 ifneq ($(SMALL),1)
 OBJS += passes/techmap/iopadmap.o
 OBJS += passes/techmap/hilomap.o
 OBJS += passes/techmap/extract.o
 OBJS += passes/techmap/alumacc.o
 OBJS += passes/techmap/dff2dffe.o
+OBJS += passes/techmap/dffinit.o
+OBJS += passes/techmap/pmuxtree.o
+OBJS += passes/techmap/muxcover.o
+OBJS += passes/techmap/aigmap.o
 endif
 
 GENFILES += passes/techmap/techmap.inc
@@ -24,9 +32,11 @@ passes/techmap/techmap.inc: techlibs/common/techmap.v
 
 passes/techmap/techmap.o: passes/techmap/techmap.inc
 
+ifneq ($(CONFIG),emcc)
 TARGETS += yosys-filterlib$(EXE)
 EXTRA_OBJS += passes/techmap/filterlib.o
 
 yosys-filterlib$(EXE): passes/techmap/filterlib.o
 	$(P) $(CXX) -o yosys-filterlib$(EXE) $(LDFLAGS) $^ $(LDLIBS)
+endif
 

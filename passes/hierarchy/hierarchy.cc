@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -268,7 +268,7 @@ void hierarchy_worker(RTLIL::Design *design, std::set<RTLIL::Module*> &used, RTL
 
 	if (indent == 0)
 		log("Top module:  %s\n", mod->name.c_str());
-	else
+	else if (!mod->get_bool_attribute("\\blackbox"))
 		log("Used module: %*s%s\n", indent, "", mod->name.c_str());
 	used.insert(mod);
 
@@ -285,7 +285,7 @@ void hierarchy_worker(RTLIL::Design *design, std::set<RTLIL::Module*> &used, RTL
 	}
 }
 
-void hierarchy(RTLIL::Design *design, RTLIL::Module *top, bool purge_lib, bool first_pass)
+void hierarchy_clean(RTLIL::Design *design, RTLIL::Module *top, bool purge_lib)
 {
 	std::set<RTLIL::Module*> used;
 	hierarchy_worker(design, used, top, 0);
@@ -295,17 +295,19 @@ void hierarchy(RTLIL::Design *design, RTLIL::Module *top, bool purge_lib, bool f
 		if (used.count(it.second) == 0)
 			del_modules.push_back(it.second);
 
+	int del_counter = 0;
 	for (auto mod : del_modules) {
-		if (first_pass && mod->name.substr(0, 9) == "$abstract")
+		if (mod->name.substr(0, 9) == "$abstract")
 			continue;
 		if (!purge_lib && mod->get_bool_attribute("\\blackbox"))
 			continue;
 		log("Removing unused module `%s'.\n", mod->name.c_str());
 		design->modules_.erase(mod->name);
+		del_counter++;
 		delete mod;
 	}
 
-	log("Removed %d unused modules.\n", GetSize(del_modules));
+	log("Removed %d unused modules.\n", del_counter);
 }
 
 bool set_keep_assert(std::map<RTLIL::Module*, bool> &cache, RTLIL::Module *mod)
@@ -317,6 +319,17 @@ bool set_keep_assert(std::map<RTLIL::Module*, bool> &cache, RTLIL::Module *mod)
 				return cache[mod] = true;
 		}
 	return cache[mod];
+}
+
+int find_top_mod_score(Design *design, Module *module, dict<Module*, int> &db)
+{
+	if (db.count(module) == 0) {
+		db[module] = 0;
+		for (auto cell : module->cells())
+			if (design->module(cell->type))
+				db[module] = std::max(db[module], find_top_mod_score(design, design->module(cell->type), db) + 1);
+	}
+	return db.at(module);
 }
 
 struct HierarchyPass : public Pass {
@@ -339,7 +352,7 @@ struct HierarchyPass : public Pass {
 		log("\n");
 		log("    -purge_lib\n");
 		log("        by default the hierarchy command will not remove library (blackbox)\n");
-		log("        module. use this options to also remove unused blackbox modules.\n");
+		log("        modules. use this option to also remove unused blackbox modules.\n");
 		log("\n");
 		log("    -libdir <directory>\n");
 		log("        search for files named <module_name>.v in the specified directory\n");
@@ -362,6 +375,9 @@ struct HierarchyPass : public Pass {
 		log("        when the -top option is used, the 'top' attribute will be set on the\n");
 		log("        specified top module. otherwise a module with the 'top' attribute set\n");
 		log("        will implicitly be used as top module, if such a module exists.\n");
+		log("\n");
+		log("    -auto-top\n");
+		log("        automatically determine the top of the design hierarchy and mark it.\n");
 		log("\n");
 		log("In -generate mode this pass generates blackbox modules for the given cell\n");
 		log("types (wildcards supported). For this the design is searched for cells that\n");
@@ -389,6 +405,7 @@ struct HierarchyPass : public Pass {
 		RTLIL::Module *top_mod = NULL;
 		std::vector<std::string> libdirs;
 
+		bool auto_top_mode = false;
 		bool generate_mode = false;
 		bool keep_positionals = false;
 		bool nokeep_asserts = false;
@@ -470,6 +487,10 @@ struct HierarchyPass : public Pass {
 					log_cmd_error("Module `%s' not found!\n", args[argidx].c_str());
 				continue;
 			}
+			if (args[argidx] == "-auto-top") {
+				auto_top_mode = true;
+				continue;
+			}
 			break;
 		}
 		extra_args(args, argidx, design, false);
@@ -481,35 +502,47 @@ struct HierarchyPass : public Pass {
 
 		log_push();
 
-		if (top_mod == NULL)
+		if (top_mod == nullptr)
 			for (auto &mod_it : design->modules_)
 				if (mod_it.second->get_bool_attribute("\\top"))
 					top_mod = mod_it.second;
 
-		if (top_mod != NULL)
-			hierarchy(design, top_mod, purge_lib, true);
-
-		bool did_something = true;
-		bool did_something_once = false;
-		while (did_something) {
-			did_something = false;
-			std::vector<RTLIL::IdString> modnames;
-			modnames.reserve(design->modules_.size());
-			for (auto &mod_it : design->modules_)
-				modnames.push_back(mod_it.first);
-			for (auto &modname : modnames) {
-				if (design->modules_.count(modname) == 0)
-					continue;
-				if (expand_module(design, design->modules_[modname], flag_check, libdirs))
-					did_something = true;
+		if (top_mod == nullptr && auto_top_mode) {
+			log_header("Finding top of design hierarchy..\n");
+			dict<Module*, int> db;
+			for (Module *mod : design->selected_modules()) {
+				int score = find_top_mod_score(design, mod, db);
+				log("root of %3d design levels: %-20s\n", score, log_id(mod));
+				if (!top_mod || score > db[top_mod])
+					top_mod = mod;
 			}
-			if (did_something)
-				did_something_once = true;
+			if (top_mod != nullptr)
+				log("Automatically selected %s as design top module.\n", log_id(top_mod));
 		}
 
-		if (top_mod != NULL && did_something_once) {
-			log_header("Re-running hierarchy analysis..\n");
-			hierarchy(design, top_mod, purge_lib, false);
+		bool did_something = true;
+		while (did_something)
+		{
+			did_something = false;
+
+			std::set<RTLIL::Module*> used_modules;
+			if (top_mod != NULL) {
+				log_header("Analyzing design hierarchy..\n");
+				hierarchy_worker(design, used_modules, top_mod, 0);
+			} else {
+				for (auto mod : design->modules())
+					used_modules.insert(mod);
+			}
+
+			for (auto module : used_modules) {
+				if (expand_module(design, module, flag_check, libdirs))
+					did_something = true;
+			}
+		}
+
+		if (top_mod != NULL) {
+			log_header("Analyzing design hierarchy..\n");
+			hierarchy_clean(design, top_mod, purge_lib);
 		}
 
 		if (top_mod != NULL) {
@@ -580,5 +613,5 @@ struct HierarchyPass : public Pass {
 		log_pop();
 	}
 } HierarchyPass;
- 
+
 PRIVATE_NAMESPACE_END

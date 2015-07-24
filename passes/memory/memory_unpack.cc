@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -76,6 +76,23 @@ void handle_memory(RTLIL::Module *module, RTLIL::Cell *memory)
 		cell->setPort("\\DATA", memory->getPort("\\WR_DATA").extract(i*mem->width, mem->width));
 	}
 
+	Const initval = memory->parameters.at("\\INIT");
+	for (int i = 0; i < GetSize(initval) && i/mem->width < (1 << abits); i += mem->width) {
+		Const val = initval.extract(i, mem->width, State::Sx);
+		for (auto bit : val.bits)
+			if (bit != State::Sx)
+				goto found_non_undef_initval;
+		continue;
+	found_non_undef_initval:
+		RTLIL::Cell *cell = module->addCell(NEW_ID, "$meminit");
+		cell->parameters["\\MEMID"] = mem_name.str();
+		cell->parameters["\\ABITS"] = memory->parameters.at("\\ABITS");
+		cell->parameters["\\WIDTH"] = memory->parameters.at("\\WIDTH");
+		cell->parameters["\\PRIORITY"] = i/mem->width;
+		 cell->setPort("\\ADDR", SigSpec(i/mem->width, abits));
+		cell->setPort("\\DATA", val);
+	}
+
 	module->remove(memory);
 }
 
@@ -109,5 +126,5 @@ struct MemoryUnpackPass : public Pass {
 				handle_module(design, mod_it.second);
 	}
 } MemoryUnpackPass;
- 
+
 PRIVATE_NAMESPACE_END

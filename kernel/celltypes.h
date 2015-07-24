@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -95,7 +95,6 @@ struct CellTypes
 			"$add", "$sub", "$mul", "$div", "$mod", "$pow",
 			"$logic_and", "$logic_or", "$concat", "$macc"
 		};
-
 		IdString A = "\\A", B = "\\B", S = "\\S", Y = "\\Y";
 		IdString P = "\\P", G = "\\G", C = "\\C", X = "\\X";
 		IdString BI = "\\BI", CI = "\\CI", CO = "\\CO", EN = "\\EN";
@@ -114,6 +113,7 @@ struct CellTypes
 		setup_type("$fa", {A, B, C}, {X, Y}, true);
 
 		setup_type("$assert", {A, EN}, pool<RTLIL::IdString>(), true);
+		setup_type("$assume", {A, EN}, pool<RTLIL::IdString>(), true);
 		setup_type("$equiv", {A, B}, {Y}, true);
 	}
 
@@ -135,6 +135,7 @@ struct CellTypes
 
 		setup_type("$memrd", {CLK, ADDR}, {DATA});
 		setup_type("$memwr", {CLK, EN, ADDR, DATA}, pool<RTLIL::IdString>());
+		setup_type("$meminit", {ADDR, DATA}, pool<RTLIL::IdString>());
 		setup_type("$mem", {RD_CLK, RD_ADDR, WR_CLK, WR_EN, WR_ADDR, WR_DATA}, {RD_DATA});
 
 		setup_type("$fsm", {CLK, ARST, CTRL_IN}, {CTRL_OUT});
@@ -142,7 +143,13 @@ struct CellTypes
 
 	void setup_stdcells()
 	{
-		IdString A = "\\A", B = "\\B", C = "\\C", D = "\\D", S = "\\S", Y = "\\Y";
+		IdString A = "\\A", B = "\\B", C = "\\C", D = "\\D";
+		IdString E = "\\E", F = "\\F", G = "\\G", H = "\\H";
+		IdString I = "\\I", J = "\\J", K = "\\K", L = "\\L";
+		IdString M = "\\I", N = "\\N", O = "\\O", P = "\\P";
+		IdString S = "\\S", T = "\\T", U = "\\U", V = "\\V";
+		IdString Y = "\\Y";
+
 		setup_type("$_BUF_", {A}, {Y}, true);
 		setup_type("$_NOT_", {A}, {Y}, true);
 		setup_type("$_AND_", {A, B}, {Y}, true);
@@ -152,6 +159,9 @@ struct CellTypes
 		setup_type("$_XOR_", {A, B}, {Y}, true);
 		setup_type("$_XNOR_", {A, B}, {Y}, true);
 		setup_type("$_MUX_", {A, B, S}, {Y}, true);
+		setup_type("$_MUX4_", {A, B, C, D, S, T}, {Y}, true);
+		setup_type("$_MUX8_", {A, B, C, D, E, F, G, H, S, T, U}, {Y}, true);
+		setup_type("$_MUX16_", {A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, S, T, U, V}, {Y}, true);
 		setup_type("$_AOI3_", {A, B, C}, {Y}, true);
 		setup_type("$_OAI3_", {A, B, C}, {Y}, true);
 		setup_type("$_AOI4_", {A, B, C, D}, {Y}, true);

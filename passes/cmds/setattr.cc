@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -32,25 +32,20 @@ struct setunset_t
 
 	setunset_t(std::string unset_name) : name(RTLIL::escape_id(unset_name)), value(), unset(true) { }
 
-	setunset_t(std::string set_name, std::vector<std::string> args, size_t &argidx) : name(RTLIL::escape_id(set_name)), value(), unset(false)
+	setunset_t(std::string set_name, std::string set_value) : name(RTLIL::escape_id(set_name)), value(), unset(false)
 	{
-		if (!args[argidx].empty() && args[argidx][0] == '"') {
-			std::string str = args[argidx++].substr(1);
-			while (str.size() != 0 && str[str.size()-1] != '"' && argidx < args.size())
-				str += args[argidx++];
-			if (str.size() != 0 && str[str.size()-1] == '"')
-				str = str.substr(0, str.size()-1);
-			value = RTLIL::Const(str);
+		if (set_value.substr(0, 1) == "\"" && set_value.substr(GetSize(set_value)-1) == "\"") {
+			value = RTLIL::Const(set_value.substr(1, GetSize(set_value)-2));
 		} else {
 			RTLIL::SigSpec sig_value;
-			if (!RTLIL::SigSpec::parse(sig_value, NULL, args[argidx++]))
-				log_cmd_error("Can't decode value '%s'!\n", args[argidx-1].c_str());
+			if (!RTLIL::SigSpec::parse(sig_value, NULL, set_value))
+				log_cmd_error("Can't decode value '%s'!\n", set_value.c_str());
 			value = sig_value.as_const();
 		}
 	}
 };
 
-static void do_setunset(dict<RTLIL::IdString, RTLIL::Const> &attrs, std::vector<setunset_t> &list)
+static void do_setunset(dict<RTLIL::IdString, RTLIL::Const> &attrs, const std::vector<setunset_t> &list)
 {
 	for (auto &item : list)
 		if (item.unset)
@@ -84,9 +79,9 @@ struct SetattrPass : public Pass {
 		{
 			std::string arg = args[argidx];
 			if (arg == "-set" && argidx+2 < args.size()) {
-				argidx += 2;
-				setunset_list.push_back(setunset_t(args[argidx-1], args, argidx));
-				argidx--;
+				string set_key = args[++argidx];
+				string set_val = args[++argidx];
+				setunset_list.push_back(setunset_t(set_key, set_val));
 				continue;
 			}
 			if (arg == "-unset" && argidx+1 < args.size()) {
@@ -132,7 +127,7 @@ struct SetattrPass : public Pass {
 		}
 	}
 } SetattrPass;
- 
+
 struct SetparamPass : public Pass {
 	SetparamPass() : Pass("setparam", "set/unset parameters on objects") { }
 	virtual void help()
@@ -154,9 +149,9 @@ struct SetparamPass : public Pass {
 		{
 			std::string arg = args[argidx];
 			if (arg == "-set" && argidx+2 < args.size()) {
-				argidx += 2;
-				setunset_list.push_back(setunset_t(args[argidx-1], args, argidx));
-				argidx--;
+				string set_key = args[++argidx];
+				string set_val = args[++argidx];
+				setunset_list.push_back(setunset_t(set_key, set_val));
 				continue;
 			}
 			if (arg == "-unset" && argidx+1 < args.size()) {
@@ -180,5 +175,81 @@ struct SetparamPass : public Pass {
 		}
 	}
 } SetparamPass;
- 
+
+struct ChparamPass : public Pass {
+	ChparamPass() : Pass("chparam", "re-evaluate modules with new parameters") { }
+	virtual void help()
+	{
+		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
+		log("\n");
+		log("    chparam [ -set name value ]... [selection]\n");
+		log("\n");
+		log("Re-evaluate the selected modules with new parameters. String values must be\n");
+		log("passed in double quotes (\").\n");
+		log("\n");
+		log("\n");
+		log("    chparam -list [selection]\n");
+		log("\n");
+		log("List the available parameters of the selected modules.\n");
+		log("\n");
+	}
+	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
+	{
+		std::vector<setunset_t> setunset_list;
+		dict<RTLIL::IdString, RTLIL::Const> new_parameters;
+		bool list_mode = false;
+
+		size_t argidx;
+		for (argidx = 1; argidx < args.size(); argidx++)
+		{
+			std::string arg = args[argidx];
+			if (arg == "-set" && argidx+2 < args.size()) {
+				string set_key = args[++argidx];
+				string set_val = args[++argidx];
+				setunset_list.push_back(setunset_t(set_key, set_val));
+				continue;
+			}
+			if (arg == "-list") {
+				list_mode = true;
+				continue;
+			}
+			break;
+		}
+		extra_args(args, argidx, design);
+
+		do_setunset(new_parameters, setunset_list);
+
+		if (list_mode) {
+			if (!new_parameters.empty())
+				log_cmd_error("The options -set and -list cannot be used together.\n");
+			for (auto module : design->selected_modules()) {
+				log("%s:\n", log_id(module));
+				for (auto param : module->avail_parameters)
+					log("  %s\n", log_id(param));
+			}
+			return;
+		}
+
+		pool<IdString> modnames, old_modnames;
+		for (auto module : design->selected_whole_modules_warn()) {
+			modnames.insert(module->name);
+			old_modnames.insert(module->name);
+		}
+		modnames.sort();
+
+		for (auto modname : modnames) {
+			Module *module = design->module(modname);
+			Module *new_module = design->module(module->derive(design, new_parameters));
+			if (module != new_module) {
+				Module *m = new_module->clone();
+				m->name = module->name;
+				design->remove(module);
+				design->add(m);
+			}
+			if (old_modnames.count(new_module->name) == 0)
+				design->remove(new_module);
+		}
+	}
+} ChparamPass;
+
 PRIVATE_NAMESPACE_END

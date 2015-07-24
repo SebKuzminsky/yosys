@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -29,7 +29,37 @@
 
 YOSYS_NAMESPACE_BEGIN
 
-typedef ezMiniSAT ezDefaultSAT;
+// defined in kernel/register.cc
+extern struct SatSolver *yosys_satsolver_list;
+extern struct SatSolver *yosys_satsolver;
+
+struct SatSolver
+{
+	string name;
+	SatSolver *next;
+	virtual ezSAT *create() = 0;
+
+	SatSolver(string name) : name(name) {
+		next = yosys_satsolver_list;
+		yosys_satsolver_list = this;
+	}
+
+	virtual ~SatSolver() {
+		auto p = &yosys_satsolver_list;
+		while (*p) {
+			if (*p == this)
+				*p = next;
+			else
+				p = &(*p)->next;
+		}
+		if (yosys_satsolver == this)
+			yosys_satsolver = yosys_satsolver_list;
+	}
+};
+
+struct ezSatPtr : public std::unique_ptr<ezSAT> {
+	ezSatPtr() : unique_ptr<ezSAT>(yosys_satsolver->create()) { }
+};
 
 struct SatGen
 {
@@ -38,6 +68,7 @@ struct SatGen
 	std::string prefix;
 	SigPool initial_state;
 	std::map<std::string, RTLIL::SigSpec> asserts_a, asserts_en;
+	std::map<std::string, RTLIL::SigSpec> assumes_a, assumes_en;
 	std::map<std::string, std::map<RTLIL::SigBit, int>> imported_signals;
 	bool ignore_div_by_zero;
 	bool model_undef;
@@ -131,6 +162,13 @@ struct SatGen
 		sig_en = asserts_en[pf];
 	}
 
+	void getAssumes(RTLIL::SigSpec &sig_a, RTLIL::SigSpec &sig_en, int timestep = -1)
+	{
+		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
+		sig_a = assumes_a[pf];
+		sig_en = assumes_en[pf];
+	}
+
 	int importAsserts(int timestep = -1)
 	{
 		std::vector<int> check_bits, enable_bits;
@@ -141,6 +179,20 @@ struct SatGen
 		} else {
 			check_bits = importDefSigSpec(asserts_a[pf], timestep);
 			enable_bits = importDefSigSpec(asserts_en[pf], timestep);
+		}
+		return ez->vec_reduce_and(ez->vec_or(check_bits, ez->vec_not(enable_bits)));
+	}
+
+	int importAssumes(int timestep = -1)
+	{
+		std::vector<int> check_bits, enable_bits;
+		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
+		if (model_undef) {
+			check_bits = ez->vec_and(ez->vec_not(importUndefSigSpec(assumes_a[pf], timestep)), importDefSigSpec(assumes_a[pf], timestep));
+			enable_bits = ez->vec_and(ez->vec_not(importUndefSigSpec(assumes_en[pf], timestep)), importDefSigSpec(assumes_en[pf], timestep));
+		} else {
+			check_bits = importDefSigSpec(assumes_a[pf], timestep);
+			enable_bits = importDefSigSpec(assumes_en[pf], timestep);
 		}
 		return ez->vec_reduce_and(ez->vec_or(check_bits, ez->vec_not(enable_bits)));
 	}
@@ -1201,6 +1253,14 @@ struct SatGen
 			std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
 			asserts_a[pf].append((*sigmap)(cell->getPort("\\A")));
 			asserts_en[pf].append((*sigmap)(cell->getPort("\\EN")));
+			return true;
+		}
+
+		if (cell->type == "$assume")
+		{
+			std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
+			assumes_a[pf].append((*sigmap)(cell->getPort("\\A")));
+			assumes_en[pf].append((*sigmap)(cell->getPort("\\EN")));
 			return true;
 		}
 

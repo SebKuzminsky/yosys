@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -17,14 +17,35 @@
  *
  */
 
-#ifndef ABC_BLIFPARSE
-#define ABC_BLIFPARSE
+#ifndef CELLAIGS_H
+#define CELLAIGS_H
 
 #include "kernel/yosys.h"
 
 YOSYS_NAMESPACE_BEGIN
 
-extern RTLIL::Design *abc_parse_blif(FILE *f, std::string dff_name);
+struct AigNode
+{
+	IdString portname;
+	int portbit;
+	bool inverter;
+	int left_parent, right_parent;
+	vector<pair<IdString, int>> outports;
+
+	AigNode();
+	bool operator==(const AigNode &other) const;
+	unsigned int hash() const;
+};
+
+struct Aig
+{
+	string name;
+	vector<AigNode> nodes;
+	Aig(Cell *cell);
+
+	bool operator==(const Aig &other) const;
+	unsigned int hash() const;
+};
 
 YOSYS_NAMESPACE_END
 

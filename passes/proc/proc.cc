@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -40,10 +40,12 @@ struct ProcPass : public Pass {
 		log("    proc_init\n");
 		log("    proc_arst\n");
 		log("    proc_mux\n");
+		log("    proc_dlatch\n");
 		log("    proc_dff\n");
 		log("    proc_clean\n");
 		log("\n");
-		log("This replaces the processes in the design with multiplexers and flip-flops.\n");
+		log("This replaces the processes in the design with multiplexers,\n");
+		log("flip-flops and latches.\n");
 		log("\n");
 		log("The following options are supported:\n");
 		log("\n");
@@ -77,11 +79,12 @@ struct ProcPass : public Pass {
 		else
 			Pass::call(design, "proc_arst -global_arst " + global_arst);
 		Pass::call(design, "proc_mux");
+		Pass::call(design, "proc_dlatch");
 		Pass::call(design, "proc_dff");
 		Pass::call(design, "proc_clean");
 
 		log_pop();
 	}
 } ProcPass;
- 
+
 PRIVATE_NAMESPACE_END

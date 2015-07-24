@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -281,6 +281,10 @@ struct WreduceWorker
 					work_queue_cells.insert(port.cell);
 		}
 
+		pool<SigSpec> complete_wires;
+		for (auto w : module->wires())
+			complete_wires.insert(mi.sigmap(w));
+
 		for (auto w : module->selected_wires())
 		{
 			int unused_top_bits = 0;
@@ -296,19 +300,22 @@ struct WreduceWorker
 				unused_top_bits++;
 			}
 
-			if (0 < unused_top_bits && unused_top_bits < GetSize(w)) {
-				log("Removed top %d bits (of %d) from wire %s.%s.\n", unused_top_bits, GetSize(w), log_id(module), log_id(w));
-				Wire *nw = module->addWire(NEW_ID, w);
-				nw->width = GetSize(w) - unused_top_bits;
-				module->connect(nw, SigSpec(w).extract(0, GetSize(nw)));
-				module->swap_names(w, nw);
-			}
+			if (unused_top_bits == 0 || unused_top_bits == GetSize(w))
+				continue;
+
+			if (complete_wires[mi.sigmap(w).extract(0, GetSize(w) - unused_top_bits)])
+				continue;
+
+			log("Removed top %d bits (of %d) from wire %s.%s.\n", unused_top_bits, GetSize(w), log_id(module), log_id(w));
+			Wire *nw = module->addWire(NEW_ID, GetSize(w) - unused_top_bits);
+			module->connect(nw, SigSpec(w).extract(0, GetSize(nw)));
+			module->swap_names(w, nw);
 		}
 	}
 };
 
 struct WreducePass : public Pass {
-	WreducePass() : Pass("wreduce", "reduce the word size of operations is possible") { }
+	WreducePass() : Pass("wreduce", "reduce the word size of operations if possible") { }
 	virtual void help()
 	{
 		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
@@ -339,6 +346,17 @@ struct WreducePass : public Pass {
 		{
 			if (module->has_processes_warn())
 				continue;
+
+			for (auto c : module->selected_cells())
+				if (c->type.in({"$reduce_and", "$reduce_or", "$reduce_xor", "$reduce_xnor", "$reduce_bool",
+						"$lt", "$le", "$eq", "$ne", "$eqx", "$nex", "$ge", "$gt",
+						"$logic_not", "$logic_and", "$logic_or"}) && GetSize(c->getPort("\\Y")) > 1) {
+					SigSpec sig = c->getPort("\\Y");
+					c->setPort("\\Y", sig[0]);
+					c->setParam("\\Y_WIDTH", 1);
+					sig.remove(0);
+					module->connect(sig, Const(0, GetSize(sig)));
+				}
 
 			WreduceWorker worker(&config, module);
 			worker.run();

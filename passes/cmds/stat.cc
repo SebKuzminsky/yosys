@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -208,20 +208,17 @@ struct StatPass : public Pass {
 		}
 		extra_args(args, argidx, design);
 
-		for (auto &it : design->modules_)
+		for (auto mod : design->selected_modules())
 		{
-			if (!design->selected_module(it.first))
-				continue;
-
 			if (!top_mod && design->full_selection())
-				if (it.second->get_bool_attribute("\\top"))
-					top_mod = it.second;
+				if (mod->get_bool_attribute("\\top"))
+					top_mod = mod;
 
-			statdata_t data(design, it.second, width_mode);
-			mod_stat[it.first] = data;
+			statdata_t data(design, mod, width_mode);
+			mod_stat[mod->name] = data;
 
 			log("\n");
-			log("=== %s%s ===\n", RTLIL::id2cstr(it.first), design->selected_whole_module(it.first) ? "" : " (partially selected)");
+			log("=== %s%s ===\n", RTLIL::id2cstr(mod->name), design->selected_whole_module(mod->name) ? "" : " (partially selected)");
 			log("\n");
 			data.log_data();
 		}
@@ -242,5 +239,5 @@ struct StatPass : public Pass {
 		log("\n");
 	}
 } StatPass;
- 
+
 PRIVATE_NAMESPACE_END

@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -37,7 +37,7 @@ struct MemoryMapWorker
 	{
 		std::stringstream sstr;
 		sstr << "$memory" << name.str() << token1;
-		
+
 		if (i >= 0)
 			sstr << "[" << i << "]";
 
@@ -80,13 +80,20 @@ struct MemoryMapWorker
 	{
 		std::set<int> static_ports;
 		std::map<int, RTLIL::SigSpec> static_cells_map;
+
+		int wr_ports = cell->parameters["\\WR_PORTS"].as_int();
+		int rd_ports = cell->parameters["\\RD_PORTS"].as_int();
+
 		int mem_size = cell->parameters["\\SIZE"].as_int();
 		int mem_width = cell->parameters["\\WIDTH"].as_int();
 		int mem_offset = cell->parameters["\\OFFSET"].as_int();
 		int mem_abits = cell->parameters["\\ABITS"].as_int();
 
+		SigSpec init_data = cell->getParam("\\INIT");
+		init_data.extend_u0(mem_size*mem_width, true);
+
 		// delete unused memory cell
-		if (cell->parameters["\\RD_PORTS"].as_int() == 0 && cell->parameters["\\WR_PORTS"].as_int() == 0) {
+		if (wr_ports == 0 && rd_ports == 0) {
 			module->remove(cell);
 			return;
 		}
@@ -95,6 +102,8 @@ struct MemoryMapWorker
 		RTLIL::SigSpec clocks = cell->getPort("\\WR_CLK");
 		RTLIL::Const clocks_pol = cell->parameters["\\WR_CLK_POLARITY"];
 		RTLIL::Const clocks_en = cell->parameters["\\WR_CLK_ENABLE"];
+		clocks_pol.bits.resize(wr_ports);
+		clocks_en.bits.resize(wr_ports);
 		RTLIL::SigSpec refclock;
 		RTLIL::State refclock_pol = RTLIL::State::Sx;
 		for (int i = 0; i < clocks.size(); i++) {
@@ -110,7 +119,7 @@ struct MemoryMapWorker
 					// FIXME: Actually we should check for wr_en.is_fully_const() also and
 					// create a $adff cell with this ports wr_en input as reset pin when wr_en
 					// is not a simple static 1.
-					static_cells_map[wr_addr.as_int()] = wr_data;
+					static_cells_map[wr_addr.as_int() - mem_offset] = wr_data;
 					static_ports.insert(i);
 					continue;
 				}
@@ -165,7 +174,10 @@ struct MemoryMapWorker
 					w_out_name = genid(cell->name, "", i, "$q");
 
 				RTLIL::Wire *w_out = module->addWire(w_out_name, mem_width);
-				w_out->start_offset = mem_offset;
+				SigSpec w_init = init_data.extract(i*mem_width, mem_width);
+
+				if (!w_init.is_fully_undef())
+					w_out->attributes["\\init"] = w_init.as_const();
 
 				data_reg_out.push_back(RTLIL::SigSpec(w_out));
 				c->setPort("\\Q", data_reg_out.back());
@@ -179,6 +191,9 @@ struct MemoryMapWorker
 		for (int i = 0; i < cell->parameters["\\RD_PORTS"].as_int(); i++)
 		{
 			RTLIL::SigSpec rd_addr = cell->getPort("\\RD_ADDR").extract(i*mem_abits, mem_abits);
+
+			if (mem_offset)
+				rd_addr = module->Sub(NEW_ID, rd_addr, SigSpec(mem_offset, GetSize(rd_addr)));
 
 			std::vector<RTLIL::SigSpec> rd_signals;
 			rd_signals.push_back(cell->getPort("\\RD_DATA").extract(i*mem_width, mem_width));
@@ -256,6 +271,10 @@ struct MemoryMapWorker
 				RTLIL::SigSpec wr_addr = cell->getPort("\\WR_ADDR").extract(j*mem_abits, mem_abits);
 				RTLIL::SigSpec wr_data = cell->getPort("\\WR_DATA").extract(j*mem_width, mem_width);
 				RTLIL::SigSpec wr_en = cell->getPort("\\WR_EN").extract(j*mem_width, mem_width);
+
+				if (mem_offset)
+					wr_addr = module->Sub(NEW_ID, wr_addr, SigSpec(mem_offset, GetSize(wr_addr)));
+
 				RTLIL::Wire *w_seladdr = addr_decode(wr_addr, RTLIL::SigSpec(i, mem_abits));
 
 				int wr_offset = 0;
@@ -341,5 +360,5 @@ struct MemoryMapPass : public Pass {
 			MemoryMapWorker(design, mod);
 	}
 } MemoryMapPass;
- 
+
 PRIVATE_NAMESPACE_END

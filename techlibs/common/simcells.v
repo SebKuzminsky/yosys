@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -77,6 +77,35 @@ module \$_MUX_ (A, B, S, Y);
 input A, B, S;
 output Y;
 assign Y = S ? B : A;
+endmodule
+
+module \$_MUX4_ (A, B, C, D, S, T, Y);
+input A, B, C, D, S, T;
+output Y;
+assign Y = T ? (S ? D : C) :
+               (S ? B : A);
+endmodule
+
+module \$_MUX8_ (A, B, C, D, E, F, G, H, S, T, U, Y);
+input A, B, C, D, E, F, G, H, S, T, U;
+output Y;
+assign Y = U ? T ? (S ? H : G) :
+                   (S ? F : E) :
+               T ? (S ? D : C) :
+                   (S ? B : A);
+endmodule
+
+module \$_MUX16_ (A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, S, T, U, V, Y);
+input A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, S, T, U, V;
+output Y;
+assign Y = V ? U ? T ? (S ? P : O) :
+                       (S ? N : M) :
+                   T ? (S ? L : K) :
+                       (S ? J : I) :
+               U ? T ? (S ? H : G) :
+                       (S ? F : E) :
+                   T ? (S ? D : C) :
+                       (S ? B : A);
 endmodule
 
 module  \$_AOI3_ (A, B, C, Y);

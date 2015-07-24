@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -244,6 +244,7 @@ struct ProcArstPass : public Pass {
 		}
 
 		extra_args(args, argidx, design);
+		pool<Wire*> delete_initattr_wires;
 
 		for (auto mod : design->modules())
 			if (design->selected(mod)) {
@@ -265,6 +266,7 @@ struct ProcArstPass : public Pass {
 										value.extend_u0(chunk.wire->width, false);
 										arst_sig.append(chunk);
 										arst_val.append(value.extract(chunk.offset, chunk.width));
+										delete_initattr_wires.insert(chunk.wire);
 									}
 								if (arst_sig.size()) {
 									log("Added global reset to process %s: %s <- %s\n",
@@ -281,7 +283,10 @@ struct ProcArstPass : public Pass {
 					}
 				}
 			}
+
+		for (auto wire : delete_initattr_wires)
+			wire->attributes.erase("\\init");
 	}
 } ProcArstPass;
- 
+
 PRIVATE_NAMESPACE_END

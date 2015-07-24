@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -43,8 +43,6 @@ LibertyAst::~LibertyAst()
 
 LibertyAst *LibertyAst::find(std::string name)
 {
-	if (this == NULL)
-		return NULL;
 	for (auto child : children)
 		if (child->id == name)
 			return child;
@@ -107,14 +105,14 @@ int LibertyParser::lexer(std::string &str)
 	}
 
 	if (c == '"') {
-		str = c;
+		str = "";
 		while (1) {
 			c = f.get();
 			if (c == '\n')
 				line++;
-			str += c;
 			if (c == '"')
 				break;
+			str += c;
 		}
 		// fprintf(stderr, "LEX: string >>%s<<\n", str.c_str());
 		return 'v';
@@ -175,7 +173,7 @@ LibertyAst *LibertyParser::parse()
 
 	if (tok == '}' || tok < 0)
 		return NULL;
-	
+
 	if (tok != 'v')
 		error();
 

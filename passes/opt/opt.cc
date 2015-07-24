@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -37,23 +37,23 @@ struct OptPass : public Pass {
 		log("a series of trivial optimizations and cleanups. This pass executes the other\n");
 		log("passes in the following order:\n");
 		log("\n");
-		log("    opt_const [-mux_undef] [-mux_bool] [-undriven] [-fine] [-full] [-keepdc]\n");
-		log("    opt_share -nomux\n");
+		log("    opt_const [-mux_undef] [-mux_bool] [-undriven] [-clkinv] [-fine] [-full] [-keepdc]\n");
+		log("    opt_share [-share_all] -nomux\n");
 		log("\n");
 		log("    do\n");
 		log("        opt_muxtree\n");
 		log("        opt_reduce [-fine] [-full]\n");
-		log("        opt_share\n");
+		log("        opt_share [-share_all]\n");
 		log("        opt_rmdff\n");
 		log("        opt_clean [-purge]\n");
-		log("        opt_const [-mux_undef] [-mux_bool] [-undriven] [-fine] [-full] [-keepdc]\n");
+		log("        opt_const [-mux_undef] [-mux_bool] [-undriven] [-clkinv] [-fine] [-full] [-keepdc]\n");
 		log("    while <changed design>\n");
 		log("\n");
 		log("When called with -fast the following script is used instead:\n");
 		log("\n");
 		log("    do\n");
-		log("        opt_const [-mux_undef] [-mux_bool] [-undriven] [-fine] [-full] [-keepdc]\n");
-		log("        opt_share\n");
+		log("        opt_const [-mux_undef] [-mux_bool] [-undriven] [-clkinv] [-fine] [-full] [-keepdc]\n");
+		log("        opt_share [-share_all]\n");
 		log("        opt_rmdff\n");
 		log("        opt_clean [-purge]\n");
 		log("    while <changed design in opt_rmdff>\n");
@@ -68,6 +68,7 @@ struct OptPass : public Pass {
 		std::string opt_clean_args;
 		std::string opt_const_args;
 		std::string opt_reduce_args;
+		std::string opt_share_args;
 		bool fast_mode = false;
 
 		log_header("Executing OPT pass (performing simple optimizations).\n");
@@ -91,6 +92,10 @@ struct OptPass : public Pass {
 				opt_const_args += " -undriven";
 				continue;
 			}
+			if (args[argidx] == "-clkinv") {
+				opt_const_args += " -clkinv";
+				continue;
+			}
 			if (args[argidx] == "-fine") {
 				opt_const_args += " -fine";
 				opt_reduce_args += " -fine";
@@ -105,6 +110,10 @@ struct OptPass : public Pass {
 				opt_const_args += " -keepdc";
 				continue;
 			}
+			if (args[argidx] == "-share_all") {
+				opt_share_args += " -share_all";
+				continue;
+			}
 			if (args[argidx] == "-fast") {
 				fast_mode = true;
 				continue;
@@ -117,7 +126,7 @@ struct OptPass : public Pass {
 		{
 			while (1) {
 				Pass::call(design, "opt_const" + opt_const_args);
-				Pass::call(design, "opt_share");
+				Pass::call(design, "opt_share" + opt_share_args);
 				design->scratchpad_unset("opt.did_something");
 				Pass::call(design, "opt_rmdff");
 				if (design->scratchpad_get_bool("opt.did_something") == false)
@@ -130,12 +139,12 @@ struct OptPass : public Pass {
 		else
 		{
 			Pass::call(design, "opt_const" + opt_const_args);
-			Pass::call(design, "opt_share -nomux");
+			Pass::call(design, "opt_share -nomux" + opt_share_args);
 			while (1) {
 				design->scratchpad_unset("opt.did_something");
 				Pass::call(design, "opt_muxtree");
 				Pass::call(design, "opt_reduce" + opt_reduce_args);
-				Pass::call(design, "opt_share");
+				Pass::call(design, "opt_share" + opt_share_args);
 				Pass::call(design, "opt_rmdff");
 				Pass::call(design, "opt_clean" + opt_clean_args);
 				Pass::call(design, "opt_const" + opt_const_args);
@@ -145,9 +154,13 @@ struct OptPass : public Pass {
 			}
 		}
 
+		design->optimize();
+		design->sort();
+		design->check();
+
 		log_header(fast_mode ? "Finished fast OPT passes.\n" : "Finished OPT passes. (There is nothing left to do.)\n");
 		log_pop();
 	}
 } OptPass;
- 
+
 PRIVATE_NAMESPACE_END

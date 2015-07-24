@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -57,7 +57,7 @@ namespace VERILOG_FRONTEND {
 	std::vector<char> case_type_stack;
 	bool do_not_require_port_stubs;
 	bool default_nettype_wire;
-	bool sv_mode;
+	bool sv_mode, formal_mode;
 	std::istream *lexin;
 }
 YOSYS_NAMESPACE_END
@@ -111,7 +111,7 @@ static void free_attr(std::map<std::string, AstNode*> *al)
 %token TOK_GENERATE TOK_ENDGENERATE TOK_GENVAR TOK_REAL
 %token TOK_SYNOPSYS_FULL_CASE TOK_SYNOPSYS_PARALLEL_CASE
 %token TOK_SUPPLY0 TOK_SUPPLY1 TOK_TO_SIGNED TOK_TO_UNSIGNED
-%token TOK_POS_INDEXED TOK_NEG_INDEXED TOK_ASSERT TOK_PROPERTY
+%token TOK_POS_INDEXED TOK_NEG_INDEXED TOK_ASSERT TOK_ASSUME TOK_PROPERTY
 
 %type <ast> range range_or_multirange  non_opt_range non_opt_multirange range_or_signed_int
 %type <ast> wire_type expr basic_expr concat_list rvalue lvalue lvalue_concat_list
@@ -139,6 +139,7 @@ static void free_attr(std::map<std::string, AstNode*> *al)
 %%
 
 input: {
+	ast_stack.clear();
 	ast_stack.push_back(current_ast);
 } design {
 	ast_stack.pop_back();
@@ -309,10 +310,17 @@ module_arg:
 		do_not_require_port_stubs = true;
 	};
 
+non_opt_delay:
+	'#' '(' expr ')' { delete $3; } |
+	'#' '(' expr ':' expr ':' expr ')' { delete $3; delete $5; delete $7; };
+
+delay:
+	non_opt_delay | /* empty */;
+
 wire_type:
 	{
 		astbuf3 = new AstNode(AST_WIRE);
-	} wire_type_token_list {
+	} wire_type_token_list delay {
 		$$ = astbuf3;
 	};
 
@@ -741,7 +749,7 @@ wire_name:
 	};
 
 assign_stmt:
-	TOK_ASSIGN assign_expr_list ';';
+	TOK_ASSIGN delay assign_expr_list ';';
 
 assign_expr_list:
 	assign_expr | assign_expr_list ',' assign_expr;
@@ -761,7 +769,7 @@ cell_stmt:
 	} cell_parameter_list_opt cell_list ';' {
 		delete astbuf1;
 	} |
-	attr tok_prim_wrapper {
+	attr tok_prim_wrapper delay {
 		astbuf1 = new AstNode(AST_PRIMITIVE);
 		astbuf1->str = *$2;
 		append_attr(astbuf1, $1);
@@ -926,27 +934,34 @@ opt_label:
 assert:
 	TOK_ASSERT '(' expr ')' ';' {
 		ast_stack.back()->children.push_back(new AstNode(AST_ASSERT, $3));
+	} |
+	TOK_ASSUME '(' expr ')' ';' {
+		ast_stack.back()->children.push_back(new AstNode(AST_ASSUME, $3));
 	};
 
 assert_property:
 	TOK_ASSERT TOK_PROPERTY '(' expr ')' ';' {
 		ast_stack.back()->children.push_back(new AstNode(AST_ASSERT, $4));
+	} |
+	TOK_ASSUME TOK_PROPERTY '(' expr ')' ';' {
+		ast_stack.back()->children.push_back(new AstNode(AST_ASSUME, $4));
 	};
 
 simple_behavioral_stmt:
-	lvalue '=' expr {
-		AstNode *node = new AstNode(AST_ASSIGN_EQ, $1, $3);
+	lvalue '=' delay expr {
+		AstNode *node = new AstNode(AST_ASSIGN_EQ, $1, $4);
 		ast_stack.back()->children.push_back(node);
 	} |
-	lvalue OP_LE expr {
-		AstNode *node = new AstNode(AST_ASSIGN_LE, $1, $3);
+	lvalue OP_LE delay expr {
+		AstNode *node = new AstNode(AST_ASSIGN_LE, $1, $4);
 		ast_stack.back()->children.push_back(node);
 	};
 
 // this production creates the obligatory if-else shift/reduce conflict
 behavioral_stmt:
 	defattr | assert | wire_decl |
-	simple_behavioral_stmt ';' |
+	non_opt_delay behavioral_stmt |
+	simple_behavioral_stmt ';' | ';' |
 	hierarchical_id attr {
 		AstNode *node = new AstNode(AST_TCALL);
 		node->str = *$1;
@@ -1039,13 +1054,13 @@ behavioral_stmt:
 	};
 
 case_type:
-	TOK_CASE { 
+	TOK_CASE {
 		case_type_stack.push_back(0);
 	} |
-	TOK_CASEX { 
+	TOK_CASEX {
 		case_type_stack.push_back('x');
 	} |
-	TOK_CASEZ { 
+	TOK_CASEZ {
 		case_type_stack.push_back('z');
 	};
 
@@ -1059,10 +1074,6 @@ opt_synopsys_attr:
 			ast_stack.back()->attributes["\\parallel_case"] = AstNode::mkconst_int(1, false);
 	} |
 	/* empty */;
-
-behavioral_stmt_opt:
-	behavioral_stmt |
-	';' ;
 
 behavioral_stmt_list:
 	behavioral_stmt_list behavioral_stmt |
@@ -1092,7 +1103,7 @@ case_item:
 		ast_stack.back()->children.push_back(block);
 		ast_stack.push_back(block);
 		case_type_stack.push_back(0);
-	} behavioral_stmt_opt {
+	} behavioral_stmt {
 		case_type_stack.pop_back();
 		ast_stack.pop_back();
 		ast_stack.pop_back();
@@ -1329,6 +1340,11 @@ basic_expr:
 	} |
 	'(' expr ')' {
 		$$ = $2;
+	} |
+	'(' expr ':' expr ':' expr ')' {
+		delete $2;
+		$$ = $4;
+		delete $6;
 	} |
 	'{' concat_list '}' {
 		$$ = $2;

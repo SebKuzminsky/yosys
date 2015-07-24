@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -1163,7 +1163,24 @@ input A, EN;
 `ifndef SIMLIB_NOCHECKS
 always @* begin
 	if (A !== 1'b1 && EN === 1'b1) begin
-		$display("Assertation failed!");
+		$display("Assertation %m failed!");
+		$stop;
+	end
+end
+`endif
+
+endmodule
+
+// --------------------------------------------------------
+
+module \$assume (A, EN);
+
+input A, EN;
+
+`ifndef SIMLIB_NOCHECKS
+always @* begin
+	if (A !== 1'b1 && EN === 1'b1) begin
+		$display("Assumption %m failed!");
 		$stop;
 	end
 end
@@ -1328,7 +1345,7 @@ output reg [WIDTH-1:0] Q;
 
 always @* begin
 	if (EN == EN_POLARITY)
-		Q <= D;
+		Q = D;
 end
 
 endmodule
@@ -1356,11 +1373,11 @@ generate
 	for (i = 0; i < WIDTH; i = i+1) begin:bit
 		always @*
 			if (pos_clr[i])
-				Q[i] <= 0;
+				Q[i] = 0;
 			else if (pos_set[i])
-				Q[i] <= 1;
+				Q[i] = 1;
 			else if (pos_en)
-				Q[i] <= D[i];
+				Q[i] = D[i];
 	end
 endgenerate
 
@@ -1514,20 +1531,43 @@ endmodule
 
 // --------------------------------------------------------
 
-module \$mem (RD_CLK, RD_ADDR, RD_DATA, WR_CLK, WR_EN, WR_ADDR, WR_DATA);
+module \$meminit (ADDR, DATA);
 
 parameter MEMID = "";
-parameter SIZE = 256;
-parameter OFFSET = 0;
 parameter ABITS = 8;
 parameter WIDTH = 8;
 
-parameter RD_PORTS = 1;
+parameter PRIORITY = 0;
+
+input [ABITS-1:0] ADDR;
+input [WIDTH-1:0] DATA;
+
+initial begin
+	if (MEMID != "") begin
+		$display("ERROR: Found non-simulatable instance of $meminit!");
+		$finish;
+	end
+end
+
+endmodule
+
+// --------------------------------------------------------
+
+module \$mem (RD_CLK, RD_ADDR, RD_DATA, WR_CLK, WR_EN, WR_ADDR, WR_DATA);
+
+parameter MEMID = "";
+parameter signed SIZE = 4;
+parameter signed OFFSET = 0;
+parameter signed ABITS = 2;
+parameter signed WIDTH = 8;
+parameter signed INIT = 1'bx;
+
+parameter signed RD_PORTS = 1;
 parameter RD_CLK_ENABLE = 1'b1;
 parameter RD_CLK_POLARITY = 1'b1;
 parameter RD_TRANSPARENT = 1'b1;
 
-parameter WR_PORTS = 1;
+parameter signed WR_PORTS = 1;
 parameter WR_CLK_ENABLE = 1'b1;
 parameter WR_CLK_POLARITY = 1'b1;
 
@@ -1561,25 +1601,36 @@ function port_active;
 	end
 endfunction
 
+initial begin
+	for (i = 0; i < SIZE; i = i+1)
+		memory[i] = INIT >>> (i*WIDTH);
+end
+
 always @(RD_CLK, RD_ADDR, RD_DATA, WR_CLK, WR_EN, WR_ADDR, WR_DATA) begin
 `ifdef SIMLIB_MEMDELAY
 	#`SIMLIB_MEMDELAY;
 `endif
 	for (i = 0; i < RD_PORTS; i = i+1) begin
-		if ((!RD_TRANSPARENT[i] && RD_CLK_ENABLE[i]) && port_active(RD_CLK_ENABLE[i], RD_CLK_POLARITY[i], LAST_RD_CLK[i], RD_CLK[i]))
+		if ((!RD_TRANSPARENT[i] && RD_CLK_ENABLE[i]) && port_active(RD_CLK_ENABLE[i], RD_CLK_POLARITY[i], LAST_RD_CLK[i], RD_CLK[i])) begin
+			// $display("Read from %s: addr=%b data=%b", MEMID, RD_ADDR[i*ABITS +: ABITS],  memory[RD_ADDR[i*ABITS +: ABITS] - OFFSET]);
 			RD_DATA[i*WIDTH +: WIDTH] <= memory[RD_ADDR[i*ABITS +: ABITS] - OFFSET];
+		end
 	end
 
 	for (i = 0; i < WR_PORTS; i = i+1) begin
 		if (port_active(WR_CLK_ENABLE[i], WR_CLK_POLARITY[i], LAST_WR_CLK[i], WR_CLK[i]))
 			for (j = 0; j < WIDTH; j = j+1)
-				if (WR_EN[i*WIDTH+j])
+				if (WR_EN[i*WIDTH+j]) begin
+					// $display("Write to %s: addr=%b data=%b", MEMID, WR_ADDR[i*ABITS +: ABITS], WR_DATA[i*WIDTH+j]);
 					memory[WR_ADDR[i*ABITS +: ABITS] - OFFSET][j] = WR_DATA[i*WIDTH+j];
+				end
 	end
 
 	for (i = 0; i < RD_PORTS; i = i+1) begin
-		if ((RD_TRANSPARENT[i] || !RD_CLK_ENABLE[i]) && port_active(RD_CLK_ENABLE[i], RD_CLK_POLARITY[i], LAST_RD_CLK[i], RD_CLK[i]))
+		if ((RD_TRANSPARENT[i] || !RD_CLK_ENABLE[i]) && port_active(RD_CLK_ENABLE[i], RD_CLK_POLARITY[i], LAST_RD_CLK[i], RD_CLK[i])) begin
+			// $display("Transparent read from %s: addr=%b data=%b", MEMID, RD_ADDR[i*ABITS +: ABITS],  memory[RD_ADDR[i*ABITS +: ABITS] - OFFSET]);
 			RD_DATA[i*WIDTH +: WIDTH] <= memory[RD_ADDR[i*ABITS +: ABITS] - OFFSET];
+		end
 	end
 
 	LAST_RD_CLK <= RD_CLK;

@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -71,6 +71,53 @@ int getopt(int argc, char **argv, const char *optstring)
 
 
 USING_YOSYS_NAMESPACE
+
+#ifdef EMSCRIPTEN
+#  include <sys/stat.h>
+#  include <sys/types.h>
+
+extern "C" int main(int, char**);
+extern "C" void run(const char*);
+extern "C" const char *errmsg();
+extern "C" const char *prompt();
+
+int main(int, char**)
+{
+	mkdir("/work", 0777);
+	chdir("/work");
+	log_files.push_back(stdout);
+	log_error_stderr = true;
+	yosys_banner();
+	yosys_setup();
+}
+
+void run(const char *command)
+{
+	int selSize = GetSize(yosys_get_design()->selection_stack);
+	try {
+		log_last_error = "Internal error (see JavaScript console for details)";
+		run_pass(command);
+		log_last_error = "";
+	} catch (...) {
+		while (GetSize(yosys_get_design()->selection_stack) > selSize)
+			yosys_get_design()->selection_stack.pop_back();
+		throw;
+	}
+}
+
+const char *errmsg()
+{
+	return log_last_error.c_str();
+}
+
+const char *prompt()
+{
+	const char *p = create_prompt(yosys_get_design(), 0);
+	while (*p == '\n') p++;
+	return p;
+}
+
+#else /* EMSCRIPTEN */
 
 int main(int argc, char **argv)
 {
@@ -439,4 +486,6 @@ int main(int argc, char **argv)
 
 	return 0;
 }
+
+#endif /* EMSCRIPTEN */
 

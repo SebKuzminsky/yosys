@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -147,7 +147,7 @@ RTLIL::Const RTLIL::Const::from_string(std::string str)
 std::string RTLIL::Const::decode_string() const
 {
 	std::string string;
-	std::vector <char> string_chars;
+	std::vector<char> string_chars;
 	for (int i = 0; i < int (bits.size()); i += 8) {
 		char ch = 0;
 		for (int j = 0; j < 8 && i + j < int (bits.size()); j++)
@@ -159,6 +159,46 @@ std::string RTLIL::Const::decode_string() const
 	for (int i = int (string_chars.size()) - 1; i >= 0; i--)
 		string += string_chars[i];
 	return string;
+}
+
+void RTLIL::AttrObject::set_bool_attribute(RTLIL::IdString id)
+{
+	attributes[id] = RTLIL::Const(1);
+}
+
+bool RTLIL::AttrObject::get_bool_attribute(RTLIL::IdString id) const
+{
+	if (attributes.count(id) == 0)
+		return false;
+	return attributes.at(id).as_bool();
+}
+
+void RTLIL::AttrObject::set_strpool_attribute(RTLIL::IdString id, const pool<string> &data)
+{
+	string attrval;
+	for (auto &s : data) {
+		if (!attrval.empty())
+			attrval += "|";
+		attrval += s;
+	}
+	attributes[id] = RTLIL::Const(attrval);
+}
+
+void RTLIL::AttrObject::add_strpool_attribute(RTLIL::IdString id, const pool<string> &data)
+{
+	pool<string> union_data = get_strpool_attribute(id);
+	union_data.insert(data.begin(), data.end());
+	if (!union_data.empty())
+		set_strpool_attribute(id, union_data);
+}
+
+pool<string> RTLIL::AttrObject::get_strpool_attribute(RTLIL::IdString id) const
+{
+	pool<string> data;
+	if (attributes.count(id) != 0)
+		for (auto s : split_tokens(attributes.at(id).decode_string(), "|"))
+			data.insert(s);
+	return data;
 }
 
 bool RTLIL::Selection::selected_module(RTLIL::IdString mod_name) const
@@ -276,6 +316,21 @@ RTLIL::Module *RTLIL::Design::module(RTLIL::IdString name)
 	return modules_.count(name) ? modules_.at(name) : NULL;
 }
 
+RTLIL::Module *RTLIL::Design::top_module()
+{
+	RTLIL::Module *module = nullptr;
+	int module_count = 0;
+
+	for (auto mod : selected_modules()) {
+		if (mod->get_bool_attribute("\\top"))
+			return mod;
+		module_count++;
+		module = mod;
+	}
+
+	return module_count == 1 ? module : nullptr;
+}
+
 void RTLIL::Design::add(RTLIL::Module *module)
 {
 	log_assert(modules_.count(module->name) == 0);
@@ -387,6 +442,13 @@ void RTLIL::Design::remove(RTLIL::Module *module)
 	log_assert(modules_.at(module->name) == module);
 	modules_.erase(module->name);
 	delete module;
+}
+
+void RTLIL::Design::rename(RTLIL::Module *module, RTLIL::IdString new_name)
+{
+	modules_.erase(module->name);
+	module->name = new_name;
+	add(module);
 }
 
 void RTLIL::Design::sort()
@@ -904,15 +966,25 @@ namespace {
 				return;
 			}
 
+			if (cell->type == "$meminit") {
+				param("\\MEMID");
+				param("\\PRIORITY");
+				port("\\ADDR", param("\\ABITS"));
+				port("\\DATA", param("\\WIDTH"));
+				check_expected();
+				return;
+			}
+
 			if (cell->type == "$mem") {
 				param("\\MEMID");
 				param("\\SIZE");
 				param("\\OFFSET");
-				param_bits("\\RD_CLK_ENABLE", param("\\RD_PORTS"));
-				param_bits("\\RD_CLK_POLARITY", param("\\RD_PORTS"));
-				param_bits("\\RD_TRANSPARENT", param("\\RD_PORTS"));
-				param_bits("\\WR_CLK_ENABLE", param("\\WR_PORTS"));
-				param_bits("\\WR_CLK_POLARITY", param("\\WR_PORTS"));
+				param("\\INIT");
+				param_bits("\\RD_CLK_ENABLE", std::max(1, param("\\RD_PORTS")));
+				param_bits("\\RD_CLK_POLARITY", std::max(1, param("\\RD_PORTS")));
+				param_bits("\\RD_TRANSPARENT", std::max(1, param("\\RD_PORTS")));
+				param_bits("\\WR_CLK_ENABLE", std::max(1, param("\\WR_PORTS")));
+				param_bits("\\WR_CLK_POLARITY", std::max(1, param("\\WR_PORTS")));
 				port("\\RD_CLK", param("\\RD_PORTS"));
 				port("\\RD_ADDR", param("\\RD_PORTS") * param("\\ABITS"));
 				port("\\RD_DATA", param("\\RD_PORTS") * param("\\WIDTH"));
@@ -925,6 +997,13 @@ namespace {
 			}
 
 			if (cell->type == "$assert") {
+				port("\\A", 1);
+				port("\\EN", 1);
+				check_expected();
+				return;
+			}
+
+			if (cell->type == "$assume") {
 				port("\\A", 1);
 				port("\\EN", 1);
 				check_expected();
@@ -952,6 +1031,10 @@ namespace {
 			if (cell->type == "$_OAI3_") { check_gate("ABCY"); return; }
 			if (cell->type == "$_AOI4_") { check_gate("ABCDY"); return; }
 			if (cell->type == "$_OAI4_") { check_gate("ABCDY"); return; }
+
+			if (cell->type == "$_MUX4_")  { check_gate("ABCDSTY"); return; }
+			if (cell->type == "$_MUX8_")  { check_gate("ABCDEFGHSTUY"); return; }
+			if (cell->type == "$_MUX16_") { check_gate("ABCDEFGHIJKLMNOPSTUVY"); return; }
 
 			if (cell->type == "$_SR_NN_") { check_gate("SRQ"); return; }
 			if (cell->type == "$_SR_NP_") { check_gate("SRQ"); return; }
@@ -1096,6 +1179,8 @@ void RTLIL::Module::cloneInto(RTLIL::Module *new_mod) const
 {
 	log_assert(new_mod->refcount_wires_ == 0);
 	log_assert(new_mod->refcount_cells_ == 0);
+
+	new_mod->avail_parameters = avail_parameters;
 
 	for (auto &conn : connections_)
 		new_mod->connect(conn);
@@ -2785,7 +2870,7 @@ void RTLIL::SigSpec::extend_u0(int width, bool is_signed)
 
 	if (width_ > width)
 		remove(width, width_ - width);
-	
+
 	if (width_ < width) {
 		RTLIL::SigBit padding = width_ > 0 ? (*this)[width_ - 1] : RTLIL::State::S0;
 		if (!is_signed)
@@ -2936,6 +3021,21 @@ bool RTLIL::SigSpec::is_fully_const() const
 	for (auto it = chunks_.begin(); it != chunks_.end(); it++)
 		if (it->width > 0 && it->wire != NULL)
 			return false;
+	return true;
+}
+
+bool RTLIL::SigSpec::is_fully_zero() const
+{
+	cover("kernel.rtlil.sigspec.is_fully_zero");
+
+	pack();
+	for (auto it = chunks_.begin(); it != chunks_.end(); it++) {
+		if (it->width > 0 && it->wire != NULL)
+			return false;
+		for (size_t i = 0; i < it->data.size(); i++)
+			if (it->data[i] != RTLIL::State::S0)
+				return false;
+	}
 	return true;
 }
 
@@ -3339,7 +3439,7 @@ RTLIL::SwitchRule *RTLIL::SwitchRule::clone() const
 	for (auto &it : cases)
 		new_switchrule->cases.push_back(it->clone());
 	return new_switchrule;
-	
+
 }
 
 RTLIL::SyncRule *RTLIL::SyncRule::clone() const
@@ -3371,7 +3471,7 @@ RTLIL::Process *RTLIL::Process::clone() const
 
 	for (auto &it : syncs)
 		new_proc->syncs.push_back(it->clone());
-	
+
 	return new_proc;
 }
 

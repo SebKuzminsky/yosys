@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -371,8 +371,8 @@ struct MaccmapPass : public Pass {
 		log("\n");
 		log("    maccmap [-unmap] [selection]\n");
 		log("\n");
-		log("This pass maps $macc cells to yosys gate primitives. When the -unmap option is\n");
-		log("used then the $macc cell is mapped to $and, $sub, etc. cells instead.\n");
+		log("This pass maps $macc cells to yosys $fa and $alu cells. When the -unmap option\n");
+		log("is used then the $macc cell is mapped to $add, $sub, etc. cells instead.\n");
 		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
@@ -400,5 +400,5 @@ struct MaccmapPass : public Pass {
 			}
 	}
 } MaccmapPass;
- 
+
 PRIVATE_NAMESPACE_END

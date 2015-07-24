@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -76,12 +76,17 @@ struct RenamePass : public Pass {
 		log("Assign private names (the ones with $-prefix) to all selected wires and cells\n");
 		log("with public names. This ignores all selected ports.\n");
 		log("\n");
+		log("    rename -top new_name\n");
+		log("\n");
+		log("Rename top module.\n");
+		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
 	{
 		std::string pattern_prefix = "_", pattern_suffix = "_";
 		bool flag_enumerate = false;
 		bool flag_hide = false;
+		bool flag_top = false;
 		bool got_mode = false;
 
 		size_t argidx;
@@ -95,6 +100,11 @@ struct RenamePass : public Pass {
 			}
 			if (arg == "-hide" && !got_mode) {
 				flag_hide = true;
+				got_mode = true;
+				continue;
+			}
+			if (arg == "-top" && !got_mode) {
+				flag_top = true;
 				got_mode = true;
 				continue;
 			}
@@ -171,6 +181,21 @@ struct RenamePass : public Pass {
 			}
 		}
 		else
+		if (flag_top)
+		{
+			if (argidx+1 != args.size())
+				log_cmd_error("Invalid number of arguments!\n");
+
+			IdString new_name = RTLIL::escape_id(args[argidx]);
+			RTLIL::Module *module = design->top_module();
+
+			if (module == NULL)
+				log_cmd_error("No top module found!\n");
+
+			log("Renaming module %s to %s.\n", log_id(module), log_id(new_name));
+			design->rename(module, new_name);
+		}
+		else
 		{
 			if (argidx+2 != args.size())
 				log_cmd_error("Invalid number of arguments!\n");
@@ -203,5 +228,5 @@ struct RenamePass : public Pass {
 		}
 	}
 } RenamePass;
- 
+
 PRIVATE_NAMESPACE_END

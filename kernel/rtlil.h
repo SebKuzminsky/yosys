@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -53,6 +53,7 @@ namespace RTLIL
 	};
 
 	struct Const;
+	struct AttrObject;
 	struct Selection;
 	struct Monitor;
 	struct Design;
@@ -208,7 +209,7 @@ namespace RTLIL
 
 		char operator[](size_t i) const {
 			const char *p = c_str();
-			for (; i != 0; i--, p++) 
+			for (; i != 0; i--, p++)
 				log_assert(*p != 0);
 			return *p;
 		}
@@ -474,6 +475,16 @@ struct RTLIL::Const
 	std::string decode_string() const;
 
 	inline int size() const { return bits.size(); }
+	inline RTLIL::State &operator[](int index) { return bits.at(index); }
+	inline const RTLIL::State &operator[](int index) const { return bits.at(index); };
+
+	inline RTLIL::Const extract(int offset, int len = 1, RTLIL::State padding = RTLIL::State::S0) const {
+		RTLIL::Const ret;
+		ret.bits.reserve(len);
+		for (int i = offset; i < offset + len; i++)
+			ret.bits.push_back(i < GetSize(bits) ? bits[i] : padding);
+		return ret;
+	}
 
 	inline unsigned int hash() const {
 		unsigned int h = mkhash_init;
@@ -481,6 +492,17 @@ struct RTLIL::Const
 			mkhash(h, b);
 		return h;
 	}
+};
+
+struct RTLIL::AttrObject
+{
+	dict<RTLIL::IdString, RTLIL::Const> attributes;
+
+	void set_bool_attribute(RTLIL::IdString id);
+	bool get_bool_attribute(RTLIL::IdString id) const;
+	void set_strpool_attribute(RTLIL::IdString id, const pool<string> &data);
+	void add_strpool_attribute(RTLIL::IdString id, const pool<string> &data);
+	pool<string> get_strpool_attribute(RTLIL::IdString id) const;
 };
 
 struct RTLIL::SigChunk
@@ -670,6 +692,7 @@ public:
 	bool is_chunk() const;
 
 	bool is_fully_const() const;
+	bool is_fully_zero() const;
 	bool is_fully_def() const;
 	bool is_fully_undef() const;
 	bool has_const() const;
@@ -777,6 +800,7 @@ struct RTLIL::Design
 
 	RTLIL::ObjRange<RTLIL::Module*> modules();
 	RTLIL::Module *module(RTLIL::IdString name);
+	RTLIL::Module *top_module();
 
 	bool has(RTLIL::IdString id) const {
 		return modules_.count(id) != 0;
@@ -785,6 +809,7 @@ struct RTLIL::Design
 	void add(RTLIL::Module *module);
 	RTLIL::Module *addModule(RTLIL::IdString name);
 	void remove(RTLIL::Module *module);
+	void rename(RTLIL::Module *module, RTLIL::IdString new_name);
 
 	void scratchpad_unset(std::string varname);
 
@@ -806,6 +831,14 @@ struct RTLIL::Design
 
 	bool selected_module(RTLIL::Module *mod) const;
 	bool selected_whole_module(RTLIL::Module *mod) const;
+
+	RTLIL::Selection &selection() {
+		return selection_stack.back();
+	}
+
+	const RTLIL::Selection &selection() const {
+		return selection_stack.back();
+	}
 
 	bool full_selection() const {
 		return selection_stack.back().full_selection;
@@ -831,18 +864,7 @@ struct RTLIL::Design
 	std::vector<RTLIL::Module*> selected_whole_modules_warn() const;
 };
 
-#define RTLIL_ATTRIBUTE_MEMBERS                                \
-	dict<RTLIL::IdString, RTLIL::Const> attributes;    \
-	void set_bool_attribute(RTLIL::IdString id) {          \
-		attributes[id] = RTLIL::Const(1);              \
-	}                                                      \
-	bool get_bool_attribute(RTLIL::IdString id) const {    \
-		if (attributes.count(id) == 0)                 \
-			return false;                          \
-		return attributes.at(id).as_bool();            \
-	}
-
-struct RTLIL::Module
+struct RTLIL::Module : public RTLIL::AttrObject
 {
 	unsigned int hashidx_;
 	unsigned int hash() const { return hashidx_; }
@@ -866,7 +888,6 @@ public:
 	pool<RTLIL::IdString> avail_parameters;
 	dict<RTLIL::IdString, RTLIL::Memory*> memories;
 	dict<RTLIL::IdString, RTLIL::Process*> processes;
-	RTLIL_ATTRIBUTE_MEMBERS
 
 	Module();
 	virtual ~Module();
@@ -933,25 +954,25 @@ public:
 	RTLIL::Cell* addNot (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addPos (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addNeg (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
-                     
+
 	RTLIL::Cell* addAnd  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addOr   (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addXor  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addXnor (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
-                     
+
 	RTLIL::Cell* addReduceAnd  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addReduceOr   (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addReduceXor  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addReduceXnor (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addReduceBool (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
-                     
+
 	RTLIL::Cell* addShl    (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addShr    (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addSshl   (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addSshr   (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addShift  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addShiftx (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
-                     
+
 	RTLIL::Cell* addLt  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addLe  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addEq  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
@@ -960,21 +981,21 @@ public:
 	RTLIL::Cell* addNex (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addGe  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addGt  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
-                     
+
 	RTLIL::Cell* addAdd (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addSub (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addMul (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addDiv (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addMod (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addPow (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool a_signed = false, bool b_signed = false);
-                     
+
 	RTLIL::Cell* addLogicNot (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addLogicAnd (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
 	RTLIL::Cell* addLogicOr  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y, bool is_signed = false);
-                     
+
 	RTLIL::Cell* addMux  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_s, RTLIL::SigSpec sig_y);
 	RTLIL::Cell* addPmux (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_s, RTLIL::SigSpec sig_y);
-                     
+
 	RTLIL::Cell* addSlice  (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, RTLIL::Const offset);
 	RTLIL::Cell* addConcat (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_y);
 	RTLIL::Cell* addLut    (RTLIL::IdString name, RTLIL::SigSpec sig_i, RTLIL::SigSpec sig_o, RTLIL::Const lut);
@@ -1077,7 +1098,7 @@ public:
 	RTLIL::SigBit Oai4Gate (RTLIL::IdString name, RTLIL::SigBit sig_a, RTLIL::SigBit sig_b, RTLIL::SigBit sig_c, RTLIL::SigBit sig_d);
 };
 
-struct RTLIL::Wire
+struct RTLIL::Wire : public RTLIL::AttrObject
 {
 	unsigned int hashidx_;
 	unsigned int hash() const { return hashidx_; }
@@ -1097,10 +1118,9 @@ public:
 	RTLIL::IdString name;
 	int width, start_offset, port_id;
 	bool port_input, port_output, upto;
-	RTLIL_ATTRIBUTE_MEMBERS
 };
 
-struct RTLIL::Memory
+struct RTLIL::Memory : public RTLIL::AttrObject
 {
 	unsigned int hashidx_;
 	unsigned int hash() const { return hashidx_; }
@@ -1109,10 +1129,9 @@ struct RTLIL::Memory
 
 	RTLIL::IdString name;
 	int width, start_offset, size;
-	RTLIL_ATTRIBUTE_MEMBERS
 };
 
-struct RTLIL::Cell
+struct RTLIL::Cell : public RTLIL::AttrObject
 {
 	unsigned int hashidx_;
 	unsigned int hash() const { return hashidx_; }
@@ -1132,7 +1151,6 @@ public:
 	RTLIL::IdString type;
 	dict<RTLIL::IdString, RTLIL::SigSpec> connections_;
 	dict<RTLIL::IdString, RTLIL::Const> parameters;
-	RTLIL_ATTRIBUTE_MEMBERS
 
 	// access cell ports
 	bool hasPort(RTLIL::IdString portname) const;
@@ -1177,10 +1195,9 @@ struct RTLIL::CaseRule
 	RTLIL::CaseRule *clone() const;
 };
 
-struct RTLIL::SwitchRule
+struct RTLIL::SwitchRule : public RTLIL::AttrObject
 {
 	RTLIL::SigSpec signal;
-	RTLIL_ATTRIBUTE_MEMBERS
 	std::vector<RTLIL::CaseRule*> cases;
 
 	~SwitchRule();
@@ -1199,10 +1216,9 @@ struct RTLIL::SyncRule
 	RTLIL::SyncRule *clone() const;
 };
 
-struct RTLIL::Process
+struct RTLIL::Process : public RTLIL::AttrObject
 {
 	RTLIL::IdString name;
-	RTLIL_ATTRIBUTE_MEMBERS
 	RTLIL::CaseRule root_case;
 	std::vector<RTLIL::SyncRule*> syncs;
 

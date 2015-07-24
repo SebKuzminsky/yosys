@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -196,6 +196,27 @@ static void select_op_submod(RTLIL::Design *design, RTLIL::Selection &lhs)
 	}
 }
 
+static void select_op_cells_to_modules(RTLIL::Design *design, RTLIL::Selection &lhs)
+{
+	RTLIL::Selection new_sel(false);
+	for (auto &mod_it : design->modules_)
+		if (lhs.selected_module(mod_it.first))
+			for (auto &cell_it : mod_it.second->cells_)
+				if (lhs.selected_member(mod_it.first, cell_it.first) && design->modules_.count(cell_it.second->type))
+					new_sel.selected_modules.insert(cell_it.second->type);
+	lhs = new_sel;
+}
+
+static void select_op_module_to_cells(RTLIL::Design *design, RTLIL::Selection &lhs)
+{
+	RTLIL::Selection new_sel(false);
+	for (auto &mod_it : design->modules_)
+		for (auto &cell_it : mod_it.second->cells_)
+			if (design->modules_.count(cell_it.second->type) && lhs.selected_whole_module(cell_it.second->type))
+				new_sel.selected_members[mod_it.first].insert(cell_it.first);
+	lhs = new_sel;
+}
+
 static void select_op_fullmod(RTLIL::Design *design, RTLIL::Selection &lhs)
 {
 	lhs.optimize(design);
@@ -365,7 +386,7 @@ static int parse_comma_list(std::set<RTLIL::IdString> &tokens, std::string str, 
 	}
 }
 
-static int select_op_expand(RTLIL::Design *design, RTLIL::Selection &lhs, std::vector<expand_rule_t> &rules, std::set<RTLIL::IdString> &limits, int max_objects, char mode, CellTypes &ct)
+static int select_op_expand(RTLIL::Design *design, RTLIL::Selection &lhs, std::vector<expand_rule_t> &rules, std::set<RTLIL::IdString> &limits, int max_objects, char mode, CellTypes &ct, bool eval_only)
 {
 	int sel_objects = 0;
 	bool is_input, is_output;
@@ -401,6 +422,8 @@ static int select_op_expand(RTLIL::Design *design, RTLIL::Selection &lhs, std::v
 		for (auto &conn : cell.second->connections())
 		{
 			char last_mode = '-';
+			if (eval_only && !yosys_celltypes.cell_evaluable(cell.second->type))
+				goto exclude_match;
 			for (auto &rule : rules) {
 				last_mode = rule.mode;
 				if (rule.cell_types.size() > 0 && rule.cell_types.count(cell.second->type) == 0)
@@ -433,9 +456,10 @@ static int select_op_expand(RTLIL::Design *design, RTLIL::Selection &lhs, std::v
 	return sel_objects;
 }
 
-static void select_op_expand(RTLIL::Design *design, std::string arg, char mode)
+static void select_op_expand(RTLIL::Design *design, std::string arg, char mode, bool eval_only)
 {
-	int pos = mode == 'x' ? 2 : 3, levels = 1, rem_objects = -1;
+	int pos = (mode == 'x' ? 2 : 3) + (eval_only ? 1 : 0);
+	int levels = 1, rem_objects = -1;
 	std::vector<expand_rule_t> rules;
 	std::set<RTLIL::IdString> limits;
 
@@ -526,7 +550,7 @@ static void select_op_expand(RTLIL::Design *design, std::string arg, char mode)
 #endif
 
 	while (levels-- > 0 && rem_objects != 0) {
-		int num_objects = select_op_expand(design, work_stack.back(), rules, limits, rem_objects, mode, ct);
+		int num_objects = select_op_expand(design, work_stack.back(), rules, limits, rem_objects, mode, ct, eval_only);
 		if (num_objects == 0)
 			break;
 		rem_objects -= num_objects;
@@ -540,7 +564,7 @@ static void select_filter_active_mod(RTLIL::Design *design, RTLIL::Selection &se
 {
 	if (design->selected_active_module.empty())
 		return;
-	
+
 	if (sel.full_selection) {
 		sel.full_selection = false;
 		sel.selected_modules.clear();
@@ -615,6 +639,16 @@ static void select_stmt(RTLIL::Design *design, std::string arg)
 				log_cmd_error("Must have at least one element on the stack for operator %%s.\n");
 			select_op_submod(design, work_stack[work_stack.size()-1]);
 		} else
+		if (arg == "%M") {
+			if (work_stack.size() < 1)
+				log_cmd_error("Must have at least one element on the stack for operator %%M.\n");
+			select_op_cells_to_modules(design, work_stack[work_stack.size()-1]);
+		} else
+		if (arg == "%C") {
+			if (work_stack.size() < 1)
+				log_cmd_error("Must have at least one element on the stack for operator %%M.\n");
+			select_op_module_to_cells(design, work_stack[work_stack.size()-1]);
+		} else
 		if (arg == "%c") {
 			if (work_stack.size() < 1)
 				log_cmd_error("Must have at least one element on the stack for operator %%c.\n");
@@ -633,17 +667,32 @@ static void select_stmt(RTLIL::Design *design, std::string arg)
 		if (arg == "%x" || (arg.size() > 2 && arg.substr(0, 2) == "%x" && (arg[2] == ':' || arg[2] == '*' || arg[2] == '.' || ('0' <= arg[2] && arg[2] <= '9')))) {
 			if (work_stack.size() < 1)
 				log_cmd_error("Must have at least one element on the stack for operator %%x.\n");
-			select_op_expand(design, arg, 'x');
+			select_op_expand(design, arg, 'x', false);
 		} else
 		if (arg == "%ci" || (arg.size() > 3 && arg.substr(0, 3) == "%ci" && (arg[3] == ':' || arg[3] == '*' || arg[3] == '.' || ('0' <= arg[3] && arg[3] <= '9')))) {
 			if (work_stack.size() < 1)
 				log_cmd_error("Must have at least one element on the stack for operator %%ci.\n");
-			select_op_expand(design, arg, 'i');
+			select_op_expand(design, arg, 'i', false);
 		} else
 		if (arg == "%co" || (arg.size() > 3 && arg.substr(0, 3) == "%co" && (arg[3] == ':' || arg[3] == '*' || arg[3] == '.' || ('0' <= arg[3] && arg[3] <= '9')))) {
 			if (work_stack.size() < 1)
 				log_cmd_error("Must have at least one element on the stack for operator %%co.\n");
-			select_op_expand(design, arg, 'o');
+			select_op_expand(design, arg, 'o', false);
+		} else
+		if (arg == "%xe" || (arg.size() > 3 && arg.substr(0, 3) == "%xe" && (arg[3] == ':' || arg[3] == '*' || arg[3] == '.' || ('0' <= arg[3] && arg[3] <= '9')))) {
+			if (work_stack.size() < 1)
+				log_cmd_error("Must have at least one element on the stack for operator %%xe.\n");
+			select_op_expand(design, arg, 'x', true);
+		} else
+		if (arg == "%cie" || (arg.size() > 4 && arg.substr(0, 4) == "%cie" && (arg[4] == ':' || arg[4] == '*' || arg[4] == '.' || ('0' <= arg[4] && arg[4] <= '9')))) {
+			if (work_stack.size() < 1)
+				log_cmd_error("Must have at least one element on the stack for operator %%cie.\n");
+			select_op_expand(design, arg, 'i', true);
+		} else
+		if (arg == "%coe" || (arg.size() > 4 && arg.substr(0, 4) == "%coe" && (arg[4] == ':' || arg[4] == '*' || arg[4] == '.' || ('0' <= arg[4] && arg[4] <= '9')))) {
+			if (work_stack.size() < 1)
+				log_cmd_error("Must have at least one element on the stack for operator %%coe.\n");
+			select_op_expand(design, arg, 'o', true);
 		} else
 			log_cmd_error("Unknown selection operator '%s'.\n", arg.c_str());
 		if (work_stack.size() >= 1)
@@ -684,7 +733,7 @@ static void select_stmt(RTLIL::Design *design, std::string arg)
 		select_filter_active_mod(design, work_stack.back());
 		return;
 	}
-	
+
 	sel.full_selection = false;
 	for (auto &mod_it : design->modules_)
 	{
@@ -1031,16 +1080,25 @@ struct SelectPass : public Pass {
 		log("    %%co[<num1>|*][.<num2>][:<rule>[:<rule>..]]\n");
 		log("        simmilar to %%x, but only select input (%%ci) or output cones (%%co)\n");
 		log("\n");
+		log("    %%xe[...] %%cie[...] %%coe\n");
+		log("        like %%x, %%ci, and %%co but only consider combinatorial cells\n");
+		log("\n");
 		log("    %%a\n");
 		log("        expand top set by selecting all wires that are (at least in part)\n");
 		log("        aliases for selected wires.\n");
 		log("\n");
 		log("    %%s\n");
-		log("        expand top set by adding all modules of instantiated cells in selected\n");
+		log("        expand top set by adding all modules that implement cells in selected\n");
 		log("        modules\n");
 		log("\n");
 		log("    %%m\n");
 		log("        expand top set by selecting all modules that contain selected objects\n");
+		log("\n");
+		log("    %%M\n");
+		log("        select modules that implement selected cells\n");
+		log("\n");
+		log("    %%C\n");
+		log("        select cells that implement selected modules\n");
 		log("\n");
 		log("Example: the following command selects all wires that are connected to a\n");
 		log("'GATE' input of a 'SWITCH' cell:\n");
@@ -1261,6 +1319,7 @@ struct SelectPass : public Pass {
 		{
 			if (work_stack.size() == 0)
 				log_cmd_error("No selection to check.\n");
+			work_stack.back().optimize(design);
 			if (!work_stack.back().empty())
 				log_error("Assertation failed: selection is not empty:%s\n", sel_str.c_str());
 			return;
@@ -1270,6 +1329,7 @@ struct SelectPass : public Pass {
 		{
 			if (work_stack.size() == 0)
 				log_cmd_error("No selection to check.\n");
+			work_stack.back().optimize(design);
 			if (work_stack.back().empty())
 				log_error("Assertation failed: selection is empty:%s\n", sel_str.c_str());
 			return;
@@ -1328,7 +1388,7 @@ struct SelectPass : public Pass {
 		design->selection_stack.back().optimize(design);
 	}
 } SelectPass;
- 
+
 struct CdPass : public Pass {
 	CdPass() : Pass("cd", "a shortcut for 'select -module <name>'") { }
 	virtual void help()
@@ -1400,7 +1460,7 @@ static void log_matches(const char *title, Module *module, T list)
 			log("  %s\n", RTLIL::id2cstr(id));
 	}
 }
- 
+
 struct LsPass : public Pass {
 	LsPass() : Pass("ls", "list modules or objects in modules") { }
 	virtual void help()
@@ -1444,5 +1504,5 @@ struct LsPass : public Pass {
 		}
 	}
 } LsPass;
- 
+
 PRIVATE_NAMESPACE_END

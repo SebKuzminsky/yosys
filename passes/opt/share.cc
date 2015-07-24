@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -369,7 +369,9 @@ struct ShareWorker
 			}
 
 			if (cell->type == "$memrd") {
-				if (!cell->parameters.at("\\CLK_ENABLE").as_bool())
+				if (cell->parameters.at("\\CLK_ENABLE").as_bool())
+					continue;
+				if (config.opt_aggressive || !modwalker.sigmap(cell->getPort("\\ADDR")).is_fully_const())
 					shareable_cells.insert(cell);
 				continue;
 			}
@@ -387,7 +389,7 @@ struct ShareWorker
 			}
 
 			if (generic_ops.count(cell->type)) {
-				if (config.opt_aggressive || cell->parameters.at("\\Y_WIDTH").as_int() >= 10)
+				if (config.opt_aggressive)
 					shareable_cells.insert(cell);
 				continue;
 			}
@@ -1105,7 +1107,7 @@ struct ShareWorker
 			RTLIL::Cell *cell = *shareable_cells.begin();
 			shareable_cells.erase(cell);
 
-			log("  Analyzing resource sharing options for %s:\n", log_id(cell));
+			log("  Analyzing resource sharing options for %s (%s):\n", log_id(cell), log_id(cell->type));
 
 			const pool<ssc_pair_t> &cell_activation_patterns = find_cell_activation_patterns(cell, "    ");
 			RTLIL::SigSpec cell_activation_signals = bits_from_activation_patterns(cell_activation_patterns);
@@ -1138,7 +1140,7 @@ struct ShareWorker
 
 			for (auto other_cell : candidates)
 			{
-				log("    Analyzing resource sharing with %s:\n", log_id(other_cell));
+				log("    Analyzing resource sharing with %s (%s):\n", log_id(other_cell), log_id(other_cell->type));
 
 				const pool<ssc_pair_t> &other_cell_activation_patterns = find_cell_activation_patterns(other_cell, "      ");
 				RTLIL::SigSpec other_cell_activation_signals = bits_from_activation_patterns(other_cell_activation_patterns);
@@ -1178,8 +1180,8 @@ struct ShareWorker
 				optimize_activation_patterns(filtered_cell_activation_patterns);
 				optimize_activation_patterns(filtered_other_cell_activation_patterns);
 
-				ezDefaultSAT ez;
-				SatGen satgen(&ez, &modwalker.sigmap);
+				ezSatPtr ez;
+				SatGen satgen(ez.get(), &modwalker.sigmap);
 
 				pool<RTLIL::Cell*> sat_cells;
 				std::set<RTLIL::SigBit> bits_queue;
@@ -1189,13 +1191,13 @@ struct ShareWorker
 
 				for (auto &p : filtered_cell_activation_patterns) {
 					log("      Activation pattern for cell %s: %s = %s\n", log_id(cell), log_signal(p.first), log_signal(p.second));
-					cell_active.push_back(ez.vec_eq(satgen.importSigSpec(p.first), satgen.importSigSpec(p.second)));
+					cell_active.push_back(ez->vec_eq(satgen.importSigSpec(p.first), satgen.importSigSpec(p.second)));
 					all_ctrl_signals.append(p.first);
 				}
 
 				for (auto &p : filtered_other_cell_activation_patterns) {
 					log("      Activation pattern for cell %s: %s = %s\n", log_id(other_cell), log_signal(p.first), log_signal(p.second));
-					other_cell_active.push_back(ez.vec_eq(satgen.importSigSpec(p.first), satgen.importSigSpec(p.second)));
+					other_cell_active.push_back(ez->vec_eq(satgen.importSigSpec(p.first), satgen.importSigSpec(p.second)));
 					all_ctrl_signals.append(p.first);
 				}
 
@@ -1230,36 +1232,36 @@ struct ShareWorker
 						log("      Adding exclusive control bits: %s vs. %s\n", log_signal(it.first), log_signal(it.second));
 						int sub1 = satgen.importSigBit(it.first);
 						int sub2 = satgen.importSigBit(it.second);
-						ez.assume(ez.NOT(ez.AND(sub1, sub2)));
+						ez->assume(ez->NOT(ez->AND(sub1, sub2)));
 					}
 
-				if (!ez.solve(ez.expression(ez.OpOr, cell_active))) {
+				if (!ez->solve(ez->expression(ez->OpOr, cell_active))) {
 					log("      According to the SAT solver the cell %s is never active. Sharing is pointless, we simply remove it.\n", log_id(cell));
 					cells_to_remove.insert(cell);
 					break;
 				}
 
-				if (!ez.solve(ez.expression(ez.OpOr, other_cell_active))) {
+				if (!ez->solve(ez->expression(ez->OpOr, other_cell_active))) {
 					log("      According to the SAT solver the cell %s is never active. Sharing is pointless, we simply remove it.\n", log_id(other_cell));
 					cells_to_remove.insert(other_cell);
 					shareable_cells.erase(other_cell);
 					continue;
 				}
 
-				ez.non_incremental();
+				ez->non_incremental();
 
 				all_ctrl_signals.sort_and_unify();
 				std::vector<int> sat_model = satgen.importSigSpec(all_ctrl_signals);
 				std::vector<bool> sat_model_values;
 
-				int sub1 = ez.expression(ez.OpOr, cell_active);
-				int sub2 = ez.expression(ez.OpOr, other_cell_active);
-				ez.assume(ez.AND(sub1, sub2));
+				int sub1 = ez->expression(ez->OpOr, cell_active);
+				int sub2 = ez->expression(ez->OpOr, other_cell_active);
+				ez->assume(ez->AND(sub1, sub2));
 
 				log("      Size of SAT problem: %d cells, %d variables, %d clauses\n",
-						GetSize(sat_cells), ez.numCnfVariables(), ez.numCnfClauses());
+						GetSize(sat_cells), ez->numCnfVariables(), ez->numCnfClauses());
 
-				if (ez.solve(sat_model, sat_model_values)) {
+				if (ez->solve(sat_model, sat_model_values)) {
 					log("      According to the SAT solver this pair of cells can not be shared.\n");
 					log("      Model from SAT solver: %s = %d'", log_signal(all_ctrl_signals), GetSize(sat_model_values));
 					for (int i = GetSize(sat_model_values)-1; i >= 0; i--)

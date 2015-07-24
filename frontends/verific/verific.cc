@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -65,7 +65,7 @@ static void msg_func(msg_type_t msg_type, const char *message_id, linefile_type 
 	log("\n");
 }
 
-static void import_attributes(std::map<RTLIL::IdString, RTLIL::Const> &attributes, DesignObj *obj)
+static void import_attributes(dict<RTLIL::IdString, RTLIL::Const> &attributes, DesignObj *obj)
 {
 	MapIter mi;
 	Att *attr;
@@ -947,6 +947,6 @@ struct VerificPass : public Pass {
 	}
 #endif
 } VerificPass;
- 
+
 YOSYS_NAMESPACE_END
 

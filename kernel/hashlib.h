@@ -1,5 +1,5 @@
 // This is free and unencumbered software released into the public domain.
-// 
+//
 // Anyone is free to copy, modify, publish, use, compile, sell, or
 // distribute this software, either in source code form or as a compiled
 // binary, for any purpose, commercial or non-commercial, and by any
@@ -30,7 +30,7 @@ inline unsigned int mkhash(unsigned int a, unsigned int b) {
 const unsigned int mkhash_init = 5381;
 
 // The ADD version of DJB2
-// (usunsigned int mkhashe this version for cache locality in b)
+// (use this version for cache locality in b)
 inline unsigned int mkhash_add(unsigned int a, unsigned int b) {
 	return ((a << 5) + a) + b;
 }
@@ -89,6 +89,21 @@ template<typename P, typename Q> struct hash_ops<std::pair<P, Q>> {
 		hash_ops<P> p_ops;
 		hash_ops<Q> q_ops;
 		return mkhash(p_ops.hash(a.first), q_ops.hash(a.second));
+	}
+};
+
+template<typename... T> struct hash_ops<std::tuple<T...>> {
+	static inline bool cmp(std::tuple<T...> a, std::tuple<T...> b) {
+		return a == b;
+	}
+	template<size_t I = 0>
+	static inline typename std::enable_if<I == sizeof...(T), unsigned int>::type hash(std::tuple<T...>) {
+		return mkhash_init;
+	}
+	template<size_t I = 0>
+	static inline typename std::enable_if<I != sizeof...(T), unsigned int>::type hash(std::tuple<T...> a) {
+		hash_ops<typename std::tuple_element<I, std::tuple<T...>>::type> element_ops;
+		return mkhash(hash<I+1>(a), element_ops.hash(std::get<I>(a)));
 	}
 };
 
@@ -178,18 +193,19 @@ class dict
 
 		entry_t() { }
 		entry_t(const std::pair<K, T> &udata, int next) : udata(udata), next(next) { }
+		entry_t(std::pair<K, T> &&udata, int next) : udata(std::move(udata)), next(next) { }
 	};
 
 	std::vector<int> hashtable;
 	std::vector<entry_t> entries;
 	OPS ops;
 
-#if 0
+#ifdef NDEBUG
+	static inline void do_assert(bool) { }
+#else
 	static inline void do_assert(bool cond) {
 		if (!cond) throw std::runtime_error("dict<> assert failed.");
 	}
-#else
-	static inline void do_assert(bool) { }
 #endif
 
 	int do_hash(const K &key) const
@@ -220,6 +236,8 @@ class dict
 			return 0;
 
 		int k = hashtable[hash];
+		do_assert(0 <= k && k < int(entries.size()));
+
 		if (k == index) {
 			hashtable[hash] = entries[index].next;
 		} else {
@@ -237,6 +255,8 @@ class dict
 			int back_hash = do_hash(entries[back_idx].udata.first);
 
 			k = hashtable[back_hash];
+			do_assert(0 <= k && k < int(entries.size()));
+
 			if (k == back_idx) {
 				hashtable[back_hash] = index;
 			} else {
@@ -276,6 +296,19 @@ class dict
 		}
 
 		return index;
+	}
+
+	int do_insert(const K &key, int &hash)
+	{
+		if (hashtable.empty()) {
+			entries.push_back(entry_t(std::pair<K, T>(key, T()), -1));
+			do_rehash();
+			hash = do_hash(key);
+		} else {
+			entries.push_back(entry_t(std::pair<K, T>(key, T()), hashtable[hash]));
+			hashtable[hash] = entries.size() - 1;
+		}
+		return entries.size() - 1;
 	}
 
 	int do_insert(const std::pair<K, T> &value, int &hash)
@@ -373,6 +406,16 @@ public:
 	{
 		for (; first != last; ++first)
 			insert(*first);
+	}
+
+	std::pair<iterator, bool> insert(const K &key)
+	{
+		int hash = do_hash(key);
+		int i = do_lookup(key, hash);
+		if (i >= 0)
+			return std::pair<iterator, bool>(iterator(this, i), false);
+		i = do_insert(key, hash);
+		return std::pair<iterator, bool>(iterator(this, i), true);
 	}
 
 	std::pair<iterator, bool> insert(const std::pair<K, T> &value)
@@ -476,14 +519,14 @@ public:
 			return false;
 		for (auto &it : entries) {
 			auto oit = other.find(it.udata.first);
-			if (oit == other.end() || oit->second != it.udata.second)
+			if (oit == other.end() || !(oit->second == it.udata.second))
 				return false;
 		}
 		return true;
 	}
 
 	bool operator!=(const dict &other) const {
-		return !(*this == other);
+		return !operator==(other);
 	}
 
 	size_t size() const { return entries.size(); }
@@ -516,12 +559,12 @@ protected:
 	std::vector<entry_t> entries;
 	OPS ops;
 
-#if 0
+#ifdef NDEBUG
+	static inline void do_assert(bool) { }
+#else
 	static inline void do_assert(bool cond) {
 		if (!cond) throw std::runtime_error("pool<> assert failed.");
 	}
-#else
-	static inline void do_assert(bool) { }
 #endif
 
 	int do_hash(const K &key) const
@@ -775,6 +818,14 @@ public:
 		do_rehash();
 	}
 
+	K pop()
+	{
+		iterator it = begin();
+		K ret = *it;
+		erase(it);
+		return ret;
+	}
+
 	void swap(pool &other)
 	{
 		hashtable.swap(other.hashtable);
@@ -791,7 +842,7 @@ public:
 	}
 
 	bool operator!=(const pool &other) const {
-		return !(*this == other);
+		return !operator==(other);
 	}
 
 	size_t size() const { return entries.size(); }

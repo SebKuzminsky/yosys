@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -47,7 +47,7 @@ void rmunused_module_cells(Module *module, bool verbose)
 					if (bit.wire != nullptr)
 						wire2driver[bit].insert(cell);
 		}
-		if (cell->type == "$memwr" || cell->type == "$assert" || cell->has_keep_attr())
+		if (cell->type.in("$memwr", "$meminit", "$assert", "$assume") || cell->has_keep_attr())
 			queue.insert(cell);
 		else
 			unused.insert(cell);
@@ -159,7 +159,7 @@ void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool verbos
 			for (auto &it2 : cell->connections())
 				connected_signals.add(it2.second);
 		}
-	
+
 	SigMap assign_map(module);
 	pool<RTLIL::SigSpec> direct_sigs;
 	pool<RTLIL::Wire*> direct_wires;
@@ -216,7 +216,7 @@ void rmunused_module_signals(RTLIL::Module *module, bool purge_mode, bool verbos
 	std::vector<RTLIL::Wire*> maybe_del_wires;
 	for (auto wire : module->wires())
 	{
-		if ((!purge_mode && check_public_name(wire->name)) || wire->port_id != 0 || wire->get_bool_attribute("\\keep")) {
+		if ((!purge_mode && check_public_name(wire->name)) || wire->port_id != 0 || wire->get_bool_attribute("\\keep") || wire->attributes.count("\\init")) {
 			RTLIL::SigSpec s1 = RTLIL::SigSpec(wire), s2 = s1;
 			assign_map.apply(s2);
 			if (!used_signals.check_any(s2) && wire->port_id == 0 && !wire->get_bool_attribute("\\keep")) {
@@ -296,8 +296,14 @@ void rmunused_module(RTLIL::Module *module, bool purge_mode, bool verbose)
 			module->connect(y, a);
 			delcells.push_back(cell);
 		}
-	for (auto cell : delcells)
+	for (auto cell : delcells) {
+		if (verbose)
+			log("  removing buffer cell `%s': %s = %s\n", cell->name.c_str(),
+					log_signal(cell->getPort("\\Y")), log_signal(cell->getPort("\\A")));
 		module->remove(cell);
+	}
+	if (!delcells.empty())
+		module->design->scratchpad_set_bool("opt.did_something", true);
 
 	rmunused_module_cells(module, verbose);
 	rmunused_module_signals(module, purge_mode, verbose);
@@ -353,12 +359,16 @@ struct OptCleanPass : public Pass {
 			rmunused_module(module, purge_mode, true);
 		}
 
+		design->optimize();
+		design->sort();
+		design->check();
+
 		ct.clear();
 		ct_reg.clear();
 		log_pop();
 	}
 } OptCleanPass;
- 
+
 struct CleanPass : public Pass {
 	CleanPass() : Pass("clean", "remove unused cells and wires") { }
 	virtual void help()
@@ -404,13 +414,10 @@ struct CleanPass : public Pass {
 		count_rm_cells = 0;
 		count_rm_wires = 0;
 
-		for (auto mod : design->selected_whole_modules()) {
-			if (mod->has_processes())
+		for (auto module : design->selected_whole_modules()) {
+			if (module->has_processes())
 				continue;
-			do {
-				design->scratchpad_unset("opt.did_something");
-				rmunused_module(mod, purge_mode, false);
-			} while (design->scratchpad_get_bool("opt.did_something"));
+			rmunused_module(module, purge_mode, false);
 		}
 
 		if (count_rm_cells > 0 || count_rm_wires > 0)
@@ -425,5 +432,5 @@ struct CleanPass : public Pass {
 		ct_all.clear();
 	}
 } CleanPass;
- 
+
 PRIVATE_NAMESPACE_END

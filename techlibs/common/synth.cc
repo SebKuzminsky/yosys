@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -55,8 +55,18 @@ struct SynthPass : public Pass {
 		log("    -encfile <file>\n");
 		log("        passed to 'fsm_recode' via 'fsm'\n");
 		log("\n");
+		log("    -nofsm\n");
+		log("        do not run FSM optimization\n");
+		log("\n");
 		log("    -noabc\n");
 		log("        do not run abc (as if yosys was compiled without ABC support)\n");
+		log("\n");
+		log("    -noalumacc\n");
+		log("        do not run 'alumacc' pass. i.e. keep arithmetic operators in\n");
+		log("        their direct form ($add, $sub, etc.).\n");
+		log("\n");
+		log("    -nordff\n");
+		log("        passed to 'memory'. prohibits merging of FFs into memory read ports\n");
 		log("\n");
 		log("    -run <from_label>[:<to_label>]\n");
 		log("        only run the commands between the labels (see below). an empty\n");
@@ -71,6 +81,8 @@ struct SynthPass : public Pass {
 		log("\n");
 		log("    coarse:\n");
 		log("        proc\n");
+		log("        opt_clean\n");
+		log("        check\n");
 		log("        opt\n");
 		log("        wreduce\n");
 		log("        alumacc\n");
@@ -88,17 +100,22 @@ struct SynthPass : public Pass {
 		log("        techmap\n");
 		log("        opt -fast\n");
 	#ifdef YOSYS_ENABLE_ABC
-		log("\n");
-		log("    abc:\n");
 		log("        abc -fast\n");
 		log("        opt -fast\n");
 	#endif
 		log("\n");
+		log("    check:\n");
+		log("        hierarchy -check\n");
+		log("        stat\n");
+		log("        check\n");
+		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
 	{
-		std::string top_module, fsm_opts;
+		std::string top_module, fsm_opts, memory_opts;
 		std::string run_from, run_to;
+		bool noalumacc = false;
+		bool nofsm = false;
 		bool noabc = false;
 
 		size_t argidx;
@@ -123,8 +140,20 @@ struct SynthPass : public Pass {
 				}
 				continue;
 			}
+			if (args[argidx] == "-nofsm") {
+				nofsm = true;
+				continue;
+			}
 			if (args[argidx] == "-noabc") {
 				noabc = true;
+				continue;
+			}
+			if (args[argidx] == "-noalumacc") {
+				noalumacc = true;
+				continue;
+			}
+			if (args[argidx] == "-nordff") {
+				memory_opts += " -nordff";
 				continue;
 			}
 			break;
@@ -150,14 +179,18 @@ struct SynthPass : public Pass {
 		if (check_label(active, run_from, run_to, "coarse"))
 		{
 			Pass::call(design, "proc");
+			Pass::call(design, "opt_clean");
+			Pass::call(design, "check");
 			Pass::call(design, "opt");
 			Pass::call(design, "wreduce");
-			Pass::call(design, "alumacc");
+			if (!noalumacc)
+				Pass::call(design, "alumacc");
 			Pass::call(design, "share");
 			Pass::call(design, "opt");
-			Pass::call(design, "fsm" + fsm_opts);
+			if (!nofsm)
+				Pass::call(design, "fsm" + fsm_opts);
 			Pass::call(design, "opt -fast");
-			Pass::call(design, "memory -nomap");
+			Pass::call(design, "memory -nomap" + memory_opts);
 			Pass::call(design, "opt_clean");
 		}
 
@@ -168,18 +201,24 @@ struct SynthPass : public Pass {
 			Pass::call(design, "opt -full");
 			Pass::call(design, "techmap");
 			Pass::call(design, "opt -fast");
+
+			if (!noabc) {
+		#ifdef YOSYS_ENABLE_ABC
+				Pass::call(design, "abc -fast");
+				Pass::call(design, "opt -fast");
+		#endif
+			}
 		}
 
-	#ifdef YOSYS_ENABLE_ABC
-		if (check_label(active, run_from, run_to, "abc") && !noabc)
+		if (check_label(active, run_from, run_to, "check"))
 		{
-			Pass::call(design, "abc -fast");
-			Pass::call(design, "opt -fast");
+			Pass::call(design, "hierarchy -check");
+			Pass::call(design, "stat");
+			Pass::call(design, "check");
 		}
-	#endif
 
 		log_pop();
 	}
 } SynthPass;
- 
+
 PRIVATE_NAMESPACE_END

@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -47,7 +47,7 @@ struct SynthXilinxPass : public Pass {
 		log("compatible with 7-Series Xilinx devices.\n");
 		log("\n");
 		log("    -top <module>\n");
-		log("        use the specified module as top module (default='top')\n");
+		log("        use the specified module as top module\n");
 		log("\n");
 		log("    -edif <file>\n");
 		log("        write the design to the specified edif file. writing of an output file\n");
@@ -69,6 +69,8 @@ struct SynthXilinxPass : public Pass {
 		log("\n");
 		log("    begin:\n");
 		log("        read_verilog -lib +/xilinx/cells_sim.v\n");
+		log("        read_verilog -lib +/xilinx/brams_bb.v\n");
+		log("        read_verilog -lib +/xilinx/drams_bb.v\n");
 		log("        hierarchy -check -top <top>\n");
 		log("\n");
 		log("    flatten:     (only if -flatten)\n");
@@ -83,6 +85,10 @@ struct SynthXilinxPass : public Pass {
 		log("        memory_bram -rules +/xilinx/brams.txt\n");
 		log("        techmap -map +/xilinx/brams_map.v\n");
 		log("\n");
+		log("    dram:\n");
+		log("        memory_bram -rules +/xilinx/drams.txt\n");
+		log("        techmap -map +/xilinx/drams_map.v\n");
+		log("\n");
 		log("    fine:\n");
 		log("        opt -fast -full\n");
 		log("        memory_map\n");
@@ -96,16 +102,21 @@ struct SynthXilinxPass : public Pass {
 		log("\n");
 		log("    map_cells:\n");
 		log("        techmap -map +/xilinx/cells_map.v\n");
+		log("        dffinit -ff FDRE Q INIT -ff FDCE Q INIT -ff FDPE Q INIT\n");
 		log("        clean\n");
 		log("\n");
-		log("    edif:\n");
-		log("        write_edif synth.edif\n");
+		log("    check:\n");
+		log("        hierarchy -check\n");
+		log("        stat\n");
+		log("        check -noinit\n");
+		log("\n");
+		log("    edif:     (only if -edif)\n");
+		log("        write_edif <file-name>\n");
 		log("\n");
 	}
 	virtual void execute(std::vector<std::string> args, RTLIL::Design *design)
 	{
-		std::string top_module = "top";
-		std::string arch_name = "spartan6";
+		std::string top_opt = "-auto-top";
 		std::string edif_file;
 		std::string run_from, run_to;
 		bool flatten = false;
@@ -115,7 +126,7 @@ struct SynthXilinxPass : public Pass {
 		for (argidx = 1; argidx < args.size(); argidx++)
 		{
 			if (args[argidx] == "-top" && argidx+1 < args.size()) {
-				top_module = args[++argidx];
+				top_opt = "-top " + args[++argidx];
 				continue;
 			}
 			if (args[argidx] == "-edif" && argidx+1 < args.size()) {
@@ -153,7 +164,9 @@ struct SynthXilinxPass : public Pass {
 		if (check_label(active, run_from, run_to, "begin"))
 		{
 			Pass::call(design, "read_verilog -lib +/xilinx/cells_sim.v");
-			Pass::call(design, stringf("hierarchy -check -top %s", top_module.c_str()));
+			Pass::call(design, "read_verilog -lib +/xilinx/brams_bb.v");
+			Pass::call(design, "read_verilog -lib +/xilinx/drams_bb.v");
+			Pass::call(design, stringf("hierarchy -check %s", top_opt.c_str()));
 		}
 
 		if (flatten && check_label(active, run_from, run_to, "flatten"))
@@ -174,6 +187,12 @@ struct SynthXilinxPass : public Pass {
 			Pass::call(design, "techmap -map +/xilinx/brams_map.v");
 		}
 
+		if (check_label(active, run_from, run_to, "dram"))
+		{
+			Pass::call(design, "memory_bram -rules +/xilinx/drams.txt");
+			Pass::call(design, "techmap -map +/xilinx/drams_map.v");
+		}
+
 		if (check_label(active, run_from, run_to, "fine"))
 		{
 			Pass::call(design, "opt -fast -full");
@@ -192,7 +211,15 @@ struct SynthXilinxPass : public Pass {
 		if (check_label(active, run_from, run_to, "map_cells"))
 		{
 			Pass::call(design, "techmap -map +/xilinx/cells_map.v");
+			Pass::call(design, "dffinit -ff FDRE Q INIT -ff FDCE Q INIT -ff FDPE Q INIT");
 			Pass::call(design, "clean");
+		}
+
+		if (check_label(active, run_from, run_to, "check"))
+		{
+			Pass::call(design, "hierarchy -check");
+			Pass::call(design, "stat");
+			Pass::call(design, "check -noinit");
 		}
 
 		if (check_label(active, run_from, run_to, "edif"))
@@ -204,5 +231,5 @@ struct SynthXilinxPass : public Pass {
 		log_pop();
 	}
 } SynthXilinxPass;
- 
+
 PRIVATE_NAMESPACE_END

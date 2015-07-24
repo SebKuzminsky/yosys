@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -48,10 +48,11 @@ bool log_error_stderr = false;
 bool log_cmd_error_throw = false;
 bool log_quiet_warnings = false;
 int log_verbose_level;
+string log_last_error;
 
 vector<int> header_count;
 pool<RTLIL::IdString> log_id_cache;
-vector<string> string_buf;
+vector<shared_str> string_buf;
 int string_buf_index = -1;
 
 static struct timeval initial_tv = { 0, 0 };
@@ -173,6 +174,10 @@ void logv_warning(const char *format, va_list ap)
 
 void logv_error(const char *format, va_list ap)
 {
+#ifdef EMSCRIPTEN
+	auto backup_log_files = log_files;
+#endif
+
 	if (log_errfile != NULL)
 		log_files.push_back(log_errfile);
 
@@ -181,10 +186,16 @@ void logv_error(const char *format, va_list ap)
 			if (f == stdout)
 				f = stderr;
 
-	log("ERROR: ");
-	logv(format, ap);
+	log_last_error = vstringf(format, ap);
+	log("ERROR: %s", log_last_error.c_str());
 	log_flush();
+
+#ifdef EMSCRIPTEN
+	log_files = backup_log_files;
+	throw 0;
+#else
 	exit(1);
+#endif
 }
 
 void log(const char *format, ...)
@@ -224,8 +235,8 @@ void log_cmd_error(const char *format, ...)
 	va_start(ap, format);
 
 	if (log_cmd_error_throw) {
-		log("ERROR: ");
-		logv(format, ap);
+		log_last_error = vstringf(format, ap);
+		log("ERROR: %s", log_last_error.c_str());
 		log_flush();
 		throw log_cmd_error_exception();
 	}
@@ -253,7 +264,7 @@ void log_pop()
 	log_flush();
 }
 
-#ifdef __linux__
+#if defined(__linux__) && defined(YOSYS_ENABLE_PLUGINS)
 void log_backtrace(const char *prefix, int levels)
 {
 	if (levels <= 0) return;
@@ -363,6 +374,10 @@ void log_flush()
 
 	for (auto f : log_streams)
 		f->flush();
+}
+
+void log_dump_val_worker(RTLIL::IdString v) {
+	log("%s", log_id(v));
 }
 
 void log_dump_val_worker(RTLIL::SigSpec v) {

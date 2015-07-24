@@ -2,11 +2,11 @@
  *  yosys -- Yosys Open SYnthesis Suite
  *
  *  Copyright (C) 2012  Clifford Wolf <clifford@clifford.at>
- *  
+ *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
  *  copyright notice and this permission notice appear in all copies.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -195,7 +195,7 @@ static void autotest(std::ostream &f, RTLIL::Design *design, int num_iter)
 			f << stringf(" } = {");
 			for (auto it = signal_clk.begin(); it != signal_clk.end(); it++)
 				f << stringf("%s %s", it == signal_clk.begin() ? "" : ",", it->first.c_str());
-			f << stringf(" } ^ (%d'b1 << (xorshift128_w %% %d));\n", total_clock_bits, total_clock_bits);
+			f << stringf(" } ^ (%d'b1 << (xorshift128_w %% %d));\n", total_clock_bits, total_clock_bits + 1);
 		}
 		f << stringf("end\n");
 		f << stringf("endtask\n\n");
@@ -349,6 +349,6 @@ struct TestAutotbBackend : public Backend {
 		autotest(*f, design, num_iter);
 	}
 } TestAutotbBackend;
- 
+
 PRIVATE_NAMESPACE_END
 
