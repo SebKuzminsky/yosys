@@ -4,8 +4,8 @@ Forwarded: will do
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-02-09 21:26:15.243414558 +0100
-+++ yosys/Makefile	2015-02-09 21:26:50.991414942 +0100
+--- yosys.orig/Makefile	2015-07-24 12:12:50.288168224 +0200
++++ yosys/Makefile	2015-07-24 12:12:50.288168224 +0200
 @@ -36,8 +36,8 @@
  all: top-all
  
@@ -17,7 +17,7 @@ Index: yosys/Makefile
  LDLIBS = -lstdc++ -lm
  SED = sed
  BISON = bison
-@@ -262,10 +262,10 @@
+@@ -289,10 +289,10 @@
  	$(P) $(CXX) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
  
  %.o: %.cc
@@ -30,7 +30,7 @@ Index: yosys/Makefile
  
  kernel/version_$(GIT_REV).cc: Makefile
  	$(P) rm -f kernel/version_*.o kernel/version_*.d kernel/version_*.cc
-@@ -273,9 +273,9 @@
+@@ -300,9 +300,9 @@
  			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\"; }" > kernel/version_$(GIT_REV).cc
  
  yosys-config: misc/yosys-config.in

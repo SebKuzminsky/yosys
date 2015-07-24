@@ -7,14 +7,14 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-02-09 20:38:17.263383691 +0100
-+++ yosys/Makefile	2015-02-09 20:39:35.339384528 +0100
+--- yosys.orig/Makefile	2015-07-24 12:08:44.116881178 +0200
++++ yosys/Makefile	2015-07-24 12:09:23.993545416 +0200
 @@ -58,7 +58,7 @@
  endif
  
- YOSYS_VER := 0.5
+ YOSYS_VER := 0.5+$(shell test -d .git && { git log --author=clifford@clifford.at --oneline c3c9fbfb8c678.. | wc -l; })
 -GIT_REV := $(shell git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
-+GIT_REV := c3c9fbf
++GIT_REV := c6ca478
  OBJS = kernel/version_$(GIT_REV).o
  
  # set 'ABCREV = default' to use abc/ as it is

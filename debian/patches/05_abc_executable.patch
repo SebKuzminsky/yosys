@@ -4,11 +4,11 @@ Description: The dependency abc is built with the name yosys-abc
   This patch changes the name of the command that yosys looks for.
 Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
-Index: yosys/passes/abc/abc.cc
+Index: yosys/passes/techmap/abc.cc
 ===================================================================
---- yosys.orig/passes/abc/abc.cc	2015-02-09 20:41:36.823385831 +0100
-+++ yosys/passes/abc/abc.cc	2015-02-09 20:41:36.823385831 +0100
-@@ -1190,7 +1190,7 @@
+--- yosys.orig/passes/techmap/abc.cc	2015-07-24 12:07:08.559415094 +0200
++++ yosys/passes/techmap/abc.cc	2015-07-24 12:12:33.764281530 +0200
+@@ -1264,7 +1264,7 @@
  		log_header("Executing ABC pass (technology mapping using ABC).\n");
  		log_push();
  

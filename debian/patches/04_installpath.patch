@@ -4,8 +4,8 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-02-09 21:16:12.307408092 +0100
-+++ yosys/Makefile	2015-02-09 21:16:26.955408249 +0100
+--- yosys.orig/Makefile	2015-07-24 12:10:09.835533316 +0200
++++ yosys/Makefile	2015-07-24 12:10:09.831532775 +0200
 @@ -17,11 +17,11 @@
  ENABLE_GPROF := 0
  ENABLE_NDEBUG := 0
@@ -30,7 +30,7 @@ Index: yosys/Makefile
  LDFLAGS = -L$(DESTDIR)/lib
  LDLIBS = -lstdc++ -lm
  SED = sed
-@@ -332,10 +332,10 @@
+@@ -359,10 +359,10 @@
  	@echo ""
  
  install: $(TARGETS) $(EXTRA_TARGETS)
