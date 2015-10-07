@@ -4,8 +4,8 @@ Forwarded: will do
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-10-07 23:56:09.422434236 +0400
-+++ yosys/Makefile	2015-10-07 23:57:01.005214928 +0400
+--- yosys.orig/Makefile	2015-10-07 22:15:11.177383326 +0200
++++ yosys/Makefile	2015-10-07 22:18:16.680295247 +0200
 @@ -39,8 +39,8 @@
  YOSYS_SRC := $(dir $(firstword $(MAKEFILE_LIST)))
  VPATH := $(YOSYS_SRC)
@@ -31,3 +31,16 @@ Index: yosys/Makefile
  
  kernel/version_$(GIT_REV).cc: $(YOSYS_SRC)/Makefile
  	$(P) rm -f kernel/version_*.o kernel/version_*.d kernel/version_*.cc
+@@ -319,9 +319,9 @@
+ 			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\"; }" > kernel/version_$(GIT_REV).cc
+ 
+ yosys-config: misc/yosys-config.in
+-	$(P) $(SED) -e 's,@CXXFLAGS@,$(subst -I. -I"$(YOSYS_SRC)",-I"$(TARGET_DATDIR)/include",$(CXXFLAGS)),;' \
+-			-e 's,@CXX@,$(CXX),;' -e 's,@LDFLAGS@,$(LDFLAGS),;' -e 's,@LDLIBS@,$(LDLIBS),;' \
+-			-e 's,@BINDIR@,$(TARGET_BINDIR),;' -e 's,@DATDIR@,$(TARGET_DATDIR),;' < $< > yosys-config
++	$(P) $(SED) -e 's#@CXXFLAGS@#$(subst -I. -I"$(YOSYS_SRC)",-I"$(TARGET_DATDIR)/include",$(CXXFLAGS))#;' \
++			-e 's#@CXX@#$(CXX)#;' -e 's#@LDFLAGS@#$(LDFLAGS)#;' -e 's#@LDLIBS@#$(LDLIBS)#;' \
++			-e 's#@BINDIR@#$(TARGET_BINDIR)#;' -e 's#@DATDIR@#$(TARGET_DATDIR)#;' < $< > yosys-config
+ 	$(Q) chmod +x yosys-config
+ 
+ abc/abc-$(ABCREV)$(EXE):
