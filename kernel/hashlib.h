@@ -58,14 +58,23 @@ template<typename T> struct hash_ops {
 	}
 };
 
-template<> struct hash_ops<int> {
+struct hash_int_ops {
 	template<typename T>
 	static inline bool cmp(T a, T b) {
 		return a == b;
 	}
-	template<typename T>
-	static inline unsigned int hash(T a) {
+};
+
+template<> struct hash_ops<int32_t> : hash_int_ops
+{
+	static inline unsigned int hash(int32_t a) {
 		return a;
+	}
+};
+template<> struct hash_ops<int64_t> : hash_int_ops
+{
+	static inline unsigned int hash(int64_t a) {
+		return mkhash(a, a >> 32);
 	}
 };
 
@@ -112,10 +121,9 @@ template<typename T> struct hash_ops<std::vector<T>> {
 		return a == b;
 	}
 	static inline unsigned int hash(std::vector<T> a) {
-		hash_ops<T> t_ops;
 		unsigned int h = mkhash_init;
 		for (auto k : a)
-			h = mkhash(h, t_ops.hash(k));
+			h = mkhash(h, hash_ops<T>::hash(k));
 		return h;
 	}
 };

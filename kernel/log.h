@@ -29,6 +29,11 @@
 #  include <sys/resource.h>
 #endif
 
+#if defined(_MSC_VER)
+// At least this is not in MSVC++ 2013.
+#  define __PRETTY_FUNCTION__ __FUNCTION__
+#endif
+
 // from libs/sha1/sha1.h
 class SHA1;
 
@@ -145,7 +150,7 @@ std::string cover_list_worker(std::string prefix, std::string first, T... rest) 
 // ------------------------------------------------------------
 
 // simple timer for performance measurements
-// toggle the '#if 1' to get a baseline for the perormance penalty added by the measurement
+// toggle the '#if 1' to get a baseline for the performance penalty added by the measurement
 struct PerformanceTimer
 {
 #if 1

@@ -112,6 +112,8 @@ struct CellTypes
 		setup_type("$alu", {A, B, CI, BI}, {X, Y, CO}, true);
 		setup_type("$fa", {A, B, C}, {X, Y}, true);
 
+		setup_type("$tribuf", {A, EN}, {Y}, true);
+
 		setup_type("$assert", {A, EN}, pool<RTLIL::IdString>(), true);
 		setup_type("$assume", {A, EN}, pool<RTLIL::IdString>(), true);
 		setup_type("$equiv", {A, B}, {Y}, true);
@@ -120,7 +122,7 @@ struct CellTypes
 	void setup_internals_mem()
 	{
 		IdString SET = "\\SET", CLR = "\\CLR", CLK = "\\CLK", ARST = "\\ARST", EN = "\\EN";
-		IdString Q = "\\Q", D = "\\D", ADDR = "\\ADDR", DATA = "\\DATA";
+		IdString Q = "\\Q", D = "\\D", ADDR = "\\ADDR", DATA = "\\DATA", RD_EN = "\\RD_EN";
 		IdString RD_CLK = "\\RD_CLK", RD_ADDR = "\\RD_ADDR", WR_CLK = "\\WR_CLK", WR_EN = "\\WR_EN";
 		IdString WR_ADDR = "\\WR_ADDR", WR_DATA = "\\WR_DATA", RD_DATA = "\\RD_DATA";
 		IdString CTRL_IN = "\\CTRL_IN", CTRL_OUT = "\\CTRL_OUT";
@@ -133,10 +135,10 @@ struct CellTypes
 		setup_type("$dlatch", {EN, D}, {Q});
 		setup_type("$dlatchsr", {EN, SET, CLR, D}, {Q});
 
-		setup_type("$memrd", {CLK, ADDR}, {DATA});
+		setup_type("$memrd", {CLK, EN, ADDR}, {DATA});
 		setup_type("$memwr", {CLK, EN, ADDR, DATA}, pool<RTLIL::IdString>());
 		setup_type("$meminit", {ADDR, DATA}, pool<RTLIL::IdString>());
-		setup_type("$mem", {RD_CLK, RD_ADDR, WR_CLK, WR_EN, WR_ADDR, WR_DATA}, {RD_DATA});
+		setup_type("$mem", {RD_CLK, RD_EN, RD_ADDR, WR_CLK, WR_EN, WR_ADDR, WR_DATA}, {RD_DATA});
 
 		setup_type("$fsm", {CLK, ARST, CTRL_IN}, {CTRL_OUT});
 	}
@@ -166,6 +168,7 @@ struct CellTypes
 		setup_type("$_OAI3_", {A, B, C}, {Y}, true);
 		setup_type("$_AOI4_", {A, B, C, D}, {Y}, true);
 		setup_type("$_OAI4_", {A, B, C, D}, {Y}, true);
+		setup_type("$_TBUF_", {A, E}, {Y}, true);
 	}
 
 	void setup_stdcells_mem()

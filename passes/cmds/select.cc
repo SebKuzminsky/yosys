@@ -1061,7 +1061,7 @@ struct SelectPass : public Pass {
 		log("        like %%d but swap the roles of two top sets on the stack\n");
 		log("\n");
 		log("    %%c\n");
-		log("        create a copy of the top set rom the stack and push it\n");
+		log("        create a copy of the top set from the stack and push it\n");
 		log("\n");
 		log("    %%x[<num1>|*][.<num2>][:<rule>[:<rule>..]]\n");
 		log("        expand top set <num1> num times according to the specified rules.\n");
@@ -1078,7 +1078,7 @@ struct SelectPass : public Pass {
 		log("\n");
 		log("    %%ci[<num1>|*][.<num2>][:<rule>[:<rule>..]]\n");
 		log("    %%co[<num1>|*][.<num2>][:<rule>[:<rule>..]]\n");
-		log("        simmilar to %%x, but only select input (%%ci) or output cones (%%co)\n");
+		log("        similar to %%x, but only select input (%%ci) or output cones (%%co)\n");
 		log("\n");
 		log("    %%xe[...] %%cie[...] %%coe\n");
 		log("        like %%x, %%ci, and %%co but only consider combinatorial cells\n");
@@ -1321,7 +1321,7 @@ struct SelectPass : public Pass {
 				log_cmd_error("No selection to check.\n");
 			work_stack.back().optimize(design);
 			if (!work_stack.back().empty())
-				log_error("Assertation failed: selection is not empty:%s\n", sel_str.c_str());
+				log_error("Assertion failed: selection is not empty:%s\n", sel_str.c_str());
 			return;
 		}
 
@@ -1331,7 +1331,7 @@ struct SelectPass : public Pass {
 				log_cmd_error("No selection to check.\n");
 			work_stack.back().optimize(design);
 			if (work_stack.back().empty())
-				log_error("Assertation failed: selection is empty:%s\n", sel_str.c_str());
+				log_error("Assertion failed: selection is empty:%s\n", sel_str.c_str());
 			return;
 		}
 
@@ -1358,7 +1358,7 @@ struct SelectPass : public Pass {
 							total_count++;
 				}
 			if (assert_count != total_count)
-				log_error("Assertation failed: selection contains %d elements instead of the asserted %d:%s\n",
+				log_error("Assertion failed: selection contains %d elements instead of the asserted %d:%s\n",
 						total_count, assert_count, sel_str.c_str());
 			return;
 		}
@@ -1403,7 +1403,7 @@ struct CdPass : public Pass {
 		log("    cd <cellname>\n");
 		log("\n");
 		log("When no module with the specified name is found, but there is a cell\n");
-		log("with the specified name in the current module, then this is equivialent\n");
+		log("with the specified name in the current module, then this is equivalent\n");
 		log("to 'cd <celltype>'.\n");
 		log("\n");
 		log("    cd ..\n");

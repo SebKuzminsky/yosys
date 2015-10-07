@@ -947,6 +947,7 @@ namespace {
 				param_bool("\\CLK_POLARITY");
 				param_bool("\\TRANSPARENT");
 				port("\\CLK", 1);
+				port("\\EN", 1);
 				port("\\ADDR", param("\\ABITS"));
 				port("\\DATA", param("\\WIDTH"));
 				check_expected();
@@ -970,7 +971,7 @@ namespace {
 				param("\\MEMID");
 				param("\\PRIORITY");
 				port("\\ADDR", param("\\ABITS"));
-				port("\\DATA", param("\\WIDTH"));
+				port("\\DATA", param("\\WIDTH") * param("\\WORDS"));
 				check_expected();
 				return;
 			}
@@ -986,12 +987,21 @@ namespace {
 				param_bits("\\WR_CLK_ENABLE", std::max(1, param("\\WR_PORTS")));
 				param_bits("\\WR_CLK_POLARITY", std::max(1, param("\\WR_PORTS")));
 				port("\\RD_CLK", param("\\RD_PORTS"));
+				port("\\RD_EN", param("\\RD_PORTS"));
 				port("\\RD_ADDR", param("\\RD_PORTS") * param("\\ABITS"));
 				port("\\RD_DATA", param("\\RD_PORTS") * param("\\WIDTH"));
 				port("\\WR_CLK", param("\\WR_PORTS"));
 				port("\\WR_EN", param("\\WR_PORTS") * param("\\WIDTH"));
 				port("\\WR_ADDR", param("\\WR_PORTS") * param("\\ABITS"));
 				port("\\WR_DATA", param("\\WR_PORTS") * param("\\WIDTH"));
+				check_expected();
+				return;
+			}
+
+			if (cell->type == "$tribuf") {
+				port("\\A", param("\\WIDTH"));
+				port("\\Y", param("\\WIDTH"));
+				port("\\EN", 1);
 				check_expected();
 				return;
 			}
@@ -1031,6 +1041,8 @@ namespace {
 			if (cell->type == "$_OAI3_") { check_gate("ABCY"); return; }
 			if (cell->type == "$_AOI4_") { check_gate("ABCDY"); return; }
 			if (cell->type == "$_OAI4_") { check_gate("ABCDY"); return; }
+
+			if (cell->type == "$_TBUF_")  { check_gate("AYE"); return; }
 
 			if (cell->type == "$_MUX4_")  { check_gate("ABCDSTY"); return; }
 			if (cell->type == "$_MUX8_")  { check_gate("ABCDEFGHSTUY"); return; }
@@ -1730,13 +1742,23 @@ RTLIL::Cell* RTLIL::Module::addConcat(RTLIL::IdString name, RTLIL::SigSpec sig_a
 	return cell;
 }
 
-RTLIL::Cell* RTLIL::Module::addLut(RTLIL::IdString name, RTLIL::SigSpec sig_i, RTLIL::SigSpec sig_o, RTLIL::Const lut)
+RTLIL::Cell* RTLIL::Module::addLut(RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_y, RTLIL::Const lut)
 {
 	RTLIL::Cell *cell = addCell(name, "$lut");
 	cell->parameters["\\LUT"] = lut;
-	cell->parameters["\\WIDTH"] = sig_i.size();
-	cell->setPort("\\A", sig_i);
-	cell->setPort("\\Y", sig_o);
+	cell->parameters["\\WIDTH"] = sig_a.size();
+	cell->setPort("\\A", sig_a);
+	cell->setPort("\\Y", sig_y);
+	return cell;
+}
+
+RTLIL::Cell* RTLIL::Module::addTribuf(RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_en, RTLIL::SigSpec sig_y)
+{
+	RTLIL::Cell *cell = addCell(name, "$tribuf");
+	cell->parameters["\\WIDTH"] = sig_a.size();
+	cell->setPort("\\A", sig_a);
+	cell->setPort("\\EN", sig_en);
+	cell->setPort("\\Y", sig_y);
 	return cell;
 }
 
@@ -3279,6 +3301,10 @@ static int sigspec_parse_get_dummy_line_num()
 bool RTLIL::SigSpec::parse(RTLIL::SigSpec &sig, RTLIL::Module *module, std::string str)
 {
 	cover("kernel.rtlil.sigspec.parse");
+
+	AST::current_filename = "input";
+	AST::use_internal_line_num();
+	AST::set_line_num(0);
 
 	std::vector<std::string> tokens;
 	sigspec_parse_split(tokens, str, ',');

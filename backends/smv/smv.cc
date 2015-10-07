@@ -42,7 +42,7 @@ struct SmvWorker
 
 	pool<Wire*> partial_assignment_wires;
 	dict<SigBit, std::pair<const char*, int>> partial_assignment_bits;
-	vector<string> assignments;
+	vector<string> assignments, invarspecs;
 
 	const char *cid()
 	{
@@ -226,6 +226,16 @@ struct SmvWorker
 		for (auto cell : module->cells())
 		{
 			// FIXME: $slice, $concat, $mem
+
+			if (cell->type.in("$assert"))
+			{
+				SigSpec sig_a = cell->getPort("\\A");
+				SigSpec sig_en = cell->getPort("\\EN");
+
+				invarspecs.push_back(stringf("!bool(%s) | bool(%s);", rvalue(sig_en), rvalue(sig_a)));
+
+				continue;
+			}
 
 			if (cell->type.in("$shl", "$shr", "$sshl", "$sshr", "$shift", "$shiftx"))
 			{
@@ -568,15 +578,13 @@ struct SmvWorker
 
 			for (int i = 0; i < wire->width; i++)
 			{
-				SigBit bit = sigmap(SigBit(wire, i));
-
 				if (!expr.empty())
 					expr = " :: " + expr;
 
-				if (partial_assignment_bits.count(bit))
+				if (partial_assignment_bits.count(sigmap(SigBit(wire, i))))
 				{
 					int width = 1;
-					const auto &bit_a = partial_assignment_bits.at(bit);
+					const auto &bit_a = partial_assignment_bits.at(sigmap(SigBit(wire, i)));
 
 					while (i+1 < wire->width)
 					{
@@ -614,6 +622,20 @@ struct SmvWorker
 
 					expr = stringf("0ub%d_%s", GetSize(bits), bits.c_str()) + expr;
 				}
+				else if (sigmap(SigBit(wire, i)) == SigBit(wire, i))
+				{
+					int length = 1;
+
+					while (i+1 < wire->width) {
+						if (partial_assignment_bits.count(sigmap(SigBit(wire, i+1))))
+							break;
+						if (sigmap(SigBit(wire, i+1)) != SigBit(wire, i+1))
+							break;
+						i++, length++;
+					}
+
+					expr = stringf("0ub%d_0", length) + expr;
+				}
 				else
 				{
 					string bits;
@@ -634,9 +656,16 @@ struct SmvWorker
 			assignments.push_back(stringf("%s := %s;", cid(wire->name), expr.c_str()));
 		}
 
-		f << stringf("  ASSIGN\n");
-		for (const string &line : assignments)
-			f << stringf("    %s\n", line.c_str());
+		if (!assignments.empty()) {
+			f << stringf("  ASSIGN\n");
+			for (const string &line : assignments)
+				f << stringf("    %s\n", line.c_str());
+		}
+
+		if (!invarspecs.empty()) {
+			for (const string &line : invarspecs)
+				f << stringf("  INVARSPEC %s\n", line.c_str());
+		}
 	}
 };
 

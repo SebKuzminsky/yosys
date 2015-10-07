@@ -12,6 +12,7 @@ ENABLE_PLUGINS := 1
 ENABLE_READLINE := 1
 ENABLE_VERIFIC := 0
 ENABLE_COVER := 1
+ENABLE_LIBYOSYS := 0
 
 # other configuration flags
 ENABLE_GPROF := 0
@@ -35,8 +36,10 @@ SMALL = 0
 
 all: top-all
 
-YOSYS_SRC := $(shell pwd)
-CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
+YOSYS_SRC := $(dir $(firstword $(MAKEFILE_LIST)))
+VPATH := $(YOSYS_SRC)
+
+CXXFLAGS = -Wall -Wextra -ggdb -I. -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
 LDFLAGS = -L$(DESTDIR)/lib
 LDLIBS = -lstdc++ -lm
 SED = sed
@@ -57,8 +60,8 @@ else
 	LDLIBS += -lrt
 endif
 
-YOSYS_VER := 0.5+$(shell test -d .git && { git log --author=clifford@clifford.at --oneline c3c9fbfb8c678.. | wc -l; })
-GIT_REV := $(shell git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
+YOSYS_VER := 0.5+$(shell cd $(YOSYS_SRC) && test -d .git && { git log --author=clifford@clifford.at --oneline c3c9fbfb8c678.. | wc -l; })
+GIT_REV := $(shell cd $(YOSYS_SRC) && git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
 OBJS = kernel/version_$(GIT_REV).o
 
 # set 'ABCREV = default' to use abc/ as it is
@@ -136,6 +139,10 @@ else ifneq ($(CONFIG),none)
 $(error Invalid CONFIG setting '$(CONFIG)'. Valid values: clang, gcc, gcc-4.6, emcc, none)
 endif
 
+ifeq ($(ENABLE_LIBYOSYS),1)
+TARGETS += libyosys.so
+endif
+
 ifeq ($(ENABLE_READLINE),1)
 CXXFLAGS += -DYOSYS_ENABLE_READLINE
 LDLIBS += -lreadline
@@ -182,6 +189,13 @@ CXXFLAGS += -DYOSYS_ENABLE_COVER
 endif
 
 define add_share_file
+EXTRA_TARGETS += $(subst //,/,$(1)/$(notdir $(2)))
+$(subst //,/,$(1)/$(notdir $(2))): $(2)
+	$$(P) mkdir -p $(1)
+	$$(Q) cp "$(YOSYS_SRC)"/$(2) $(subst //,/,$(1)/$(notdir $(2)))
+endef
+
+define add_gen_share_file
 EXTRA_TARGETS += $(subst //,/,$(1)/$(notdir $(2)))
 $(subst //,/,$(1)/$(notdir $(2))): $(2)
 	$$(P) mkdir -p $(1)
@@ -245,10 +259,10 @@ OBJS += libs/minisat/SimpSolver.o
 OBJS += libs/minisat/Solver.o
 OBJS += libs/minisat/System.o
 
-include frontends/*/Makefile.inc
-include passes/*/Makefile.inc
-include backends/*/Makefile.inc
-include techlibs/*/Makefile.inc
+include $(YOSYS_SRC)/frontends/*/Makefile.inc
+include $(YOSYS_SRC)/passes/*/Makefile.inc
+include $(YOSYS_SRC)/backends/*/Makefile.inc
+include $(YOSYS_SRC)/techlibs/*/Makefile.inc
 
 else
 
@@ -288,21 +302,26 @@ endif
 yosys$(EXE): $(OBJS)
 	$(P) $(CXX) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
 
+libyosys.so: $(filter-out kernel/driver.o,$(OBJS))
+	$(P) $(CXX) -o libyosys.so -shared -Wl,-soname,libyosys.so $(LDFLAGS) $^ $(LDLIBS)
+
 %.o: %.cc
+	$(Q) mkdir -p $(dir $@)
 	$(P) $(CXX) -o $@ -c $(CXXFLAGS) $<
 
 %.o: %.cpp
+	$(Q) mkdir -p $(dir $@)
 	$(P) $(CXX) -o $@ -c $(CXXFLAGS) $<
 
-kernel/version_$(GIT_REV).cc: Makefile
+kernel/version_$(GIT_REV).cc: $(YOSYS_SRC)/Makefile
 	$(P) rm -f kernel/version_*.o kernel/version_*.d kernel/version_*.cc
-	$(Q) echo "namespace Yosys { extern const char *yosys_version_str; const char *yosys_version_str=\"Yosys $(YOSYS_VER) (git sha1 $(GIT_REV), $(notdir $(CXX)) ` \
+	$(Q) mkdir -p kernel && echo "namespace Yosys { extern const char *yosys_version_str; const char *yosys_version_str=\"Yosys $(YOSYS_VER) (git sha1 $(GIT_REV), $(notdir $(CXX)) ` \
 			$(CXX) --version | tr ' ()' '\n' | grep '^[0-9]' | head -n1` $(filter -f% -m% -O% -DNDEBUG,$(CXXFLAGS)))\"; }" > kernel/version_$(GIT_REV).cc
 
 yosys-config: misc/yosys-config.in
-	$(P) $(SED) -e 's,@CXXFLAGS@,$(subst -I"$(YOSYS_SRC)",-I"$(TARGET_DATDIR)/include",$(CXXFLAGS)),;' \
+	$(P) $(SED) -e 's,@CXXFLAGS@,$(subst -I. -I"$(YOSYS_SRC)",-I"$(TARGET_DATDIR)/include",$(CXXFLAGS)),;' \
 			-e 's,@CXX@,$(CXX),;' -e 's,@LDFLAGS@,$(LDFLAGS),;' -e 's,@LDLIBS@,$(LDLIBS),;' \
-			-e 's,@BINDIR@,$(TARGET_BINDIR),;' -e 's,@DATDIR@,$(TARGET_DATDIR),;' < misc/yosys-config.in > yosys-config
+			-e 's,@BINDIR@,$(TARGET_BINDIR),;' -e 's,@DATDIR@,$(TARGET_DATDIR),;' < $< > yosys-config
 	$(Q) chmod +x yosys-config
 
 abc/abc-$(ABCREV)$(EXE):
@@ -363,10 +382,17 @@ install: $(TARGETS) $(EXTRA_TARGETS)
 	$(INSTALL_SUDO) install $(TARGETS) $(DESTDIR)/bin/
 	$(INSTALL_SUDO) mkdir -p $(DESTDIR)/share/yosys
 	$(INSTALL_SUDO) cp -r share/. $(DESTDIR)/share/yosys/.
+ifeq ($(ENABLE_LIBYOSYS),1)
+	$(INSTALL_SUDO) cp libyosys.so $(DESTDIR)/lib/
+	$(INSTALL_SUDO) ldconfig
+endif
 
 uninstall:
 	$(INSTALL_SUDO) rm -vf $(addprefix $(DESTDIR)/bin/,$(notdir $(TARGETS)))
 	$(INSTALL_SUDO) rm -rvf $(DESTDIR)/share/yosys/
+ifeq ($(ENABLE_LIBYOSYS),1)
+	$(INSTALL_SUDO) rm -vf $(DESTDIR)/lib/libyosys.so
+endif
 
 update-manual: $(TARGETS) $(EXTRA_TARGETS)
 	cd manual && ../yosys -p 'help -write-tex-command-reference-manual'
@@ -378,7 +404,7 @@ manual: $(TARGETS) $(EXTRA_TARGETS)
 
 clean:
 	rm -rf share
-	cd manual && bash clean.sh
+	if test -d manual; then cd manual && sh clean.sh; fi
 	rm -f $(OBJS) $(GENFILES) $(TARGETS) $(EXTRA_TARGETS) $(EXTRA_OBJS)
 	rm -f kernel/version_*.o kernel/version_*.cc abc/abc-[0-9a-f]*
 	rm -f libs/*/*.d frontends/*/*.d passes/*/*.d backends/*/*.d kernel/*.d techlibs/*/*.d

@@ -708,6 +708,10 @@ struct ShareWorker
 		if (c1->type == "$memrd")
 		{
 			RTLIL::Cell *supercell = module->addCell(NEW_ID, c1);
+			RTLIL::SigSpec addr1 = c1->getPort("\\ADDR");
+			RTLIL::SigSpec addr2 = c2->getPort("\\ADDR");
+			if (addr1 != addr2)
+				supercell->setPort("\\ADDR", module->Mux(NEW_ID, addr2, addr1, act));
 			supercell_aux.insert(module->addPos(NEW_ID, supercell->getPort("\\DATA"), c2->getPort("\\DATA")));
 			supercell_aux.insert(supercell);
 			return supercell;
@@ -1393,7 +1397,7 @@ struct SharePass : public Pass {
 		log("\n");
 		log("  -fast\n");
 		log("    Only consider the simple part of the control logic in SAT solving, resulting\n");
-		log("    in much easier SAT problems at the cost of maybe missing some oportunities\n");
+		log("    in much easier SAT problems at the cost of maybe missing some opportunities\n");
 		log("    for resource sharing.\n");
 		log("\n");
 		log("  -limit N\n");

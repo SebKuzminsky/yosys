@@ -48,7 +48,9 @@ static int my_decimal_div_by_two(std::vector<uint8_t> &digits)
 {
 	int carry = 0;
 	for (size_t i = 0; i < digits.size(); i++) {
-		log_assert(digits[i] < 10);
+		if (digits[i] >= 10)
+			log_error("Invalid use of [a-fxz?] in decimal constant at %s:%d.\n",
+				current_filename.c_str(), get_line_num());
 		digits[i] += carry * 10;
 		carry = digits[i] % 2;
 		digits[i] /= 2;
@@ -91,54 +93,67 @@ static void my_strtobin(std::vector<RTLIL::State> &data, const char *str, int le
 		str++;
 	}
 
+	if (base == 10 && GetSize(digits) == 1 && digits.front() >= 0xf0)
+		base = 2;
+
+	data.clear();
+
 	if (base == 10) {
-		data.clear();
-		if (len_in_bits < 0) {
-			while (!digits.empty())
-				data.push_back(my_decimal_div_by_two(digits) ? RTLIL::S1 : RTLIL::S0);
-			while (data.size() < 32)
-				data.push_back(RTLIL::S0);
-		} else {
-			for (int i = 0; i < len_in_bits; i++)
-				data.push_back(my_decimal_div_by_two(digits) ? RTLIL::S1 : RTLIL::S0);
+		while (!digits.empty())
+			data.push_back(my_decimal_div_by_two(digits) ? RTLIL::S1 : RTLIL::S0);
+	} else {
+		int bits_per_digit = my_ilog2(base-1);
+		for (auto it = digits.rbegin(), e = digits.rend(); it != e; it++) {
+			if (*it > (base-1) && *it < 0xf0)
+				log_error("Digit larger than %d used in in base-%d constant at %s:%d.\n",
+					base-1, base, current_filename.c_str(), get_line_num());
+			for (int i = 0; i < bits_per_digit; i++) {
+				int bitmask = 1 << i;
+				if (*it == 0xf0)
+					data.push_back(case_type == 'x' ? RTLIL::Sa : RTLIL::Sx);
+				else if (*it == 0xf1)
+					data.push_back(case_type == 'x' || case_type == 'z' ? RTLIL::Sa : RTLIL::Sz);
+				else if (*it == 0xf2)
+					data.push_back(RTLIL::Sa);
+				else
+					data.push_back((*it & bitmask) ? RTLIL::S1 : RTLIL::S0);
+			}
 		}
+	}
+
+	int len = GetSize(data);
+	RTLIL::State msb = data.empty() ? RTLIL::S0 : data.back();
+
+	if (len_in_bits < 0) {
+		if (len < 32)
+			data.resize(32, msb == RTLIL::S0 || msb == RTLIL::S1 ? RTLIL::S0 : msb);
 		return;
 	}
 
-	int bits_per_digit = my_ilog2(base-1);
-	if (len_in_bits < 0)
-		len_in_bits = std::max<int>(digits.size() * bits_per_digit, 32);
-
-	data.clear();
-	data.resize(len_in_bits);
-
-	for (int i = 0; i < len_in_bits; i++) {
-		int bitmask = 1 << (i % bits_per_digit);
-		int digitidx = digits.size() - (i / bits_per_digit) - 1;
-		if (digitidx < 0) {
-			if (i > 0 && (data[i-1] == RTLIL::Sz || data[i-1] == RTLIL::Sx || data[i-1] == RTLIL::Sa))
-				data[i] = data[i-1];
-			else
-				data[i] = RTLIL::S0;
-		} else if (digits[digitidx] == 0xf0)
-			data[i] = case_type == 'x' ? RTLIL::Sa : RTLIL::Sx;
-		else if (digits[digitidx] == 0xf1)
-			data[i] = case_type == 'x' || case_type == 'z' ? RTLIL::Sa : RTLIL::Sz;
-		else if (digits[digitidx] == 0xf2)
-			data[i] = RTLIL::Sa;
-		else
-			data[i] = (digits[digitidx] & bitmask) ? RTLIL::S1 : RTLIL::S0;
+	for (len = len - 1; len >= 0; len--)
+		if (data[len] == RTLIL::S1)
+			break;
+	if (msb == RTLIL::S0 || msb == RTLIL::S1) {
+		len += 1;
+		data.resize(len_in_bits, RTLIL::S0);
+	} else {
+		len += 2;
+		data.resize(len_in_bits, msb);
 	}
+
+	if (len > len_in_bits)
+		log_warning("Literal has a width of %d bit, but value requires %d bit. (%s:%d)\n",
+			len_in_bits, len, current_filename.c_str(), get_line_num());
 }
 
-// convert the verilog code for a constant to an AST node
+// convert the Verilog code for a constant to an AST node
 AstNode *VERILOG_FRONTEND::const2ast(std::string code, char case_type, bool warn_z)
 {
 	if (warn_z) {
 		AstNode *ret = const2ast(code, case_type);
 		if (std::find(ret->bits.begin(), ret->bits.end(), RTLIL::State::Sz) != ret->bits.end())
-			log_warning("Yosys does not support tri-state logic at the moment. (%s:%d)\n",
-				current_filename.c_str(), frontend_verilog_yyget_lineno());
+			log_warning("Yosys has only limited support for tri-state logic at the moment. (%s:%d)\n",
+				current_filename.c_str(), get_line_num());
 		return ret;
 	}
 
@@ -214,8 +229,6 @@ AstNode *VERILOG_FRONTEND::const2ast(std::string code, char case_type, bool warn
 		}
 		if (len_in_bits < 0) {
 			if (is_signed && data.back() == RTLIL::S1)
-				data.push_back(RTLIL::S0);
-			while (data.size() < 32)
 				data.push_back(RTLIL::S0);
 		}
 		return AstNode::mkconst_bits(data, is_signed);

@@ -39,15 +39,23 @@ using namespace VERILOG_FRONTEND;
 static std::vector<std::string> verilog_defaults;
 static std::list<std::vector<std::string>> verilog_defaults_stack;
 
+static void error_on_dpi_function(AST::AstNode *node)
+{
+	if (node->type == AST::AST_DPI_FUNCTION)
+		log_error("Found DPI function %s at %s:%d.\n", node->str.c_str(), node->filename.c_str(), node->linenum);
+	for (auto child : node->children)
+		error_on_dpi_function(child);
+}
+
 struct VerilogFrontend : public Frontend {
-	VerilogFrontend() : Frontend("verilog", "read modules from verilog file") { }
+	VerilogFrontend() : Frontend("verilog", "read modules from Verilog file") { }
 	virtual void help()
 	{
 		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
 		log("\n");
 		log("    read_verilog [options] [filename]\n");
 		log("\n");
-		log("Load modules from a verilog file to the current design. A large subset of\n");
+		log("Load modules from a Verilog file to the current design. A large subset of\n");
 		log("Verilog-2005 is supported.\n");
 		log("\n");
 		log("    -sv\n");
@@ -65,7 +73,7 @@ struct VerilogFrontend : public Frontend {
 		log("        dump abstract syntax tree (after simplification)\n");
 		log("\n");
 		log("    -dump_vlog\n");
-		log("        dump ast as verilog code (after simplification)\n");
+		log("        dump ast as Verilog code (after simplification)\n");
 		log("\n");
 		log("    -yydebug\n");
 		log("        enable parser debug output\n");
@@ -102,10 +110,13 @@ struct VerilogFrontend : public Frontend {
 		log("        memories to registers directly in the front-end.\n");
 		log("\n");
 		log("    -ppdump\n");
-		log("        dump verilog code after pre-processor\n");
+		log("        dump Verilog code after pre-processor\n");
 		log("\n");
 		log("    -nopp\n");
 		log("        do not run the pre-processor\n");
+		log("\n");
+		log("    -nodpi\n");
+		log("        disable DPI-C support\n");
 		log("\n");
 		log("    -lib\n");
 		log("        only create empty blackbox modules. This implies -DBLACKBOX.\n");
@@ -126,6 +137,9 @@ struct VerilogFrontend : public Frontend {
 		log("        to a later 'hierarchy' command. Useful in cases where the default\n");
 		log("        parameters of modules yield invalid or not synthesizable code.\n");
 		log("\n");
+		log("    -noautowire\n");
+		log("        make the default of `default_nettype be \"none\" instead of \"wire\".\n");
+		log("\n");
 		log("    -setattr <attribute_name>\n");
 		log("        set the specified attribute (to the value 1) on all loaded modules\n");
 		log("\n");
@@ -142,7 +156,7 @@ struct VerilogFrontend : public Frontend {
 		log("\n");
 		log("Note that the Verilog frontend does a pretty good job of processing valid\n");
 		log("verilog input, but has not very good error reporting. It generally is\n");
-		log("recommended to use a simulator (for example icarus verilog) for checking\n");
+		log("recommended to use a simulator (for example Icarus Verilog) for checking\n");
 		log("the syntax of the code, rather than to rely on read_verilog for that.\n");
 		log("\n");
 	}
@@ -157,6 +171,7 @@ struct VerilogFrontend : public Frontend {
 		bool flag_mem2reg = false;
 		bool flag_ppdump = false;
 		bool flag_nopp = false;
+		bool flag_nodpi = false;
 		bool flag_lib = false;
 		bool flag_noopt = false;
 		bool flag_icells = false;
@@ -169,6 +184,7 @@ struct VerilogFrontend : public Frontend {
 		frontend_verilog_yydebug = false;
 		sv_mode = false;
 		formal_mode = false;
+		default_nettype_wire = true;
 
 		log_header("Executing Verilog-2005 frontend.\n");
 
@@ -225,6 +241,10 @@ struct VerilogFrontend : public Frontend {
 				flag_nopp = true;
 				continue;
 			}
+			if (arg == "-nodpi") {
+				flag_nodpi = true;
+				continue;
+			}
 			if (arg == "-lib") {
 				flag_lib = true;
 				defines_map["BLACKBOX"] = string();
@@ -244,6 +264,10 @@ struct VerilogFrontend : public Frontend {
 			}
 			if (arg == "-defer") {
 				flag_defer = true;
+				continue;
+			}
+			if (arg == "-noautowire") {
+				default_nettype_wire = false;
 				continue;
 			}
 			if (arg == "-setattr" && argidx+1 < args.size()) {
@@ -289,7 +313,6 @@ struct VerilogFrontend : public Frontend {
 		AST::get_line_num = &frontend_verilog_yyget_lineno;
 
 		current_ast = new AST::AstNode(AST::AST_DESIGN);
-		default_nettype_wire = true;
 
 		lexin = f;
 		std::string code_after_preproc;
@@ -313,6 +336,9 @@ struct VerilogFrontend : public Frontend {
 						child->attributes[attr] = AST::AstNode::mkconst_int(1, false);
 		}
 
+		if (flag_nodpi)
+			error_on_dpi_function(current_ast);
+
 		AST::process(design, current_ast, flag_dump_ast1, flag_dump_ast2, flag_dump_vlog, flag_nolatches, flag_nomeminit, flag_nomem2reg, flag_mem2reg, flag_lib, flag_noopt, flag_icells, flag_ignore_redef, flag_defer, default_nettype_wire);
 
 		if (!flag_nopp)
@@ -333,12 +359,12 @@ struct VerilogDefaults : public Pass {
 		log("\n");
 		log("    verilog_defaults -add [options]\n");
 		log("\n");
-		log("Add the sepcified options to the list of default options to read_verilog.\n");
+		log("Add the specified options to the list of default options to read_verilog.\n");
 		log("\n");
 		log("\n");
 		log("    verilog_defaults -clear");
 		log("\n");
-		log("Clear the list of verilog default options.\n");
+		log("Clear the list of Verilog default options.\n");
 		log("\n");
 		log("\n");
 		log("    verilog_defaults -push");

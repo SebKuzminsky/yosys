@@ -26,7 +26,7 @@
 // http://www.ece.cmu.edu/~ee760/760docs/blif.pdf
 
 // [[CITE]] Kahn's Topological sorting algorithm
-// Kahn, Arthur B. (1962), "Topological sorting of large networks", Communications of the ACM 5 (11): 558–562, doi:10.1145/368996.369025
+// Kahn, Arthur B. (1962), "Topological sorting of large networks", Communications of the ACM 5 (11): 558-562, doi:10.1145/368996.369025
 // http://en.wikipedia.org/wiki/Topological_sorting
 
 #define ABC_COMMAND_LIB "strash; scorr; ifraig; retime {D}; strash; dch -f; map {D}"
@@ -1075,6 +1075,12 @@ void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::strin
 					design->select(module, cell);
 					continue;
 				}
+				if (c->type == "$lut" && GetSize(c->getPort("\\A")) == 1 && c->getParam("\\LUT").as_int() == 2) {
+					SigSpec my_a = module->wires_[remap_name(c->getPort("\\A").as_wire()->name)];
+					SigSpec my_y = module->wires_[remap_name(c->getPort("\\Y").as_wire()->name)];
+					module->connect(my_y, my_a);
+					continue;
+				}
 				RTLIL::Cell *cell = module->addCell(remap_name(c->name), c->type);
 				if (markgroups) cell->attributes["\\abcgroup"] = map_autoidx;
 				cell->parameters = c->parameters;
@@ -1158,7 +1164,7 @@ struct AbcPass : public Pass {
 		log("        use the specified ABC script file instead of the default script.\n");
 		log("\n");
 		log("        if <file> starts with a plus sign (+), then the rest of the filename\n");
-		log("        string is interprated as the command string to be passed to ABC. the\n");
+		log("        string is interpreted as the command string to be passed to ABC. The\n");
 		log("        leading plus sign is removed and all commas (,) in the string are\n");
 		log("        replaced with blanks before the string is passed to ABC.\n");
 		log("\n");
@@ -1235,7 +1241,7 @@ struct AbcPass : public Pass {
 		log("\n");
 		log("    -keepff\n");
 		log("        set the \"keep\" attribute on flip-flop output wires. (and thus preserve\n");
-		log("        them, for example for equivialence checking.)\n");
+		log("        them, for example for equivalence checking.)\n");
 		log("\n");
 		log("    -nocleanup\n");
 		log("        when this option is used, the temporary files created by this pass\n");

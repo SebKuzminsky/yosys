@@ -37,7 +37,7 @@ struct WreduceConfig
 			"$and", "$or", "$xor", "$xnor",
 			"$shl", "$shr", "$sshl", "$sshr", "$shift", "$shiftx",
 			"$lt", "$le", "$eq", "$ne", "$eqx", "$nex", "$ge", "$gt",
-			"$add", "$sub", // "$mul", "$div", "$mod", "$pow",
+			"$add", "$sub", "$mul", // "$div", "$mod", "$pow",
 			"$mux", "$pmux"
 		});
 	}
@@ -348,9 +348,9 @@ struct WreducePass : public Pass {
 				continue;
 
 			for (auto c : module->selected_cells())
-				if (c->type.in({"$reduce_and", "$reduce_or", "$reduce_xor", "$reduce_xnor", "$reduce_bool",
+				if (c->type.in("$reduce_and", "$reduce_or", "$reduce_xor", "$reduce_xnor", "$reduce_bool",
 						"$lt", "$le", "$eq", "$ne", "$eqx", "$nex", "$ge", "$gt",
-						"$logic_not", "$logic_and", "$logic_or"}) && GetSize(c->getPort("\\Y")) > 1) {
+						"$logic_not", "$logic_and", "$logic_or") && GetSize(c->getPort("\\Y")) > 1) {
 					SigSpec sig = c->getPort("\\Y");
 					c->setPort("\\Y", sig[0]);
 					c->setParam("\\Y_WIDTH", 1);

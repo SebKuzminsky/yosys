@@ -329,7 +329,7 @@ static std::string id2vl(std::string txt)
 	return txt;
 }
 
-// dump AST node as verilog pseudo-code
+// dump AST node as Verilog pseudo-code
 void AstNode::dumpVlog(FILE *f, std::string indent)
 {
 	bool first = true;
@@ -699,7 +699,7 @@ AstNode *AstNode::mkconst_bits(const std::vector<RTLIL::State> &v, bool is_signe
 	for (size_t i = 0; i < 32; i++) {
 		if (i < node->bits.size())
 			node->integer |= (node->bits[i] == RTLIL::S1) << i;
-		else if (is_signed)
+		else if (is_signed && !node->bits.empty())
 			node->integer |= (node->bits.back() == RTLIL::S1) << i;
 	}
 	node->range_valid = true;
@@ -831,7 +831,7 @@ double AstNode::asReal(bool is_signed)
 	{
 		RTLIL::Const val(bits);
 
-		bool is_negative = is_signed && val.bits.back() == RTLIL::State::S1;
+		bool is_negative = is_signed && !val.bits.empty() && val.bits.back() == RTLIL::State::S1;
 		if (is_negative)
 			val = const_neg(val, val, false, false, val.bits.size());
 
@@ -894,7 +894,7 @@ static AstModule* process_module(AstNode *ast, bool defer)
 	AstNode *ast_before_simplify = ast->clone();
 
 	if (flag_dump_ast1) {
-		log("Dumping verilog AST before simplification:\n");
+		log("Dumping Verilog AST before simplification:\n");
 		ast->dumpAst(NULL, "    ");
 		log("--- END OF AST DUMP ---\n");
 	}
@@ -904,13 +904,13 @@ static AstModule* process_module(AstNode *ast, bool defer)
 		while (ast->simplify(!flag_noopt, false, false, 0, -1, false, false)) { }
 
 		if (flag_dump_ast2) {
-			log("Dumping verilog AST after simplification:\n");
+			log("Dumping Verilog AST after simplification:\n");
 			ast->dumpAst(NULL, "    ");
 			log("--- END OF AST DUMP ---\n");
 		}
 
 		if (flag_dump_vlog) {
-			log("Dumping verilog AST (as requested by dump_vlog option):\n");
+			log("Dumping Verilog AST (as requested by dump_vlog option):\n");
 			ast->dumpVlog(NULL, "    ");
 			log("--- END OF AST DUMP ---\n");
 		}

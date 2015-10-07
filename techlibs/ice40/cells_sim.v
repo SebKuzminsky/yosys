@@ -460,7 +460,6 @@ module SB_RAM40_4K (
 			if (!WMASK_I[13]) memory[WADDR[7:0]][13] <= WDATA_I[13];
 			if (!WMASK_I[14]) memory[WADDR[7:0]][14] <= WDATA_I[14];
 			if (!WMASK_I[15]) memory[WADDR[7:0]][15] <= WDATA_I[15];
-			if (!WMASK_I[16]) memory[WADDR[7:0]][16] <= WDATA_I[16];
 		end
 	end
 
@@ -474,7 +473,7 @@ endmodule
 
 module SB_RAM40_4KNR (
 	output [15:0] RDATA,
-	input         RCLK, RCLKE, RE,
+	input         RCLKN, RCLKE, RE,
 	input  [10:0] RADDR,
 	input         WCLK, WCLKE, WE,
 	input  [10:0] WADDR,
@@ -521,7 +520,7 @@ module SB_RAM40_4KNR (
 		.INIT_F    (INIT_F    )
 	) RAM (
 		.RDATA(RDATA),
-		.RCLK (~RCLK),
+		.RCLK (~RCLKN),
 		.RCLKE(RCLKE),
 		.RE   (RE   ),
 		.RADDR(RADDR),
@@ -538,7 +537,7 @@ module SB_RAM40_4KNW (
 	output [15:0] RDATA,
 	input         RCLK, RCLKE, RE,
 	input  [10:0] RADDR,
-	input         WCLK, WCLKE, WE,
+	input         WCLKN, WCLKE, WE,
 	input  [10:0] WADDR,
 	input  [15:0] MASK, WDATA
 );
@@ -587,7 +586,7 @@ module SB_RAM40_4KNW (
 		.RCLKE(RCLKE),
 		.RE   (RE   ),
 		.RADDR(RADDR),
-		.WCLK (~WCLK),
+		.WCLK (~WCLKN),
 		.WCLKE(WCLKE),
 		.WE   (WE   ),
 		.WADDR(WADDR),
@@ -598,9 +597,9 @@ endmodule
 
 module SB_RAM40_4KNRNW (
 	output [15:0] RDATA,
-	input         RCLK, RCLKE, RE,
+	input         RCLKN, RCLKE, RE,
 	input  [10:0] RADDR,
-	input         WCLK, WCLKE, WE,
+	input         WCLKN, WCLKE, WE,
 	input  [10:0] WADDR,
 	input  [15:0] MASK, WDATA
 );
@@ -645,11 +644,11 @@ module SB_RAM40_4KNRNW (
 		.INIT_F    (INIT_F    )
 	) RAM (
 		.RDATA(RDATA),
-		.RCLK (~RCLK),
+		.RCLK (~RCLKN),
 		.RCLKE(RCLKE),
 		.RE   (RE   ),
 		.RADDR(RADDR),
-		.WCLK (~WCLK),
+		.WCLK (~WCLKN),
 		.WCLKE(WCLKE),
 		.WE   (WE   ),
 		.WADDR(WADDR),
@@ -865,3 +864,12 @@ module SB_PLL40_2F_PAD (
 	parameter EXTERNAL_DIVIDE_FACTOR = 1;
 endmodule
 
+// SiliconBlue Device Configuration Cells
+
+(* blackbox, keep *)
+module SB_WARMBOOT (
+	input BOOT,
+	input S1,
+	input S0
+);
+endmodule

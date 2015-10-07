@@ -28,6 +28,15 @@ PRIVATE_NAMESPACE_BEGIN
 
 SigMap assign_map, dff_init_map;
 SigSet<RTLIL::Cell*> mux_drivers;
+dict<SigBit, pool<SigBit>> init_attributes;
+
+void remove_init_attr(SigSpec sig)
+{
+	for (auto bit : assign_map(sig))
+		if (init_attributes.count(bit))
+			for (auto wbit : init_attributes.at(bit))
+				wbit.wire->attributes.at("\\init")[wbit.offset] = State::Sx;
+}
 
 bool handle_dlatch(RTLIL::Module *mod, RTLIL::Cell *dlatch)
 {
@@ -52,6 +61,7 @@ bool handle_dlatch(RTLIL::Module *mod, RTLIL::Cell *dlatch)
 
 delete_dlatch:
 	log("Removing %s (%s) from module %s.\n", dlatch->name.c_str(), dlatch->type.c_str(), mod->name.c_str());
+	remove_init_attr(dlatch->getPort("\\Q"));
 	mod->remove(dlatch);
 	return true;
 }
@@ -130,38 +140,30 @@ bool handle_dff(RTLIL::Module *mod, RTLIL::Cell *dff)
 	if (sig_c.is_fully_const() && (!sig_r.size() || !has_init || val_init == val_rv)) {
 		if (val_rv.bits.size() == 0)
 			val_rv = val_init;
-		RTLIL::SigSig conn(sig_q, val_rv);
-		mod->connect(conn);
+		mod->connect(sig_q, val_rv);
 		goto delete_dff;
 	}
 
 	if (sig_d.is_fully_undef() && sig_r.size() && (!has_init || val_init == val_rv)) {
-		RTLIL::SigSig conn(sig_q, val_rv);
-		mod->connect(conn);
+		mod->connect(sig_q, val_rv);
 		goto delete_dff;
 	}
 
 	if (sig_d.is_fully_undef() && !sig_r.size() && has_init) {
-		RTLIL::SigSig conn(sig_q, val_init);
-		mod->connect(conn);
+		mod->connect(sig_q, val_init);
 		goto delete_dff;
 	}
 
-	if (sig_d.is_fully_const() && !sig_r.size() && (!has_init || val_init == sig_d.as_const())) {
-		RTLIL::SigSig conn(sig_q, sig_d);
-		mod->connect(conn);
+	if (sig_d.is_fully_const() && (!sig_r.size() || val_rv == sig_d.as_const()) && (!has_init || val_init == sig_d.as_const())) {
+		mod->connect(sig_q, sig_d);
 		goto delete_dff;
 	}
 
 	if (sig_d == sig_q && (!sig_r.size() || !has_init || val_init == val_rv)) {
-		if (sig_r.size()) {
-			RTLIL::SigSig conn(sig_q, val_rv);
-			mod->connect(conn);
-		}
-		if (has_init) {
-			RTLIL::SigSig conn(sig_q, val_init);
-			mod->connect(conn);
-		}
+		if (sig_r.size())
+			mod->connect(sig_q, val_rv);
+		if (has_init)
+			mod->connect(sig_q, val_init);
 		goto delete_dff;
 	}
 
@@ -169,6 +171,7 @@ bool handle_dff(RTLIL::Module *mod, RTLIL::Cell *dff)
 
 delete_dff:
 	log("Removing %s (%s) from module %s.\n", dff->name.c_str(), dff->type.c_str(), mod->name.c_str());
+	remove_init_attr(dff->getPort("\\Q"));
 	mod->remove(dff);
 	return true;
 }
@@ -200,8 +203,14 @@ struct OptRmdffPass : public Pass {
 			assign_map.set(mod_it.second);
 			dff_init_map.set(mod_it.second);
 			for (auto &it : mod_it.second->wires_)
-				if (it.second->attributes.count("\\init") != 0)
+				if (it.second->attributes.count("\\init") != 0) {
 					dff_init_map.add(it.second, it.second->attributes.at("\\init"));
+					for (int i = 0; i < GetSize(it.second); i++) {
+						SigBit wire_bit(it.second, i), mapped_bit = assign_map(wire_bit);
+						if (mapped_bit.wire)
+							init_attributes[mapped_bit].insert(wire_bit);
+					}
+				}
 			mux_drivers.clear();
 
 			std::vector<RTLIL::IdString> dff_list;

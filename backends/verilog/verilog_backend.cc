@@ -17,7 +17,7 @@
  *
  *  ---
  *
- *  A simple and straightforward verilog backend.
+ *  A simple and straightforward Verilog backend.
  *
  *  Note that RTLIL processes can't always be mapped easily to a Verilog
  *  process. Therefore this frontend should only be used to export a
@@ -165,12 +165,13 @@ void dump_const(std::ostream &f, const RTLIL::Const &data, int width = -1, int o
 				log_assert(i < (int)data.bits.size());
 				if (data.bits[i] != RTLIL::S0 && data.bits[i] != RTLIL::S1)
 					goto dump_bits;
-				if (data.bits[i] == RTLIL::S1 && (i - offset) == 31)
-					goto dump_bits;
 				if (data.bits[i] == RTLIL::S1)
 					val |= 1 << (i - offset);
 			}
-			f << stringf("32'%sd %d", set_signed ? "s" : "", val);
+			if (set_signed && val < 0)
+				f << stringf("-32'sd %u", -val);
+			else
+				f << stringf("32'%sd %u", set_signed ? "s" : "", val);
 		} else {
 	dump_bits:
 			f << stringf("%d'%sb", width, set_signed ? "s" : "");
@@ -284,7 +285,7 @@ void dump_wire(std::ostream &f, std::string indent, RTLIL::Wire *wire)
 		f << stringf("[%d:%d] ", wire->width - 1 + wire->start_offset, wire->start_offset);
 	f << stringf("%s;\n", id(wire->name).c_str());
 #else
-	// do not use Verilog-2k "outut reg" syntax in verilog export
+	// do not use Verilog-2k "output reg" syntax in Verilog export
 	std::string range = "";
 	if (wire->width != 1) {
 		if (wire->upto)
@@ -805,15 +806,15 @@ bool dump_cell_expr(std::ostream &f, std::string indent, RTLIL::Cell *cell)
 		//  initial begin
 		//    memid[0] <= ...
 		//  end
-		int mem_val;
 		f << stringf("%s" "reg [%d:%d] %s [%d:%d];\n", indent.c_str(), width-1, 0, mem_id.c_str(), size-1, 0);
 		if (use_init)
 		{
 			f << stringf("%s" "initial begin\n", indent.c_str());
 			for (int i=0; i<size; i++)
 			{
-				mem_val = cell->parameters["\\INIT"].extract(i*width, width).as_int();
-				f << stringf("%s" "  %s[%d] <= %d'd%d;\n", indent.c_str(), mem_id.c_str(), i, width, mem_val);
+				f << stringf("%s" "  %s[%d] <= ", indent.c_str(), mem_id.c_str(), i);
+				dump_const(f, cell->parameters["\\INIT"].extract(i*width, width));
+				f << stringf(";\n");
 			}
 			f << stringf("%s" "end\n", indent.c_str());
 		}
@@ -884,7 +885,7 @@ bool dump_cell_expr(std::ostream &f, std::string indent, RTLIL::Cell *cell)
 						std::ostringstream os;
 						dump_sigspec(os, sig_rd_data);
 						std::string line = stringf("assign %s = %s[%s];\n", os.str().c_str(), mem_id.c_str(), temp_id.c_str());
-						clk_to_lof_body[clk_domain_str].push_back(line);
+						clk_to_lof_body[""].push_back(line);
 					}
 				} else {
 					// for non-clocked read-ports make something like:
@@ -966,7 +967,7 @@ bool dump_cell_expr(std::ostream &f, std::string indent, RTLIL::Cell *cell)
 				n += wen_width;
 			}
 		}
-		// Output verilog that looks something like this:
+		// Output Verilog that looks something like this:
 		// reg [..] _3_;
 		// always @(posedge CLK2) begin
 		//   _3_ <= memory[D1ADDR];
@@ -1315,14 +1316,14 @@ void dump_module(std::ostream &f, std::string indent, RTLIL::Module *module)
 }
 
 struct VerilogBackend : public Backend {
-	VerilogBackend() : Backend("verilog", "write design to verilog file") { }
+	VerilogBackend() : Backend("verilog", "write design to Verilog file") { }
 	virtual void help()
 	{
 		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
 		log("\n");
 		log("    write_verilog [options] [filename]\n");
 		log("\n");
-		log("Write the current design to a verilog file.\n");
+		log("Write the current design to a Verilog file.\n");
 		log("\n");
 		log("    -norename\n");
 		log("        without this option all internal object names (the ones with a dollar\n");
@@ -1336,7 +1337,7 @@ struct VerilogBackend : public Backend {
 		log("        with this option attributes are included as comments in the output\n");
 		log("\n");
 		log("    -noexpr\n");
-		log("        without this option all internal cells are converted to verilog\n");
+		log("        without this option all internal cells are converted to Verilog\n");
 		log("        expressions.\n");
 		log("\n");
 		log("    -blackboxes\n");

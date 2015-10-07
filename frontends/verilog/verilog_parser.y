@@ -36,7 +36,7 @@
 %{
 #include <list>
 #include <string.h>
-#include "verilog_frontend.h"
+#include "frontends/verilog/verilog_frontend.h"
 #include "kernel/log.h"
 
 USING_YOSYS_NAMESPACE
@@ -153,6 +153,8 @@ design:
 	module design |
 	defattr design |
 	task_func_decl design |
+	param_decl design |
+	localparam_decl design |
 	/* empty */;
 
 attr:
@@ -708,6 +710,8 @@ wire_name_and_opt_assign:
 
 wire_name:
 	TOK_ID range_or_multirange {
+		if (astbuf1 == nullptr)
+			frontend_verilog_yyerror("Syntax error.");
 		AstNode *node = astbuf1->clone();
 		node->str = *$1;
 		append_attr_clone(node, albuf);

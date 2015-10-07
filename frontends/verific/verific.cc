@@ -692,7 +692,8 @@ static void import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*
 			cell->parameters["\\TRANSPARENT"] = false;
 			cell->parameters["\\ABITS"] = GetSize(addr);
 			cell->parameters["\\WIDTH"] = GetSize(data);
-			cell->setPort("\\CLK", RTLIL::State::S0);
+			cell->setPort("\\CLK", RTLIL::State::Sx);
+			cell->setPort("\\EN", RTLIL::State::Sx);
 			cell->setPort("\\ADDR", addr);
 			cell->setPort("\\DATA", data);
 			continue;
@@ -789,7 +790,7 @@ struct VerificPass : public Pass {
 		log("\n");
 		log("    verific -import [-gates] {-all | <top-module>..}\n");
 		log("\n");
-		log("Elaborate the design for the sepcified top modules, import to Yosys and\n");
+		log("Elaborate the design for the specified top modules, import to Yosys and\n");
 		log("reset the internal state of Verific. A gate-level netlist is created\n");
 		log("when called with -gates.\n");
 		log("\n");

@@ -210,12 +210,12 @@ namespace AST
 		// simplify() creates a simpler AST by unrolling for-loops, expanding generate blocks, etc.
 		// it also sets the id2ast pointers so that identifier lookups are fast in genRTLIL()
 		bool simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage, int width_hint, bool sign_hint, bool in_param);
-		AstNode *readmem(bool is_readmemh, std::string mem_filename, AstNode *memory, int start_addr, int finish_addr);
+		AstNode *readmem(bool is_readmemh, std::string mem_filename, AstNode *memory, int start_addr, int finish_addr, bool unconditional_init);
 		void expand_genblock(std::string index_var, std::string prefix, std::map<std::string, std::string> &name_map);
 		void replace_ids(const std::string &prefix, const std::map<std::string, std::string> &rules);
 		void mem2reg_as_needed_pass1(dict<AstNode*, pool<std::string>> &mem2reg_places,
 				dict<AstNode*, uint32_t> &mem2reg_flags, dict<AstNode*, uint32_t> &proc_flags, uint32_t &status_flags);
-		void mem2reg_as_needed_pass2(pool<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block);
+		bool mem2reg_as_needed_pass2(pool<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block);
 		bool mem2reg_check(pool<AstNode*> &mem2reg_set);
 		void meminfo(int &mem_width, int &mem_size, int &addr_bits);
 
@@ -269,7 +269,7 @@ namespace AST
 	void process(RTLIL::Design *design, AstNode *ast, bool dump_ast1, bool dump_ast2, bool dump_vlog, bool nolatches, bool nomeminit, bool nomem2reg, bool mem2reg, bool lib, bool noopt, bool icells, bool ignore_redef, bool defer, bool autowire);
 
 	// parametric modules are supported directly by the AST library
-	// therfore we need our own derivate of RTLIL::Module with overloaded virtual functions
+	// therefore we need our own derivate of RTLIL::Module with overloaded virtual functions
 	struct AstModule : RTLIL::Module {
 		AstNode *ast;
 		bool nolatches, nomeminit, nomem2reg, mem2reg, lib, noopt, icells, autowire;

@@ -40,7 +40,7 @@
 #endif
 
 #include "kernel/log.h"
-#include "verilog_frontend.h"
+#include "frontends/verilog/verilog_frontend.h"
 #include "frontends/ast/ast.h"
 #include "verilog_parser.tab.h"
 
@@ -248,7 +248,7 @@ and|nand|or|nor|xor|xnor|not|buf|bufif0|bufif1|notif0|notif1 {
 supply0 { return TOK_SUPPLY0; }
 supply1 { return TOK_SUPPLY1; }
 
-"$"(display|strobe|monitor|time|stop|finish|dumpfile|dumpvars|dumpon|dumpoff|dumpall) {
+"$"(display|write|strobe|monitor|time|stop|finish|dumpfile|dumpvars|dumpon|dumpoff|dumpall) {
 	frontend_verilog_yylval.string = new std::string(yytext);
 	return TOK_ID;
 }
@@ -281,7 +281,7 @@ supply1 { return TOK_SUPPLY1; }
 	static bool printed_warning = false;
 	if (!printed_warning) {
 		log_warning("Found one of those horrible `(synopsys|synthesis) full_case' comments.\n"
-				"Yosys does support them but it is recommended to use verilog `full_case' attributes instead!\n");
+				"Yosys does support them but it is recommended to use Verilog `full_case' attributes instead!\n");
 		printed_warning = true;
 	}
 	return TOK_SYNOPSYS_FULL_CASE;
@@ -290,7 +290,7 @@ supply1 { return TOK_SUPPLY1; }
 	static bool printed_warning = false;
 	if (!printed_warning) {
 		log_warning("Found one of those horrible `(synopsys|synthesis) parallel_case' comments.\n"
-				"Yosys does support them but it is recommended to use verilog `parallel_case' attributes instead!\n");
+				"Yosys does support them but it is recommended to use Verilog `parallel_case' attributes instead!\n");
 		printed_warning = true;
 	}
 	return TOK_SYNOPSYS_PARALLEL_CASE;

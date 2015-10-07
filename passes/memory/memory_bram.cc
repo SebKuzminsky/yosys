@@ -112,15 +112,15 @@ struct rules_t
 				if (ports[i] != other.ports[i])
 					log_error("Bram %s variants %d and %d have different number of %c-ports.\n", log_id(name), variant, other.variant, 'A'+i);
 				if (wrmode[i] != other.wrmode[i])
-					variant_params[stringf("\\CFG_WRMODE_%c", 'A' + i)] = wrmode[1];
+					variant_params[stringf("\\CFG_WRMODE_%c", 'A' + i)] = wrmode[i];
 				if (enable[i] != other.enable[i])
-					variant_params[stringf("\\CFG_ENABLE_%c", 'A' + i)] = enable[1];
+					variant_params[stringf("\\CFG_ENABLE_%c", 'A' + i)] = enable[i];
 				if (transp[i] != other.transp[i])
-					variant_params[stringf("\\CFG_TRANSP_%c", 'A' + i)] = transp[1];
+					variant_params[stringf("\\CFG_TRANSP_%c", 'A' + i)] = transp[i];
 				if (clocks[i] != other.clocks[i])
-					variant_params[stringf("\\CFG_CLOCKS_%c", 'A' + i)] = clocks[1];
+					variant_params[stringf("\\CFG_CLOCKS_%c", 'A' + i)] = clocks[i];
 				if (clkpol[i] != other.clkpol[i])
-					variant_params[stringf("\\CFG_CLKPOL_%c", 'A' + i)] = clkpol[1];
+					variant_params[stringf("\\CFG_CLKPOL_%c", 'A' + i)] = clkpol[i];
 			}
 		}
 	};
@@ -429,11 +429,12 @@ bool replace_cell(Cell *cell, const rules_t &rules, const rules_t::bram_t &bram,
 	rd_clkpol.extend_u0(rd_ports);
 	rd_transp.extend_u0(rd_ports);
 
+	SigSpec rd_en = cell->getPort("\\RD_EN");
 	SigSpec rd_clk = cell->getPort("\\RD_CLK");
 	SigSpec rd_data = cell->getPort("\\RD_DATA");
 	SigSpec rd_addr = cell->getPort("\\RD_ADDR");
 
-	if (match.shuffle_enable && bram.dbits >= portinfos.at(match.shuffle_enable - 'A').enable*2 && portinfos.at(match.shuffle_enable - 'A').enable > 0)
+	if (match.shuffle_enable && bram.dbits >= portinfos.at(match.shuffle_enable - 'A').enable*2 && portinfos.at(match.shuffle_enable - 'A').enable > 0 && wr_ports > 0)
 	{
 		int bucket_size = bram.dbits / portinfos.at(match.shuffle_enable - 'A').enable;
 		log("      Shuffle bit order to accommodate enable buckets of size %d..\n", bucket_size);
@@ -605,7 +606,7 @@ bool replace_cell(Cell *cell, const rules_t &rules, const rules_t::bram_t &bram,
 	mapped_wr_port:;
 	}
 
-	// houskeeping stuff for growing more read ports and restarting read port assignments
+	// housekeeping stuff for growing more read ports and restarting read port assignments
 
 	int grow_read_ports_cursor = -1;
 	bool try_growing_more_read_ports = false;
@@ -688,13 +689,17 @@ grow_read_ports:;
 					log("        Bram port %c%d.%d has incompatible clock polarity.\n", pi.group + 'A', pi.index + 1, pi.dupidx + 1);
 					goto skip_bram_rport;
 				}
+				if (rd_en[cell_port_i] != State::S1 && pi.enable == 0) {
+					log("        Bram port %c%d.%d has no read enable input.\n", pi.group + 'A', pi.index + 1, pi.dupidx + 1);
+					goto skip_bram_rport;
+				}
 			skip_bram_rport_clkcheck:
 				if (read_transp.count(pi.transp) && read_transp.at(pi.transp) != transp) {
 					if (match.make_transp && wr_ports <= 1) {
 						pi.make_transp = true;
 						enable_make_transp = true;
 					} else {
-						log("        Bram port %c%d.%d has incompatible read transparancy.\n", pi.group + 'A', pi.index + 1, pi.dupidx + 1);
+						log("        Bram port %c%d.%d has incompatible read transparency.\n", pi.group + 'A', pi.index + 1, pi.dupidx + 1);
 						goto skip_bram_rport;
 					}
 				}
@@ -713,6 +718,7 @@ grow_read_ports:;
 				clock_polarities[pi.clkpol] = clkdom.second;
 				read_transp[pi.transp] = transp;
 				pi.sig_clock = clkdom.first;
+				pi.sig_en = rd_en[cell_port_i];
 				pi.effective_clkpol = clkdom.second;
 			}
 
@@ -853,8 +859,11 @@ grow_read_ports:;
 				if (pi.enable)
 				{
 					SigSpec sig_en = pi.sig_en;
-					sig_en.extend_u0((grid_d+1) * pi.enable);
-					sig_en = sig_en.extract(grid_d * pi.enable, pi.enable);
+
+					if (pi.wrmode == 1) {
+						sig_en.extend_u0((grid_d+1) * pi.enable);
+						sig_en = sig_en.extract(grid_d * pi.enable, pi.enable);
+					}
 
 					if (!addr_ok.empty())
 						sig_en = module->Mux(NEW_ID, SigSpec(0, GetSize(sig_en)), sig_en, addr_ok);
@@ -886,6 +895,8 @@ grow_read_ports:;
 
 					if (pi.make_outreg) {
 						SigSpec bram_dout_q = module->addWire(NEW_ID, bram.dbits);
+						if (!pi.sig_en.empty())
+							bram_dout = module->Mux(NEW_ID, bram_dout_q, bram_dout, pi.sig_en);
 						module->addDff(NEW_ID, pi.sig_clock, bram_dout, bram_dout_q, pi.effective_clkpol);
 						bram_dout = bram_dout_q;
 					}
@@ -1126,8 +1137,8 @@ struct MemoryBramPass : public Pass {
 		log("      groups 2           # number of port groups\n");
 		log("      ports  1 1         # number of ports in each group\n");
 		log("      wrmode 1 0         # set to '1' if this groups is write ports\n");
-		log("      enable 4 0         # number of enable bits (for write ports)\n");
-		log("      transp 0 2         # transparatent (for read ports)\n");
+		log("      enable 4 1         # number of enable bits\n");
+		log("      transp 0 2         # transparent (for read ports)\n");
 		log("      clocks 1 2         # clock configuration\n");
 		log("      clkpol 2 2         # clock polarity configuration\n");
 		log("    endbram\n");
@@ -1145,7 +1156,7 @@ struct MemoryBramPass : public Pass {
 		log("greater than 1 share the same configuration bit.\n");
 		log("\n");
 		log("Using the same bram name in different bram blocks will create different variants\n");
-		log("of the bram. Verilog configration parameters for the bram are created as needed.\n");
+		log("of the bram. Verilog configuration parameters for the bram are created as needed.\n");
 		log("\n");
 		log("It is also possible to create variants by repeating statements in the bram block\n");
 		log("and appending '@<label>' to the individual statements.\n");
@@ -1178,7 +1189,7 @@ struct MemoryBramPass : public Pass {
 		log("    dcells  .......  number of cells in 'data-direction'\n");
 		log("    cells  ........  total number of cells (acells*dcells*dups)\n");
 		log("\n");
-		log("The interface for the created bram instances is dervived from the bram\n");
+		log("The interface for the created bram instances is derived from the bram\n");
 		log("description. Use 'techmap' to convert the created bram instances into\n");
 		log("instances of the actual bram cells of your target architecture.\n");
 		log("\n");

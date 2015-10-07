@@ -57,6 +57,7 @@ void handle_memory(RTLIL::Module *module, RTLIL::Cell *memory)
 		cell->parameters["\\CLK_POLARITY"] = RTLIL::SigSpec(memory->parameters.at("\\RD_CLK_POLARITY")).extract(i, 1).as_const();
 		cell->parameters["\\TRANSPARENT"] = RTLIL::SigSpec(memory->parameters.at("\\RD_TRANSPARENT")).extract(i, 1).as_const();
 		cell->setPort("\\CLK", memory->getPort("\\RD_CLK").extract(i, 1));
+		cell->setPort("\\EN", memory->getPort("\\RD_EN").extract(i, 1));
 		cell->setPort("\\ADDR", memory->getPort("\\RD_ADDR").extract(i*abits, abits));
 		cell->setPort("\\DATA", memory->getPort("\\RD_DATA").extract(i*mem->width, mem->width));
 	}
@@ -77,6 +78,10 @@ void handle_memory(RTLIL::Module *module, RTLIL::Cell *memory)
 	}
 
 	Const initval = memory->parameters.at("\\INIT");
+	RTLIL::Cell *last_init_cell = nullptr;
+	SigSpec last_init_data;
+	int last_init_addr=0;
+
 	for (int i = 0; i < GetSize(initval) && i/mem->width < (1 << abits); i += mem->width) {
 		Const val = initval.extract(i, mem->width, State::Sx);
 		for (auto bit : val.bits)
@@ -84,14 +89,28 @@ void handle_memory(RTLIL::Module *module, RTLIL::Cell *memory)
 				goto found_non_undef_initval;
 		continue;
 	found_non_undef_initval:
-		RTLIL::Cell *cell = module->addCell(NEW_ID, "$meminit");
-		cell->parameters["\\MEMID"] = mem_name.str();
-		cell->parameters["\\ABITS"] = memory->parameters.at("\\ABITS");
-		cell->parameters["\\WIDTH"] = memory->parameters.at("\\WIDTH");
-		cell->parameters["\\PRIORITY"] = i/mem->width;
-		 cell->setPort("\\ADDR", SigSpec(i/mem->width, abits));
-		cell->setPort("\\DATA", val);
+		if (last_init_cell && last_init_addr+1 == i/mem->width) {
+			last_init_cell->parameters["\\WORDS"] = last_init_cell->parameters["\\WORDS"].as_int() + 1;
+			last_init_data.append(val);
+			last_init_addr++;
+		} else {
+			if (last_init_cell)
+				last_init_cell->setPort("\\DATA", last_init_data);
+			RTLIL::Cell *cell = module->addCell(NEW_ID, "$meminit");
+			cell->parameters["\\MEMID"] = mem_name.str();
+			cell->parameters["\\ABITS"] = memory->parameters.at("\\ABITS");
+			cell->parameters["\\WIDTH"] = memory->parameters.at("\\WIDTH");
+			cell->parameters["\\WORDS"] = 1;
+			cell->parameters["\\PRIORITY"] = i/mem->width;
+			cell->setPort("\\ADDR", SigSpec(i/mem->width, abits));
+			last_init_cell = cell;
+			last_init_addr = i/mem->width;
+			last_init_data = val;
+		}
 	}
+
+	if (last_init_cell)
+		last_init_cell->setPort("\\DATA", last_init_data);
 
 	module->remove(memory);
 }

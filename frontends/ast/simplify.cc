@@ -41,7 +41,7 @@ YOSYS_NAMESPACE_BEGIN
 using namespace AST;
 using namespace AST_INTERNAL;
 
-// convert the AST into a simpler AST that has all parameters subsitited by their
+// convert the AST into a simpler AST that has all parameters substituted by their
 // values, unrolled for-loops, expanded generate blocks, etc. when this function
 // is done with an AST it can be converted into RTLIL using genRTLIL().
 //
@@ -148,7 +148,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 				}
 			}
 
-			mem2reg_as_needed_pass2(mem2reg_set, this, NULL);
+			while (mem2reg_as_needed_pass2(mem2reg_set, this, NULL)) { }
 
 			for (size_t i = 0; i < children.size(); i++) {
 				if (mem2reg_set.count(children[i]) > 0) {
@@ -167,16 +167,116 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 	set_line_num(linenum);
 
 	// we do not look inside a task or function
-	// (but as soon as a task of function is instanciated we process the generated AST as usual)
+	// (but as soon as a task or function is instantiated we process the generated AST as usual)
 	if (type == AST_FUNCTION || type == AST_TASK) {
 		recursion_counter--;
 		return false;
 	}
 
-	// deactivate all calls to non-synthesis system taks
-	if ((type == AST_FCALL || type == AST_TCALL) && (str == "$display" || str == "$strobe" || str == "$monitor" || str == "$time" || str == "$stop" || str == "$finish" ||
+	// deactivate all calls to non-synthesis system tasks
+	// note that $display and $finish are used for synthesis-time DRC so they're not in this list
+	if ((type == AST_FCALL || type == AST_TCALL) && (str == "$strobe" || str == "$monitor" || str == "$time" || str == "$stop"  ||
 			str == "$dumpfile" || str == "$dumpvars" || str == "$dumpon" || str == "$dumpoff" || str == "$dumpall")) {
 		log_warning("Ignoring call to system %s %s at %s:%d.\n", type == AST_FCALL ? "function" : "task", str.c_str(), filename.c_str(), linenum);
+		delete_children();
+		str = std::string();
+	}
+
+	if ((type == AST_TCALL) && (str == "$display" || str == "$write") && (!current_always || current_always->type != AST_INITIAL)) {
+		log_warning("System task `%s' outside initial block is unsupported at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+		delete_children();
+		str = std::string();
+	}
+
+	// print messages if this a call to $display() or $write()
+	// This code implements only a small subset of Verilog-2005 $display() format specifiers,
+	// but should be good enough for most uses
+	if ((type == AST_TCALL) && ((str == "$display") || (str == "$write")))
+	{
+		size_t nargs = GetSize(children);
+		if(nargs < 1)
+			log_error("System task `%s' got %d arguments, expected >= 1 at %s:%d.\n",
+					str.c_str(), int(children.size()), filename.c_str(), linenum);
+
+		// First argument is the format string
+		AstNode *node_string = children[0]->clone();
+		while (node_string->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
+		if (node_string->type != AST_CONSTANT)
+			log_error("Failed to evaluate system task `%s' with non-constant 1st argument at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+		std::string sformat = node_string->bitsAsConst().decode_string();
+
+		// Other arguments are placeholders. Process the string as we go through it
+		std::string sout;
+		size_t next_arg = 1;
+		for(size_t i=0; i<sformat.length(); i++)
+		{
+			// format specifier
+			if(sformat[i] == '%')
+			{
+				// If there's no next character, that's a problem
+				if(i+1 >= sformat.length())
+					log_error("System task `%s' called with `%%' at end of string at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+
+				char cformat = sformat[++i];
+
+				// %% is special, does not need a matching argument
+				if(cformat == '%')
+				{
+					sout += '%';
+					continue;
+				}
+
+				// If we're out of arguments, that's a problem!
+				if(next_arg >= nargs)
+					log_error("System task `%s' called with more format specifiers than arguments at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+
+				// Simplify the argument
+				AstNode *node_arg = children[next_arg ++]->clone();
+				while (node_arg->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
+				if (node_arg->type != AST_CONSTANT)
+					log_error("Failed to evaluate system task `%s' with non-constant argument at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+
+				// Everything from here on depends on the format specifier
+				switch(cformat)
+				{
+					case 's':
+					case 'S':
+						sout += node_arg->bitsAsConst().decode_string();
+						break;
+
+					case 'd':
+					case 'D':
+						{
+							char tmp[128];
+							snprintf(tmp, sizeof(tmp), "%d", node_arg->bitsAsConst().as_int());
+							sout += tmp;
+						}
+						break;
+
+					case 'x':
+					case 'X':
+						{
+							char tmp[128];
+							snprintf(tmp, sizeof(tmp), "%x", node_arg->bitsAsConst().as_int());
+							sout += tmp;
+						}
+						break;
+
+					default:
+						log_error("System task `%s' called with invalid format specifier at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
+						break;
+				}
+			}
+
+			// not a format specifier
+			else
+				sout += sformat[i];
+		}
+
+		// Finally, print the message (only include a \n for $display, not for $write)
+		log("%s", sout.c_str());
+		if(str == "$display")
+			log("\n");
 		delete_children();
 		str = std::string();
 	}
@@ -552,6 +652,8 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 			// dumpAst(NULL, ">   ");
 			log_error("Index in generate block prefix syntax at %s:%d is not constant!\n", filename.c_str(), linenum);
 		}
+		if (children[1]->type == AST_PREFIX)
+			children[1]->simplify(const_fold, at_zero, in_lvalue, stage, width_hint, sign_hint, in_param);
 		log_assert(children[1]->type == AST_IDENTIFIER);
 		newNode = children[1]->clone();
 		const char *second_part = children[1]->str.c_str();
@@ -658,10 +760,10 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 			if (i == 0)
 				index_expr = new_index_expr;
 			else
-				index_expr = new AstNode(AST_ADD, new AstNode(AST_MUL, index_expr, AstNode::mkconst_int(id2ast->multirange_dimensions[2*i-1], true)), new_index_expr);
+				index_expr = new AstNode(AST_ADD, new AstNode(AST_MUL, index_expr, AstNode::mkconst_int(id2ast->multirange_dimensions[2*i+1], true)), new_index_expr);
 		}
 
-		for (int i = GetSize(id2ast->multirange_dimensions)/1; i < GetSize(children[0]->children); i++)
+		for (int i = GetSize(id2ast->multirange_dimensions)/2; i < GetSize(children[0]->children); i++)
 			children.push_back(children[0]->children[i]->clone());
 
 		delete children[0];
@@ -1085,7 +1187,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 		goto apply_newNode;
 	}
 
-	// replace primitives with assignmens
+	// replace primitives with assignments
 	if (type == AST_PRIMITIVE)
 	{
 		if (children.size() < 2)
@@ -1274,7 +1376,7 @@ skip_dynamic_range_lvalue_expansion:;
 
 	// found right-hand side identifier for memory -> replace with memory read port
 	if (stage > 1 && type == AST_IDENTIFIER && id2ast != NULL && id2ast->type == AST_MEMORY && !in_lvalue &&
-			children[0]->type == AST_RANGE && children[0]->children.size() == 1) {
+			children.size() == 1 && children[0]->type == AST_RANGE && children[0]->children.size() == 1) {
 		newNode = new AstNode(AST_MEMRD, children[0]->children[0]->clone());
 		newNode->str = str;
 		newNode->id2ast = id2ast;
@@ -1425,6 +1527,8 @@ skip_dynamic_range_lvalue_expansion:;
 		wrnode->children.push_back(new AstNode(AST_IDENTIFIER));
 		if (current_always->type != AST_INITIAL)
 			wrnode->children.push_back(new AstNode(AST_IDENTIFIER));
+		else
+			wrnode->children.push_back(AstNode::mkconst_int(1, false));
 		wrnode->str = children[0]->str;
 		wrnode->id2ast = children[0]->id2ast;
 		wrnode->children[0]->str = id_addr;
@@ -1567,7 +1671,17 @@ skip_dynamic_range_lvalue_expansion:;
 			if (current_scope.count(str) == 0 || current_scope[str]->type != AST_FUNCTION)
 				log_error("Can't resolve function name `%s' at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
 		}
-		if (type == AST_TCALL) {
+
+		if (type == AST_TCALL)
+		{
+			if (str == "$finish")
+			{
+				if (!current_always || current_always->type != AST_INITIAL)
+					log_error("System task `$finish' outside initial block is unsupported at %s:%d.\n", filename.c_str(), linenum);
+
+				log_error("System task `$finish' executed at %s:%d.\n", filename.c_str(), linenum);
+			}
+
 			if (str == "\\$readmemh" || str == "\\$readmemb")
 			{
 				if (GetSize(children) < 2 || GetSize(children) > 4)
@@ -1602,7 +1716,24 @@ skip_dynamic_range_lvalue_expansion:;
 					finish_addr = node_addr->asInt(false);
 				}
 
-				newNode = readmem(str == "\\$readmemh", node_filename->bitsAsConst().decode_string(), node_memory->id2ast, start_addr, finish_addr);
+				bool unconditional_init = false;
+				if (current_always->type == AST_INITIAL) {
+					pool<AstNode*> queue;
+					log_assert(current_always->children[0]->type == AST_BLOCK);
+					queue.insert(current_always->children[0]);
+					while (!unconditional_init && !queue.empty()) {
+						pool<AstNode*> next_queue;
+						for (auto n : queue)
+						for (auto c : n->children) {
+							if (c == this)
+								unconditional_init = true;
+							next_queue.insert(c);
+						}
+						next_queue.swap(queue);
+					}
+				}
+
+				newNode = readmem(str == "\\$readmemh", node_filename->bitsAsConst().decode_string(), node_memory->id2ast, start_addr, finish_addr, unconditional_init);
 				goto apply_newNode;
 			}
 
@@ -2085,9 +2216,17 @@ static void replace_result_wire_name_in_function(AstNode *node, std::string &fro
 }
 
 // replace a readmem[bh] TCALL ast node with a block of memory assignments
-AstNode *AstNode::readmem(bool is_readmemh, std::string mem_filename, AstNode *memory, int start_addr, int finish_addr)
+AstNode *AstNode::readmem(bool is_readmemh, std::string mem_filename, AstNode *memory, int start_addr, int finish_addr, bool unconditional_init)
 {
+	int mem_width, mem_size, addr_bits;
+	memory->meminfo(mem_width, mem_size, addr_bits);
+
 	AstNode *block = new AstNode(AST_BLOCK);
+
+	AstNode *meminit = nullptr;
+	int next_meminit_cursor=0;
+	vector<State> meminit_bits;
+	int meminit_size=0;
 
 	std::ifstream f;
 	f.open(mem_filename.c_str());
@@ -2103,7 +2242,7 @@ AstNode *AstNode::readmem(bool is_readmemh, std::string mem_filename, AstNode *m
 		start_addr = range_min;
 
 	if (finish_addr < 0)
-		finish_addr = range_max;
+		finish_addr = range_max + 1;
 
 	bool in_comment = false;
 	int increment = start_addr <= finish_addr ? +1 : -1;
@@ -2143,19 +2282,54 @@ AstNode *AstNode::readmem(bool is_readmemh, std::string mem_filename, AstNode *m
 				continue;
 			}
 
-			AstNode *value = VERILOG_FRONTEND::const2ast((is_readmemh ? "'h" : "'b") + token);
+			AstNode *value = VERILOG_FRONTEND::const2ast(stringf("%d'%c", mem_width, is_readmemh ? 'h' : 'b') + token);
 
-			block->children.push_back(new AstNode(AST_ASSIGN_EQ, new AstNode(AST_IDENTIFIER, new AstNode(AST_RANGE, AstNode::mkconst_int(cursor, false))), value));
-			block->children.back()->children[0]->str = memory->str;
-			block->children.back()->children[0]->id2ast = memory;
+			if (unconditional_init)
+			{
+				if (meminit == nullptr || cursor != next_meminit_cursor)
+				{
+					if (meminit != nullptr) {
+						meminit->children[1] = AstNode::mkconst_bits(meminit_bits, false);
+						meminit->children[2] = AstNode::mkconst_int(meminit_size, false);
+					}
 
-			if ((cursor == finish_addr) || (increment > 0 && cursor >= range_max) || (increment < 0 && cursor <= range_min))
+					meminit = new AstNode(AST_MEMINIT);
+					meminit->children.push_back(AstNode::mkconst_int(cursor, false));
+					meminit->children.push_back(nullptr);
+					meminit->children.push_back(nullptr);
+					meminit->str = memory->str;
+					meminit->id2ast = memory;
+					meminit_bits.clear();
+					meminit_size = 0;
+
+					current_ast_mod->children.push_back(meminit);
+					next_meminit_cursor = cursor;
+				}
+
+				meminit_size++;
+				next_meminit_cursor++;
+				meminit_bits.insert(meminit_bits.end(), value->bits.begin(), value->bits.end());
+				delete value;
+			}
+			else
+			{
+				block->children.push_back(new AstNode(AST_ASSIGN_EQ, new AstNode(AST_IDENTIFIER, new AstNode(AST_RANGE, AstNode::mkconst_int(cursor, false))), value));
+				block->children.back()->children[0]->str = memory->str;
+				block->children.back()->children[0]->id2ast = memory;
+			}
+
+			if ((cursor == finish_addr) || (increment > 0 && cursor > range_max) || (increment < 0 && cursor < range_min))
 				break;
 			cursor += increment;
 		}
 
-		if ((cursor == finish_addr) || (increment > 0 && cursor >= range_max) || (increment < 0 && cursor <= range_min))
+		if ((cursor == finish_addr) || (increment > 0 && cursor > range_max) || (increment < 0 && cursor < range_min))
 			break;
+	}
+
+	if (meminit != nullptr) {
+		meminit->children[1] = AstNode::mkconst_bits(meminit_bits, false);
+		meminit->children[2] = AstNode::mkconst_int(meminit_size, false);
 	}
 
 	return block;
@@ -2208,7 +2382,7 @@ void AstNode::expand_genblock(std::string index_var, std::string prefix, std::ma
 		name_map.swap(backup_name_map);
 }
 
-// rename stuff (used when tasks of functions are instanciated)
+// rename stuff (used when tasks of functions are instantiated)
 void AstNode::replace_ids(const std::string &prefix, const std::map<std::string, std::string> &rules)
 {
 	if (type == AST_BLOCK)
@@ -2366,8 +2540,10 @@ bool AstNode::mem2reg_check(pool<AstNode*> &mem2reg_set)
 }
 
 // actually replace memories with registers
-void AstNode::mem2reg_as_needed_pass2(pool<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block)
+bool AstNode::mem2reg_as_needed_pass2(pool<AstNode*> &mem2reg_set, AstNode *mod, AstNode *block)
 {
+	bool did_something = false;
+
 	if (type == AST_BLOCK)
 		block = this;
 
@@ -2426,6 +2602,8 @@ void AstNode::mem2reg_as_needed_pass2(pool<AstNode*> &mem2reg_set, AstNode *mod,
 		children[0]->id2ast = NULL;
 		children[0]->str = id_data;
 		type = AST_ASSIGN_EQ;
+
+		did_something = true;
 	}
 
 	if (mem2reg_check(mem2reg_set))
@@ -2526,10 +2704,13 @@ void AstNode::mem2reg_as_needed_pass2(pool<AstNode*> &mem2reg_set, AstNode *mod,
 
 	auto children_list = children;
 	for (size_t i = 0; i < children_list.size(); i++)
-		children_list[i]->mem2reg_as_needed_pass2(mem2reg_set, mod, block);
+		if (children_list[i]->mem2reg_as_needed_pass2(mem2reg_set, mod, block))
+			did_something = true;
+
+	return did_something;
 }
 
-// calulate memory dimensions
+// calculate memory dimensions
 void AstNode::meminfo(int &mem_width, int &mem_size, int &addr_bits)
 {
 	log_assert(type == AST_MEMORY);
@@ -2647,6 +2828,9 @@ AstNode *AstNode::eval_const_function(AstNode *fcall)
 
 		if (stmt->type == AST_ASSIGN_EQ)
 		{
+			if (stmt->children.at(0)->type == AST_IDENTIFIER && stmt->children.at(0)->children.size() != 0 &&
+					stmt->children.at(0)->children.at(0)->type == AST_RANGE)
+				stmt->children.at(0)->children.at(0)->replace_variables(variables, fcall);
 			stmt->children.at(1)->replace_variables(variables, fcall);
 			while (stmt->simplify(true, false, false, 1, -1, false, true)) { }
 
