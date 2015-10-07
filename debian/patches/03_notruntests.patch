@@ -4,9 +4,9 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-07-24 12:09:53.557355218 +0200
-+++ yosys/Makefile	2015-07-24 12:09:53.553354689 +0200
-@@ -328,21 +328,21 @@
+--- yosys.orig/Makefile	2015-10-07 23:54:30.141082241 +0400
++++ yosys/Makefile	2015-10-07 23:54:30.137082026 +0400
+@@ -347,21 +347,21 @@
  yosys-abc$(EXE): abc/abc-$(ABCREV)$(EXE)
  	$(P) cp abc/abc-$(ABCREV)$(EXE) yosys-abc$(EXE)
  
@@ -43,7 +43,7 @@ Index: yosys/Makefile
  
  VALGRIND ?= valgrind --error-exitcode=1 --leak-check=full --show-reachable=yes --errors-for-leak-kinds=all
  
-@@ -465,6 +465,6 @@
+@@ -491,6 +491,6 @@
  -include kernel/*.d
  -include techlibs/*/*.d
  

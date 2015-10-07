@@ -4,9 +4,9 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/Makefile
 ===================================================================
---- yosys.orig/Makefile	2015-07-24 12:10:09.835533316 +0200
-+++ yosys/Makefile	2015-07-24 12:10:09.831532775 +0200
-@@ -17,11 +17,11 @@
+--- yosys.orig/Makefile	2015-10-07 23:54:36.805441499 +0400
++++ yosys/Makefile	2015-10-07 23:55:47.877272796 +0400
+@@ -18,11 +18,11 @@
  ENABLE_GPROF := 0
  ENABLE_NDEBUG := 0
  
@@ -21,16 +21,16 @@ Index: yosys/Makefile
  
  EXE =
  OBJS =
-@@ -36,7 +36,7 @@
- all: top-all
+@@ -39,7 +39,7 @@
+ YOSYS_SRC := $(dir $(firstword $(MAKEFILE_LIST)))
+ VPATH := $(YOSYS_SRC)
  
- YOSYS_SRC := $(shell pwd)
--CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
-+CXXFLAGS = -Wall -Wextra -ggdb -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/usr/include
+-CXXFLAGS = -Wall -Wextra -ggdb -I. -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/include
++CXXFLAGS = -Wall -Wextra -ggdb -I. -I"$(YOSYS_SRC)" -MD -D_YOSYS_ -fPIC -I$(DESTDIR)/usr/include
  LDFLAGS = -L$(DESTDIR)/lib
  LDLIBS = -lstdc++ -lm
  SED = sed
-@@ -359,10 +359,10 @@
+@@ -378,10 +378,10 @@
  	@echo ""
  
  install: $(TARGETS) $(EXTRA_TARGETS)
@@ -42,6 +42,6 @@ Index: yosys/Makefile
 +	$(INSTALL_SUDO) install $(TARGETS) $(DESTDIR)/usr/bin/
 +	$(INSTALL_SUDO) mkdir -p $(DESTDIR)/usr/share/yosys
 +	$(INSTALL_SUDO) cp -r share/. $(DESTDIR)/usr/share/yosys/.
- 
- uninstall:
- 	$(INSTALL_SUDO) rm -vf $(addprefix $(DESTDIR)/bin/,$(notdir $(TARGETS)))
+ ifeq ($(ENABLE_LIBYOSYS),1)
+ 	$(INSTALL_SUDO) cp libyosys.so $(DESTDIR)/lib/
+ 	$(INSTALL_SUDO) ldconfig

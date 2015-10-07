@@ -6,9 +6,9 @@ Forwarded: doesn't make sense upstream
 Author: Ruben Undheim <ruben.undheim@gmail.com>
 Index: yosys/passes/techmap/abc.cc
 ===================================================================
---- yosys.orig/passes/techmap/abc.cc	2015-07-24 12:07:08.559415094 +0200
-+++ yosys/passes/techmap/abc.cc	2015-07-24 12:12:33.764281530 +0200
-@@ -1264,7 +1264,7 @@
+--- yosys.orig/passes/techmap/abc.cc	2015-10-07 23:55:52.445519056 +0400
++++ yosys/passes/techmap/abc.cc	2015-10-07 23:55:52.441518840 +0400
+@@ -1270,7 +1270,7 @@
  		log_header("Executing ABC pass (technology mapping using ABC).\n");
  		log_push();
  
