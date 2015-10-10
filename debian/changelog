@@ -2,7 +2,7 @@ yosys (0.5.0+20151007gitba4cce9-1) experimental; urgency=low
 
   * New upstream version 
     - Refreshed patches
-  * debian/control: Added "python" and "python3" as build-dependencies
+  * debian/control: Added "python3" as build-dependency
 
  -- Ruben Undheim <ruben.undheim@gmail.com>  Sat, 10 Oct 2015 09:21:17 +0200
 
