@@ -1,3 +1,9 @@
+yosys (0.5.0+20151013gitf13e387-1) UNRELEASED; urgency=low
+
+  * New upstream version
+
+ -- Ruben Undheim <ruben.undheim@gmail.com>  Wed, 14 Oct 2015 18:10:39 +0200
+
 yosys (0.5.0+20151007gitba4cce9-1) experimental; urgency=low
 
   * New upstream version 
