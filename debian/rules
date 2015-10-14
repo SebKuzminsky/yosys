@@ -12,3 +12,5 @@ export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 override_dh_auto_configure:
 	make config-gcc && make
 
+override_dh_auto_install:
+	PREFIX=/usr dh_auto_install
