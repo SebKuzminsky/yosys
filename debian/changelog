@@ -1,10 +1,13 @@
-yosys (0.5.0+20151013gitf13e387-1) UNRELEASED; urgency=low
+yosys (0.5.0+20151013gitf13e387-1) unstable; urgency=low
 
+  * Uploaded to unstable
+    - New features in yosys are needed for the Icestorm tool chain
   * New upstream version
     - Drop patches 04_installpath.patch and 06_cflags_ldflags.patch
     - Set PREFIX in d/rules
+  * debian/control: Fixed Vcs-Git to use https
 
- -- Ruben Undheim <ruben.undheim@gmail.com>  Wed, 14 Oct 2015 18:10:39 +0200
+ -- Ruben Undheim <ruben.undheim@gmail.com>  Sun, 07 Feb 2016 11:59:04 +0100
 
 yosys (0.5.0+20151007gitba4cce9-1) experimental; urgency=low
 

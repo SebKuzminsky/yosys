@@ -14,7 +14,7 @@ Build-Depends: debhelper (>= 9),
                python3
 Standards-Version: 3.9.6
 Vcs-Browser: https://anonscm.debian.org/cgit/debian-science/packages/yosys.git
-Vcs-Git: git://anonscm.debian.org/debian-science/packages/yosys.git
+Vcs-Git: https://anonscm.debian.org/git/debian-science/packages/yosys.git
 Homepage: http://www.clifford.at/yosys
 
 Package: yosys
