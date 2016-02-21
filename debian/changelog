@@ -1,3 +1,10 @@
+yosys (0.5.0+20151013gitf13e387-2~exp1) experimental; urgency=low
+
+  * Added autopkg test for synthesis for iCE FPGA.
+  * Updated standards to 3.9.7 - no needed changes
+
+ -- Ruben Undheim <ruben.undheim@gmail.com>  Sun, 21 Feb 2016 12:21:37 +0100
+
 yosys (0.5.0+20151013gitf13e387-1) unstable; urgency=low
 
   * Uploaded to unstable

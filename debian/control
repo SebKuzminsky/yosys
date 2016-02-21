@@ -3,6 +3,7 @@ Maintainer: Debian Science Maintainers <debian-science-maintainers@lists.alioth.
 Uploaders: Ruben Undheim <ruben.undheim@gmail.com>
 Section: electronics
 Priority: optional
+Testsuite: autopkgtest
 Build-Depends: debhelper (>= 9),
                tcl-dev,
                libreadline-dev,
@@ -12,7 +13,7 @@ Build-Depends: debhelper (>= 9),
                libffi-dev,
                pkg-config,
                python3
-Standards-Version: 3.9.6
+Standards-Version: 3.9.7
 Vcs-Browser: https://anonscm.debian.org/cgit/debian-science/packages/yosys.git
 Vcs-Git: https://anonscm.debian.org/git/debian-science/packages/yosys.git
 Homepage: http://www.clifford.at/yosys

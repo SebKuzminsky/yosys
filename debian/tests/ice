@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -e
+
+rm -f /tmp/design_ice.blif
+
+yosys -p "synth_ice40 -blif /tmp/design_ice.blif" debian/tests/design_ice.v
+
+if [ -f /tmp/design_ice.blif ] ; then
+  exit 0
+else
+  exit 1
+fi
