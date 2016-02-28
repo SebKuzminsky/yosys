@@ -74,7 +74,7 @@ template<> struct hash_ops<int32_t> : hash_int_ops
 template<> struct hash_ops<int64_t> : hash_int_ops
 {
 	static inline unsigned int hash(int64_t a) {
-		return mkhash(a, a >> 32);
+		return mkhash((unsigned int)(a), (unsigned int)(a >> 32));
 	}
 };
 
@@ -95,9 +95,7 @@ template<typename P, typename Q> struct hash_ops<std::pair<P, Q>> {
 		return a == b;
 	}
 	static inline unsigned int hash(std::pair<P, Q> a) {
-		hash_ops<P> p_ops;
-		hash_ops<Q> q_ops;
-		return mkhash(p_ops.hash(a.first), q_ops.hash(a.second));
+		return mkhash(hash_ops<P>::hash(a.first), hash_ops<Q>::hash(a.second));
 	}
 };
 
@@ -111,8 +109,8 @@ template<typename... T> struct hash_ops<std::tuple<T...>> {
 	}
 	template<size_t I = 0>
 	static inline typename std::enable_if<I != sizeof...(T), unsigned int>::type hash(std::tuple<T...> a) {
-		hash_ops<typename std::tuple_element<I, std::tuple<T...>>::type> element_ops;
-		return mkhash(hash<I+1>(a), element_ops.hash(std::get<I>(a)));
+		typedef hash_ops<typename std::tuple_element<I, std::tuple<T...>>::type> element_ops_t;
+		return mkhash(hash<I+1>(a), element_ops_t::hash(std::get<I>(a)));
 	}
 };
 
@@ -162,6 +160,11 @@ struct hash_obj_ops {
 	}
 };
 
+template<typename T>
+inline unsigned int mkhash(const T &v) {
+	return hash_ops<T>().hash(v);
+}
+
 inline int hashtable_size(int min_size)
 {
 	static std::vector<int> zero_and_some_primes = {
@@ -190,6 +193,7 @@ inline int hashtable_size(int min_size)
 template<typename K, typename T, typename OPS = hash_ops<K>> class dict;
 template<typename K, int offset = 0, typename OPS = hash_ops<K>> class idict;
 template<typename K, typename OPS = hash_ops<K>> class pool;
+template<typename K, typename OPS = hash_ops<K>> class mfp;
 
 template<typename K, typename T, typename OPS>
 class dict
@@ -227,7 +231,7 @@ class dict
 	void do_rehash()
 	{
 		hashtable.clear();
-		hashtable.resize(hashtable_size(entries.size() * hashtable_size_factor), -1);
+		hashtable.resize(hashtable_size(entries.capacity() * hashtable_size_factor), -1);
 
 		for (int i = 0; i < int(entries.size()); i++) {
 			do_assert(-1 <= entries[i].next && entries[i].next < int(entries.size()));
@@ -500,6 +504,15 @@ public:
 		return entries[i].udata.second;
 	}
 
+	T at(const K &key, const T &defval) const
+	{
+		int hash = do_hash(key);
+		int i = do_lookup(key, hash);
+		if (i < 0)
+			return defval;
+		return entries[i].udata.second;
+	}
+
 	T& operator[](const K &key)
 	{
 		int hash = do_hash(key);
@@ -537,6 +550,7 @@ public:
 		return !operator==(other);
 	}
 
+	void reserve(size_t n) { entries.reserve(n); }
 	size_t size() const { return entries.size(); }
 	bool empty() const { return entries.empty(); }
 	void clear() { hashtable.clear(); entries.clear(); }
@@ -586,7 +600,7 @@ protected:
 	void do_rehash()
 	{
 		hashtable.clear();
-		hashtable.resize(hashtable_size(entries.size() * hashtable_size_factor), -1);
+		hashtable.resize(hashtable_size(entries.capacity() * hashtable_size_factor), -1);
 
 		for (int i = 0; i < int(entries.size()); i++) {
 			do_assert(-1 <= entries[i].next && entries[i].next < int(entries.size()));
@@ -853,6 +867,7 @@ public:
 		return !operator==(other);
 	}
 
+	void reserve(size_t n) { entries.reserve(n); }
 	size_t size() const { return entries.size(); }
 	bool empty() const { return entries.empty(); }
 	void clear() { hashtable.clear(); entries.clear(); }
@@ -890,6 +905,15 @@ public:
 		return i + offset;
 	}
 
+	int at(const K &key, int defval) const
+	{
+		int hash = database.do_hash(key);
+		int i = database.do_lookup(key, hash);
+		if (i < 0)
+			return defval;
+		return i + offset;
+	}
+
 	int count(const K &key) const
 	{
 		int hash = database.do_hash(key);
@@ -908,6 +932,115 @@ public:
 	{
 		return database.entries.at(index - offset).udata;
 	}
+
+	void swap(idict &other)
+	{
+		database.swap(other.database);
+	}
+
+	void reserve(size_t n) { database.reserve(n); }
+	size_t size() const { return database.size(); }
+	bool empty() const { return database.empty(); }
+	void clear() { database.clear(); }
+
+	const_iterator begin() const { return database.begin(); }
+	const_iterator end() const { return database.end(); }
+};
+
+template<typename K, typename OPS>
+class mfp
+{
+	mutable idict<K, 0, OPS> database;
+	mutable std::vector<int> parents;
+
+public:
+	typedef typename idict<K, 0, OPS>::const_iterator const_iterator;
+
+	int operator()(const K &key) const
+	{
+		int i = database(key);
+		parents.resize(database.size(), -1);
+		return i;
+	}
+
+	const K &operator[](int index) const
+	{
+		return database[index];
+	}
+
+	int ifind(int i) const
+	{
+		int p = i, k = i;
+
+		while (parents[p] != -1)
+			p = parents[p];
+
+		while (k != p) {
+			int next_k = parents[k];
+			parents[k] = p;
+			k = next_k;
+		}
+
+		return p;
+	}
+
+	void imerge(int i, int j)
+	{
+		i = ifind(i);
+		j = ifind(j);
+
+		if (i != j)
+			parents[i] = j;
+	}
+
+	void ipromote(int i)
+	{
+		int k = i;
+
+		while (k != -1) {
+			int next_k = parents[k];
+			parents[k] = i;
+			k = next_k;
+		}
+
+		parents[i] = -1;
+	}
+
+	int lookup(const K &a) const
+	{
+		return ifind((*this)(a));
+	}
+
+	const K &find(const K &a) const
+	{
+		int i = database.at(a, -1);
+		if (i < 0)
+			return a;
+		return (*this)[ifind(i)];
+	}
+
+	void merge(const K &a, const K &b)
+	{
+		imerge((*this)(a), (*this)(b));
+	}
+
+	void promote(const K &a)
+	{
+		int i = database.at(a, -1);
+		if (i >= 0)
+			ipromote(i);
+	}
+
+	void swap(mfp &other)
+	{
+		database.swap(other.database);
+		parents.swap(other.parents);
+	}
+
+	void reserve(size_t n) { database.reserve(n); }
+	size_t size() const { return database.size(); }
+	bool empty() const { return database.empty(); }
+	void clear() { database.clear(); parents.clear(); }
 
 	const_iterator begin() const { return database.begin(); }
 	const_iterator end() const { return database.end(); }

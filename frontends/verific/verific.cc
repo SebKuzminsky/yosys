@@ -186,6 +186,16 @@ static bool import_netlist_instance_gates(RTLIL::Module *module, std::map<Net*, 
 		return true;
 	}
 
+	if (inst->Type() == PRIM_XNOR) {
+		module->addXnorGate(RTLIL::escape_id(inst->Name()), net_map.at(inst->GetInput1()), net_map.at(inst->GetInput2()), net_map.at(inst->GetOutput()));
+		return true;
+	}
+
+	if (inst->Type() == PRIM_BUF) {
+		module->addBufGate(RTLIL::escape_id(inst->Name()), net_map.at(inst->GetInput()), net_map.at(inst->GetOutput()));
+		return true;
+	}
+
 	if (inst->Type() == PRIM_INV) {
 		module->addNotGate(RTLIL::escape_id(inst->Name()), net_map.at(inst->GetInput()), net_map.at(inst->GetOutput()));
 		return true;
@@ -314,6 +324,16 @@ static bool import_netlist_instance_cells(RTLIL::Module *module, std::map<Net*, 
 		return true;
 	}
 
+	if (inst->Type() == PRIM_DLATCHRS)
+	{
+		if (inst->GetSet()->IsGnd() && inst->GetReset()->IsGnd())
+			module->addDlatch(RTLIL::escape_id(inst->Name()), net_map.at(inst->GetControl()), net_map.at(inst->GetInput()), net_map.at(inst->GetOutput()));
+		else
+			module->addDlatchsr(RTLIL::escape_id(inst->Name()), net_map.at(inst->GetControl()), net_map.at(inst->GetSet()), net_map.at(inst->GetReset()),
+					net_map.at(inst->GetInput()), net_map.at(inst->GetOutput()));
+		return true;
+	}
+
 	#define IN  operatorInput(inst, net_map)
 	#define IN1 operatorInput1(inst, net_map)
 	#define IN2 operatorInput2(inst, net_map)
@@ -356,6 +376,26 @@ static bool import_netlist_instance_cells(RTLIL::Module *module, std::map<Net*, 
 
 	if (inst->Type() == OPER_SHIFT_LEFT) {
 		module->addShl(RTLIL::escape_id(inst->Name()), IN1, IN2, OUT, false);
+		return true;
+	}
+
+	if (inst->Type() == OPER_ENABLED_DECODER) {
+		RTLIL::SigSpec vec;
+		vec.append(net_map.at(inst->GetControl()));
+		for (unsigned i = 1; i < inst->OutputSize(); i++) {
+			vec.append(RTLIL::State::S0);
+		}
+		module->addShl(RTLIL::escape_id(inst->Name()), vec, IN, OUT, false);
+		return true;
+	}
+
+	if (inst->Type() == OPER_DECODER) {
+		RTLIL::SigSpec vec;
+		vec.append(RTLIL::State::S1);
+		for (unsigned i = 1; i < inst->OutputSize(); i++) {
+			vec.append(RTLIL::State::S0);
+		}
+		module->addShl(RTLIL::escape_id(inst->Name()), vec, IN, OUT, false);
 		return true;
 	}
 
@@ -541,7 +581,7 @@ static void import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*
 		// log("  importing portbus %s.\n", portbus->Name());
 
 		RTLIL::Wire *wire = module->addWire(RTLIL::escape_id(portbus->Name()), portbus->Size());
-		wire->start_offset = std::min(portbus->LeftIndex(), portbus->RightIndex());
+		wire->start_offset = min(portbus->LeftIndex(), portbus->RightIndex());
 		import_attributes(wire->attributes, portbus);
 
 		if (portbus->GetDir() == DIR_INOUT || portbus->GetDir() == DIR_IN)
@@ -580,11 +620,11 @@ static void import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*
 			int bits_in_word = number_of_bits;
 			FOREACH_PORTREF_OF_NET(net, si, pr) {
 				if (pr->GetInst()->Type() == OPER_READ_PORT) {
-					bits_in_word = std::min<int>(bits_in_word, pr->GetInst()->OutputSize());
+					bits_in_word = min<int>(bits_in_word, pr->GetInst()->OutputSize());
 					continue;
 				}
 				if (pr->GetInst()->Type() == OPER_WRITE_PORT || pr->GetInst()->Type() == OPER_CLOCKED_WRITE_PORT) {
-					bits_in_word = std::min<int>(bits_in_word, pr->GetInst()->Input2Size());
+					bits_in_word = min<int>(bits_in_word, pr->GetInst()->Input2Size());
 					continue;
 				}
 				log_error("Verific RamNet %s is connected to unsupported instance type %s (%s).\n",
@@ -630,7 +670,7 @@ static void import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*
 
 			RTLIL::IdString wire_name = module->uniquify(RTLIL::escape_id(netbus->Name()));
 			RTLIL::Wire *wire = module->addWire(wire_name, netbus->Size());
-			wire->start_offset = std::min(netbus->LeftIndex(), netbus->RightIndex());
+			wire->start_offset = min(netbus->LeftIndex(), netbus->RightIndex());
 			import_attributes(wire->attributes, netbus);
 
 			for (int i = netbus->LeftIndex();; i += netbus->IsUp() ? +1 : -1) {
@@ -663,6 +703,11 @@ static void import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*
 
 		if (inst->Type() == PRIM_GND) {
 			module->connect(net_map.at(inst->GetOutput()), RTLIL::State::S0);
+			continue;
+		}
+
+		if (inst->Type() == PRIM_BUF) {
+			module->addBufGate(RTLIL::escape_id(inst->Name()), net_map.at(inst->GetInput()), net_map.at(inst->GetOutput()));
 			continue;
 		}
 
@@ -738,12 +783,14 @@ static void import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*
 		}
 
 		if (inst->IsPrimitive())
-			log_error("Unsupported Verific primitive: %s\n", inst->View()->Owner()->Name());
+			log_error("Unsupported Verific primitive %s of type %s\n", inst->Name(), inst->View()->Owner()->Name());
 
 		nl_todo.insert(inst->View());
 
 		RTLIL::Cell *cell = module->addCell(RTLIL::escape_id(inst->Name()), inst->IsOperator() ?
 				std::string("$verific$") + inst->View()->Owner()->Name() : RTLIL::escape_id(inst->View()->Owner()->Name()));
+
+		dict<IdString, vector<SigBit>> cell_port_conns;
 
 		FOREACH_PORTREF_OF_INST(inst, mi2, pr) {
 			// log("      .%s(%s)\n", pr->GetPort()->Name(), pr->GetNet()->Name());
@@ -752,18 +799,21 @@ static void import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*
 			if (pr->GetPort()->Bus()) {
 				port_name = pr->GetPort()->Bus()->Name();
 				port_offset = pr->GetPort()->Bus()->IndexOf(pr->GetPort()) -
-						std::min(pr->GetPort()->Bus()->LeftIndex(), pr->GetPort()->Bus()->RightIndex());
+						min(pr->GetPort()->Bus()->LeftIndex(), pr->GetPort()->Bus()->RightIndex());
 			}
-			RTLIL::SigSpec conn;
-			if (cell->hasPort(RTLIL::escape_id(port_name)))
-				conn = cell->getPort(RTLIL::escape_id(port_name));
-			while (GetSize(conn) <= port_offset) {
-				if (pr->GetPort()->GetDir() != DIR_IN)
-					conn.append(module->addWire(NEW_ID, port_offset - GetSize(conn)));
-				conn.append(RTLIL::State::Sz);
+			IdString port_name_id = RTLIL::escape_id(port_name);
+			auto &sigvec = cell_port_conns[port_name_id];
+			if (GetSize(sigvec) <= port_offset) {
+				SigSpec zwires = module->addWire(NEW_ID, port_offset+1-GetSize(sigvec));
+				for (auto bit : zwires)
+					sigvec.push_back(bit);
 			}
-			conn.replace(port_offset, net_map.at(pr->GetNet()));
-			cell->setPort(RTLIL::escape_id(port_name), conn);
+			sigvec[port_offset] = net_map.at(pr->GetNet());
+		}
+
+		for (auto &it : cell_port_conns) {
+			// log("      .%s(%s)\n", log_id(it.first), log_signal(it.second));
+			cell->setPort(it.first, it.second);
 		}
 	}
 }
@@ -841,7 +891,7 @@ struct VerificPass : public Pass {
 		}
 
 		if (args.size() > 1 && args[1] == "-vhdl87") {
-			vhdl_file::SetDefaultLibraryPath((proc_share_dirname() + "verific/vhdl_vdbs_1993").c_str());
+			vhdl_file::SetDefaultLibraryPath((proc_share_dirname() + "verific/vhdl_vdbs_1987").c_str());
 			for (size_t argidx = 2; argidx < args.size(); argidx++)
 				if (!vhdl_file::Analyze(args[argidx].c_str(), "work", vhdl_file::VHDL_87))
 					log_cmd_error("Reading `%s' in VHDL_87 mode failed.\n", args[argidx].c_str());
@@ -918,10 +968,12 @@ struct VerificPass : public Pass {
 
 			for (; argidx < args.size(); argidx++) {
 				if (veri_file::GetModule(args[argidx].c_str())) {
+					log("Running veri_file::Elaborate(\"%s\").\n", args[argidx].c_str());
 					if (!veri_file::Elaborate(args[argidx].c_str()))
 						log_cmd_error("Elaboration of top module `%s' failed.\n", args[argidx].c_str());
 					nl_todo.insert(Netlist::PresentDesign());
 				} else {
+					log("Running vhdl_file::Elaborate(\"%s\").\n", args[argidx].c_str());
 					if (!vhdl_file::Elaborate(args[argidx].c_str()))
 						log_cmd_error("Elaboration of top module `%s' failed.\n", args[argidx].c_str());
 					nl_todo.insert(Netlist::PresentDesign());

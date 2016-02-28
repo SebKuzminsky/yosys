@@ -47,19 +47,25 @@ module SB_IO (
 		din_1 = din_q_1;
 	end
 
+	// work around simulation glitches on dout in DDR mode
+	reg outclk_delayed_1;
+	reg outclk_delayed_2;
+	always @* outclk_delayed_1 <= OUTPUT_CLK;
+	always @* outclk_delayed_2 <= outclk_delayed_1;
+
 	always @* begin
 		if (PIN_TYPE[3])
 			dout = PIN_TYPE[2] ? !dout_q_0 : D_OUT_0;
 		else
-			dout = (OUTPUT_CLK ^ NEG_TRIGGER) || PIN_TYPE[2] ? dout_q_0 : dout_q_1;
+			dout = (outclk_delayed_2 ^ NEG_TRIGGER) || PIN_TYPE[2] ? dout_q_0 : dout_q_1;
 	end
 
 	assign D_IN_0 = din_0, D_IN_1 = din_1;
 
 	generate
 		if (PIN_TYPE[5:4] == 2'b01) assign PACKAGE_PIN = dout;
-		if (PIN_TYPE[5:4] == 2'b10) assign PACKAGE_PIN = outena_q ? dout : 1'bz;
-		if (PIN_TYPE[5:4] == 2'b11) assign PACKAGE_PIN = OUTPUT_ENABLE ? dout : 1'bz;
+		if (PIN_TYPE[5:4] == 2'b10) assign PACKAGE_PIN = OUTPUT_ENABLE ? dout : 1'bz;
+		if (PIN_TYPE[5:4] == 2'b11) assign PACKAGE_PIN = outena_q ? dout : 1'bz;
 	endgenerate
 `endif
 endmodule
@@ -661,7 +667,7 @@ endmodule
 
 module ICESTORM_LC (
 	input I0, I1, I2, I3, CIN, CLK, CEN, SR,
-	output O, COUT
+	output LO, O, COUT
 );
 	parameter [15:0] LUT_INIT = 0;
 
@@ -677,6 +683,8 @@ module ICESTORM_LC (
 	wire [3:0] lut_s2 = I2 ?   lut_s3[ 7:4] :   lut_s3[3:0];
 	wire [1:0] lut_s1 = I1 ?   lut_s2[ 3:2] :   lut_s2[1:0];
 	wire       lut_o  = I0 ?   lut_s1[   1] :   lut_s1[  0];
+
+	assign LO = lut_o;
 
 	wire polarized_clk;
 	assign polarized_clk = CLK ^ NEG_CLK;

@@ -124,6 +124,18 @@ void yosys_banner()
 	log("\n");
 }
 
+int ceil_log2(int x)
+{
+	if (x <= 0)
+		return 0;
+
+	for (int i = 0; i < 32; i++)
+		if (((x-1) >> i) == 0)
+			return i;
+
+	log_abort();
+}
+
 std::string stringf(const char *fmt, ...)
 {
 	std::string string;
@@ -168,7 +180,7 @@ std::string vstringf(const char *fmt, va_list ap)
 
 int readsome(std::istream &f, char *s, int n)
 {
-	int rc = f.readsome(s, n);
+	int rc = int(f.readsome(s, n));
 
 	// f.readsome() sometimes returns 0 on a non-empty stream..
 	if (rc == 0) {

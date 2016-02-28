@@ -981,11 +981,11 @@ namespace {
 				param("\\SIZE");
 				param("\\OFFSET");
 				param("\\INIT");
-				param_bits("\\RD_CLK_ENABLE", std::max(1, param("\\RD_PORTS")));
-				param_bits("\\RD_CLK_POLARITY", std::max(1, param("\\RD_PORTS")));
-				param_bits("\\RD_TRANSPARENT", std::max(1, param("\\RD_PORTS")));
-				param_bits("\\WR_CLK_ENABLE", std::max(1, param("\\WR_PORTS")));
-				param_bits("\\WR_CLK_POLARITY", std::max(1, param("\\WR_PORTS")));
+				param_bits("\\RD_CLK_ENABLE", max(1, param("\\RD_PORTS")));
+				param_bits("\\RD_CLK_POLARITY", max(1, param("\\RD_PORTS")));
+				param_bits("\\RD_TRANSPARENT", max(1, param("\\RD_PORTS")));
+				param_bits("\\WR_CLK_ENABLE", max(1, param("\\WR_PORTS")));
+				param_bits("\\WR_CLK_POLARITY", max(1, param("\\WR_PORTS")));
 				port("\\RD_CLK", param("\\RD_PORTS"));
 				port("\\RD_EN", param("\\RD_PORTS"));
 				port("\\RD_ADDR", param("\\RD_PORTS") * param("\\ABITS"));
@@ -1448,6 +1448,19 @@ void RTLIL::Module::connect(const RTLIL::SigSig &conn)
 		for (auto mon : design->monitors)
 			mon->notify_connect(this, conn);
 
+	// ignore all attempts to assign constants to other constants
+	if (conn.first.has_const()) {
+		RTLIL::SigSig new_conn;
+		for (int i = 0; i < GetSize(conn.first); i++)
+			if (conn.first[i].wire) {
+				new_conn.first.append(conn.first[i]);
+				new_conn.second.append(conn.second[i]);
+			}
+		if (GetSize(new_conn.first))
+			connect(new_conn);
+		return;
+	}
+
 	if (yosys_xtrace) {
 		log("#X# Connect (SigSig) in %s: %s = %s (%d bits)\n", log_id(this), log_signal(conn.first), log_signal(conn.second), GetSize(conn.first));
 		log_backtrace("-X- ", yosys_xtrace-1);
@@ -1588,10 +1601,10 @@ DEF_METHOD(LogicNot,   1, "$logic_not")
 		add ## _func(name, sig_a, sig_b, sig_y, is_signed); \
 		return sig_y;                                       \
 	}
-DEF_METHOD(And,      std::max(sig_a.size(), sig_b.size()), "$and")
-DEF_METHOD(Or,       std::max(sig_a.size(), sig_b.size()), "$or")
-DEF_METHOD(Xor,      std::max(sig_a.size(), sig_b.size()), "$xor")
-DEF_METHOD(Xnor,     std::max(sig_a.size(), sig_b.size()), "$xnor")
+DEF_METHOD(And,      max(sig_a.size(), sig_b.size()), "$and")
+DEF_METHOD(Or,       max(sig_a.size(), sig_b.size()), "$or")
+DEF_METHOD(Xor,      max(sig_a.size(), sig_b.size()), "$xor")
+DEF_METHOD(Xnor,     max(sig_a.size(), sig_b.size()), "$xnor")
 DEF_METHOD(Shl,      sig_a.size(), "$shl")
 DEF_METHOD(Shr,      sig_a.size(), "$shr")
 DEF_METHOD(Sshl,     sig_a.size(), "$sshl")
@@ -1606,11 +1619,11 @@ DEF_METHOD(Eqx,      1, "$eqx")
 DEF_METHOD(Nex,      1, "$nex")
 DEF_METHOD(Ge,       1, "$ge")
 DEF_METHOD(Gt,       1, "$gt")
-DEF_METHOD(Add,      std::max(sig_a.size(), sig_b.size()), "$add")
-DEF_METHOD(Sub,      std::max(sig_a.size(), sig_b.size()), "$sub")
-DEF_METHOD(Mul,      std::max(sig_a.size(), sig_b.size()), "$mul")
-DEF_METHOD(Div,      std::max(sig_a.size(), sig_b.size()), "$div")
-DEF_METHOD(Mod,      std::max(sig_a.size(), sig_b.size()), "$mod")
+DEF_METHOD(Add,      max(sig_a.size(), sig_b.size()), "$add")
+DEF_METHOD(Sub,      max(sig_a.size(), sig_b.size()), "$sub")
+DEF_METHOD(Mul,      max(sig_a.size(), sig_b.size()), "$mul")
+DEF_METHOD(Div,      max(sig_a.size(), sig_b.size()), "$div")
+DEF_METHOD(Mod,      max(sig_a.size(), sig_b.size()), "$mod")
 DEF_METHOD(LogicAnd, 1, "$logic_and")
 DEF_METHOD(LogicOr,  1, "$logic_or")
 #undef DEF_METHOD
@@ -1689,6 +1702,7 @@ DEF_METHOD(Pmux,     "$pmux",       1)
 		add ## _func(name, sig1, sig2, sig3, sig4, sig5); \
 		return sig5;                                      \
 	}
+DEF_METHOD_2(BufGate,  "$_BUF_",  A, Y)
 DEF_METHOD_2(NotGate,  "$_NOT_",  A, Y)
 DEF_METHOD_3(AndGate,  "$_AND_",  A, B, Y)
 DEF_METHOD_3(NandGate, "$_NAND_", A, B, Y)
@@ -2560,8 +2574,18 @@ void RTLIL::SigSpec::sort()
 
 void RTLIL::SigSpec::sort_and_unify()
 {
+	unpack();
 	cover("kernel.rtlil.sigspec.sort_and_unify");
-	*this = this->to_sigbit_set();
+
+	// A copy of the bits vector is used to prevent duplicating the logic from
+	// SigSpec::SigSpec(std::vector<SigBit>).  This incurrs an extra copy but
+	// that isn't showing up as significant in profiles.
+	std::vector<SigBit> unique_bits = bits_;
+	std::sort(unique_bits.begin(), unique_bits.end());
+	auto last = std::unique(unique_bits.begin(), unique_bits.end());
+	unique_bits.erase(last, unique_bits.end());
+
+	*this = unique_bits;
 }
 
 void RTLIL::SigSpec::replace(const RTLIL::SigSpec &pattern, const RTLIL::SigSpec &with)
@@ -2571,18 +2595,26 @@ void RTLIL::SigSpec::replace(const RTLIL::SigSpec &pattern, const RTLIL::SigSpec
 
 void RTLIL::SigSpec::replace(const RTLIL::SigSpec &pattern, const RTLIL::SigSpec &with, RTLIL::SigSpec *other) const
 {
+	log_assert(other != NULL);
+	log_assert(width_ == other->width_);
 	log_assert(pattern.width_ == with.width_);
 
 	pattern.unpack();
 	with.unpack();
+	unpack();
+	other->unpack();
 
-	dict<RTLIL::SigBit, RTLIL::SigBit> rules;
+	for (int i = 0; i < GetSize(pattern.bits_); i++) {
+		if (pattern.bits_[i].wire != NULL) {
+			for (int j = 0; j < GetSize(bits_); j++) {
+				if (bits_[j] == pattern.bits_[i]) {
+					other->bits_[j] = with.bits_[i];
+				}
+			}
+		}
+	}
 
-	for (int i = 0; i < GetSize(pattern.bits_); i++)
-		if (pattern.bits_[i].wire != NULL)
-			rules[pattern.bits_[i]] = with.bits_[i];
-
-	replace(rules, other);
+	other->check();
 }
 
 void RTLIL::SigSpec::replace(const dict<RTLIL::SigBit, RTLIL::SigBit> &rules)
@@ -2646,8 +2678,35 @@ void RTLIL::SigSpec::remove(const RTLIL::SigSpec &pattern, RTLIL::SigSpec *other
 
 void RTLIL::SigSpec::remove2(const RTLIL::SigSpec &pattern, RTLIL::SigSpec *other)
 {
-	pool<RTLIL::SigBit> pattern_bits = pattern.to_sigbit_pool();
-	remove2(pattern_bits, other);
+	if (other)
+		cover("kernel.rtlil.sigspec.remove_other");
+	else
+		cover("kernel.rtlil.sigspec.remove");
+
+	unpack();
+	if (other != NULL) {
+		log_assert(width_ == other->width_);
+		other->unpack();
+	}
+
+	for (int i = GetSize(bits_) - 1; i >= 0; i--) {
+		if (bits_[i].wire == NULL) continue;
+
+		for (auto &pattern_chunk : pattern.chunks()) {
+			if (bits_[i].wire == pattern_chunk.wire &&
+				bits_[i].offset >= pattern_chunk.offset &&
+				bits_[i].offset < pattern_chunk.offset + pattern_chunk.width) {
+				bits_.erase(bits_.begin() + i);
+				width_--;
+				if (other != NULL) {
+					other->bits_.erase(other->bits_.begin() + i);
+					other->width_--;
+				}
+			}
+		}
+	}
+
+	check();
 }
 
 void RTLIL::SigSpec::remove(const pool<RTLIL::SigBit> &pattern)
@@ -2675,31 +2734,43 @@ void RTLIL::SigSpec::remove2(const pool<RTLIL::SigBit> &pattern, RTLIL::SigSpec 
 		other->unpack();
 	}
 
-	std::vector<RTLIL::SigBit> new_bits, new_other_bits;
-
-	new_bits.resize(GetSize(bits_));
-	if (other != NULL)
-		new_other_bits.resize(GetSize(bits_));
-
-	int k = 0;
-	for (int i = 0; i < GetSize(bits_); i++) {
-		if (bits_[i].wire != NULL && pattern.count(bits_[i]))
-			continue;
-		if (other != NULL)
-			new_other_bits[k] = other->bits_[i];
-		new_bits[k++] = bits_[i];
+	for (int i = GetSize(bits_) - 1; i >= 0; i--) {
+		if (bits_[i].wire != NULL && pattern.count(bits_[i])) {
+			bits_.erase(bits_.begin() + i);
+			width_--;
+			if (other != NULL) {
+				other->bits_.erase(other->bits_.begin() + i);
+				other->width_--;
+			}
+		}
 	}
 
-	new_bits.resize(k);
-	if (other != NULL)
-		new_other_bits.resize(k);
+	check();
+}
 
-	bits_.swap(new_bits);
-	width_ = GetSize(bits_);
+void RTLIL::SigSpec::remove2(const std::set<RTLIL::SigBit> &pattern, RTLIL::SigSpec *other)
+{
+	if (other)
+		cover("kernel.rtlil.sigspec.remove_other");
+	else
+		cover("kernel.rtlil.sigspec.remove");
+
+	unpack();
 
 	if (other != NULL) {
-		other->bits_.swap(new_other_bits);
-		other->width_ = GetSize(other->bits_);
+		log_assert(width_ == other->width_);
+		other->unpack();
+	}
+
+	for (int i = GetSize(bits_) - 1; i >= 0; i--) {
+		if (bits_[i].wire != NULL && pattern.count(bits_[i])) {
+			bits_.erase(bits_.begin() + i);
+			width_--;
+			if (other != NULL) {
+				other->bits_.erase(other->bits_.begin() + i);
+				other->width_--;
+			}
+		}
 	}
 
 	check();
@@ -2707,8 +2778,37 @@ void RTLIL::SigSpec::remove2(const pool<RTLIL::SigBit> &pattern, RTLIL::SigSpec 
 
 RTLIL::SigSpec RTLIL::SigSpec::extract(const RTLIL::SigSpec &pattern, const RTLIL::SigSpec *other) const
 {
-	pool<RTLIL::SigBit> pattern_bits = pattern.to_sigbit_pool();
-	return extract(pattern_bits, other);
+	if (other)
+		cover("kernel.rtlil.sigspec.extract_other");
+	else
+		cover("kernel.rtlil.sigspec.extract");
+
+	log_assert(other == NULL || width_ == other->width_);
+
+	RTLIL::SigSpec ret;
+	std::vector<RTLIL::SigBit> bits_match = to_sigbit_vector();
+
+	for (auto& pattern_chunk : pattern.chunks()) {
+		if (other) {
+			std::vector<RTLIL::SigBit> bits_other = other->to_sigbit_vector();
+			for (int i = 0; i < width_; i++)
+				if (bits_match[i].wire &&
+					bits_match[i].wire == pattern_chunk.wire &&
+					bits_match[i].offset >= pattern_chunk.offset &&
+					bits_match[i].offset < pattern_chunk.offset + pattern_chunk.width)
+					ret.append_bit(bits_other[i]);
+		} else {
+			for (int i = 0; i < width_; i++)
+				if (bits_match[i].wire &&
+					bits_match[i].wire == pattern_chunk.wire &&
+					bits_match[i].offset >= pattern_chunk.offset &&
+					bits_match[i].offset < pattern_chunk.offset + pattern_chunk.width)
+					ret.append_bit(bits_match[i]);
+		}
+	}
+
+	ret.check();
+	return ret;
 }
 
 RTLIL::SigSpec RTLIL::SigSpec::extract(const pool<RTLIL::SigBit> &pattern, const RTLIL::SigSpec *other) const
@@ -3184,6 +3284,17 @@ RTLIL::SigChunk RTLIL::SigSpec::as_chunk() const
 	return chunks_[0];
 }
 
+RTLIL::SigBit RTLIL::SigSpec::as_bit() const
+{
+	cover("kernel.rtlil.sigspec.as_bit");
+
+	log_assert(width_ == 1);
+	if (packed())
+		return RTLIL::SigBit(*chunks_.begin());
+	else
+		return bits_[0];
+}
+
 bool RTLIL::SigSpec::match(std::string pattern) const
 {
 	cover("kernel.rtlil.sigspec.match");
@@ -3269,18 +3380,6 @@ dict<RTLIL::SigBit, RTLIL::SigBit> RTLIL::SigSpec::to_sigbit_dict(const RTLIL::S
 		new_map[bits_[i]] = other.bits_[i];
 
 	return new_map;
-}
-
-RTLIL::SigBit RTLIL::SigSpec::to_single_sigbit() const
-{
-	cover("kernel.rtlil.sigspec.to_single_sigbit");
-
-	pack();
-	log_assert(width_ == 1);
-	for (auto &c : chunks_)
-		if (c.width)
-			return RTLIL::SigBit(c);
-	log_abort();
 }
 
 static void sigspec_parse_split(std::vector<std::string> &tokens, const std::string &text, char sep)

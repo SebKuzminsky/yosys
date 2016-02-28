@@ -130,7 +130,7 @@ public:
 				RTLIL::SigSpec needleSig = conn.second;
 				RTLIL::SigSpec haystackSig = haystackCell->getPort(portMapping.at(conn.first.str()));
 
-				for (int i = 0; i < std::min(needleSig.size(), haystackSig.size()); i++) {
+				for (int i = 0; i < min(needleSig.size(), haystackSig.size()); i++) {
 					RTLIL::Wire *needleWire = needleSig[i].wire, *haystackWire = haystackSig[i].wire;
 					if (needleWire != lastNeedleWire || haystackWire != lastHaystackWire)
 						if (!compareAttributes(wire_attr, needleWire ? needleWire->attributes : emptyAttr, haystackWire ? haystackWire->attributes : emptyAttr))
@@ -737,7 +737,7 @@ struct ExtractPass : public Pass {
 					RTLIL::Cell *newCell = newMod->addCell(cell->name, cell->type);
 					newCell->parameters = cell->parameters;
 					for (auto &conn : cell->connections()) {
-						std::vector<RTLIL::SigChunk> chunks = sigmap(conn.second);
+						std::vector<SigChunk> chunks = sigmap(conn.second);
 						for (auto &chunk : chunks)
 							if (chunk.wire != NULL)
 								chunk.wire = newMod->wires_.at(chunk.wire->name);

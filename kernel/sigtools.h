@@ -222,18 +222,7 @@ struct SigSet
 
 struct SigMap
 {
-	struct bitDef_t : public std::pair<RTLIL::Wire*, int> {
-		bitDef_t() : std::pair<RTLIL::Wire*, int>(NULL, 0) { }
-		bitDef_t(const RTLIL::SigBit &bit) : std::pair<RTLIL::Wire*, int>(bit.wire, bit.offset) { }
-		unsigned int hash() const { return first->name.hash() + second; }
-	};
-
-	struct shared_bit_data_t {
-		RTLIL::SigBit map_to;
-		std::set<bitDef_t> bits;
-	};
-
-	dict<bitDef_t, shared_bit_data_t*> bits;
+	mfp<SigBit> database;
 
 	SigMap(RTLIL::Module *module = NULL)
 	{
@@ -241,119 +230,27 @@ struct SigMap
 			set(module);
 	}
 
-	SigMap(const SigMap &other)
-	{
-		copy(other);
-	}
-
-	const SigMap &operator=(const SigMap &other)
-	{
-		copy(other);
-		return *this;
-	}
-
-	void copy(const SigMap &other)
-	{
-		clear();
-		for (auto &bit : other.bits) {
-			bits[bit.first] = new shared_bit_data_t;
-			bits[bit.first]->map_to = bit.second->map_to;
-			bits[bit.first]->bits = bit.second->bits;
-		}
-	}
-
 	void swap(SigMap &other)
 	{
-		bits.swap(other.bits);
-	}
-
-	~SigMap()
-	{
-		clear();
+		database.swap(other.database);
 	}
 
 	void clear()
 	{
-		std::set<shared_bit_data_t*> all_bd_ptr;
-		for (auto &it : bits)
-			all_bd_ptr.insert(it.second);
-		for (auto bd_ptr : all_bd_ptr)
-			delete bd_ptr;
-		bits.clear();
+		database.clear();
 	}
 
 	void set(RTLIL::Module *module)
 	{
-		clear();
+		int bitcount = 0;
+		for (auto &it : module->connections())
+			bitcount += it.first.size();
+
+		database.clear();
+		database.reserve(bitcount);
+
 		for (auto &it : module->connections())
 			add(it.first, it.second);
-	}
-
-	// internal helper function
-	void register_bit(const RTLIL::SigBit &bit)
-	{
-		if (bit.wire && bits.count(bit) == 0) {
-			shared_bit_data_t *bd = new shared_bit_data_t;
-			bd->map_to = bit;
-			bd->bits.insert(bit);
-			bits[bit] = bd;
-		}
-	}
-
-	// internal helper function
-	void unregister_bit(const RTLIL::SigBit &bit)
-	{
-		if (bit.wire && bits.count(bit) > 0) {
-			shared_bit_data_t *bd = bits[bit];
-			bd->bits.erase(bit);
-			if (bd->bits.size() == 0)
-				delete bd;
-			bits.erase(bit);
-		}
-	}
-
-	// internal helper function
-	void merge_bit(const RTLIL::SigBit &bit1, const RTLIL::SigBit &bit2)
-	{
-		log_assert(bit1.wire != NULL && bit2.wire != NULL);
-
-		shared_bit_data_t *bd1 = bits[bit1];
-		shared_bit_data_t *bd2 = bits[bit2];
-		log_assert(bd1 != NULL && bd2 != NULL);
-
-		if (bd1 == bd2)
-			return;
-
-		if (bd1->bits.size() < bd2->bits.size())
-		{
-			for (auto &bit : bd1->bits)
-				bits[bit] = bd2;
-			bd2->bits.insert(bd1->bits.begin(), bd1->bits.end());
-			delete bd1;
-		}
-		else
-		{
-			bd1->map_to = bd2->map_to;
-			for (auto &bit : bd2->bits)
-				bits[bit] = bd1;
-			bd1->bits.insert(bd2->bits.begin(), bd2->bits.end());
-			delete bd2;
-		}
-	}
-
-	// internal helper function
-	void set_bit(const RTLIL::SigBit &bit1, const RTLIL::SigBit &bit2)
-	{
-		log_assert(bit1.wire != NULL);
-		log_assert(bits.count(bit1) > 0);
-		bits[bit1]->map_to = bit2;
-	}
-
-	// internal helper function
-	void map_bit(RTLIL::SigBit &bit) const
-	{
-		if (bit.wire && bits.count(bit) > 0)
-			bit = bits.at(bit)->map_to;
 	}
 
 	void add(RTLIL::SigSpec from, RTLIL::SigSpec to)
@@ -362,45 +259,43 @@ struct SigMap
 
 		for (int i = 0; i < GetSize(from); i++)
 		{
-			RTLIL::SigBit &bf = from[i];
-			RTLIL::SigBit &bt = to[i];
+			int bfi = database.lookup(from[i]);
+			int bti = database.lookup(to[i]);
 
-			if (bf.wire == NULL)
-				continue;
+			const RTLIL::SigBit &bf = database[bfi];
+			const RTLIL::SigBit &bt = database[bti];
 
-			register_bit(bf);
-			register_bit(bt);
+			if (bf.wire || bt.wire)
+			{
+				database.imerge(bfi, bti);
 
-			if (bt.wire != NULL)
-				merge_bit(bf, bt);
-			else
-				set_bit(bf, bt);
+				if (bf.wire == nullptr)
+					database.ipromote(bfi);
+
+				if (bt.wire == nullptr)
+					database.ipromote(bti);
+			}
 		}
 	}
 
 	void add(RTLIL::SigSpec sig)
 	{
 		for (auto &bit : sig) {
-			register_bit(bit);
-			set_bit(bit, bit);
+			RTLIL::SigBit b = database.find(bit);
+			if (b.wire != nullptr)
+				database.promote(bit);
 		}
-	}
-
-	void del(RTLIL::SigSpec sig)
-	{
-		for (auto &bit : sig)
-			unregister_bit(bit);
 	}
 
 	void apply(RTLIL::SigBit &bit) const
 	{
-		map_bit(bit);
+		bit = database.find(bit);
 	}
 
 	void apply(RTLIL::SigSpec &sig) const
 	{
 		for (auto &bit : sig)
-			map_bit(bit);
+			apply(bit);
 	}
 
 	RTLIL::SigBit operator()(RTLIL::SigBit bit) const
@@ -417,7 +312,7 @@ struct SigMap
 
 	RTLIL::SigSpec operator()(RTLIL::Wire *wire) const
 	{
-		RTLIL::SigSpec sig(wire);
+		SigSpec sig(wire);
 		apply(sig);
 		return sig;
 	}
@@ -425,8 +320,9 @@ struct SigMap
 	RTLIL::SigSpec allbits() const
 	{
 		RTLIL::SigSpec sig;
-		for (auto &it : bits)
-			sig.append(SigBit(it.first.first, it.first.second));
+		for (auto &bit : database)
+			if (bit.wire != nullptr)
+				sig.append(bit);
 		return sig;
 	}
 };

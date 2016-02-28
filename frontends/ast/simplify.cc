@@ -398,7 +398,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 			did_something = true;
 		children[0]->detectSignWidth(backup_width_hint, backup_sign_hint);
 		children[1]->detectSignWidth(width_hint, sign_hint);
-		width_hint = std::max(width_hint, backup_width_hint);
+		width_hint = max(width_hint, backup_width_hint);
 		child_0_is_self_determined = true;
 		break;
 
@@ -412,7 +412,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 				did_something = true;
 			if (!children[1]->range_valid)
 				log_error("Non-constant width range on parameter decl at %s:%d.\n", filename.c_str(), linenum);
-			width_hint = std::max(width_hint, children[1]->range_left - children[1]->range_right + 1);
+			width_hint = max(width_hint, children[1]->range_left - children[1]->range_right + 1);
 		}
 		break;
 
@@ -733,8 +733,8 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 		for (auto range : children[1]->children) {
 			if (!range->range_valid)
 				log_error("Non-constant range on memory decl at %s:%d.\n", filename.c_str(), linenum);
-			multirange_dimensions.push_back(std::min(range->range_left, range->range_right));
-			multirange_dimensions.push_back(std::max(range->range_left, range->range_right) - std::min(range->range_left, range->range_right) + 1);
+			multirange_dimensions.push_back(min(range->range_left, range->range_right));
+			multirange_dimensions.push_back(max(range->range_left, range->range_right) - min(range->range_left, range->range_right) + 1);
 			total_size *= multirange_dimensions.back();
 		}
 		delete children[1];
@@ -1013,7 +1013,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 
 		std::vector<AstNode*> new_children;
 		for (size_t i = 0; i < children.size(); i++)
-			if (children[i]->type == AST_WIRE) {
+			if (children[i]->type == AST_WIRE || children[i]->type == AST_PARAMETER || children[i]->type == AST_LOCALPARAM) {
 				children[i]->simplify(false, false, false, stage, -1, false, false);
 				current_ast_mod->children.push_back(children[i]);
 				current_scope[children[i]->str] = children[i];
@@ -1169,7 +1169,7 @@ bool AstNode::simplify(bool const_fold, bool at_zero, bool in_lvalue, int stage,
 			log_error("Non-constant array range on cell array at %s:%d.\n", filename.c_str(), linenum);
 
 		newNode = new AstNode(AST_GENBLOCK);
-		int num = std::max(children.at(0)->range_left, children.at(0)->range_right) - std::min(children.at(0)->range_left, children.at(0)->range_right) + 1;
+		int num = max(children.at(0)->range_left, children.at(0)->range_right) - min(children.at(0)->range_left, children.at(0)->range_right) + 1;
 
 		for (int i = 0; i < num; i++) {
 			int idx = children.at(0)->range_left > children.at(0)->range_right ? children.at(0)->range_right + i : children.at(0)->range_right - i;
@@ -1705,7 +1705,7 @@ skip_dynamic_range_lvalue_expansion:;
 					while (node_addr->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
 					if (node_addr->type != AST_CONSTANT)
 						log_error("Failed to evaluate system function `%s' with non-constant 3rd argument at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
-					start_addr = node_addr->asInt(false);
+					start_addr = int(node_addr->asInt(false));
 				}
 
 				if (GetSize(children) > 3) {
@@ -1713,7 +1713,7 @@ skip_dynamic_range_lvalue_expansion:;
 					while (node_addr->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
 					if (node_addr->type != AST_CONSTANT)
 						log_error("Failed to evaluate system function `%s' with non-constant 4th argument at %s:%d.\n", str.c_str(), filename.c_str(), linenum);
-					finish_addr = node_addr->asInt(false);
+					finish_addr = int(node_addr->asInt(false));
 				}
 
 				bool unconditional_init = false;
@@ -1773,6 +1773,8 @@ skip_dynamic_range_lvalue_expansion:;
 
 		size_t arg_count = 0;
 		std::map<std::string, std::string> replace_rules;
+		vector<AstNode*> added_mod_children;
+		dict<std::string, AstNode*> wire_cache;
 
 		if (current_block == NULL)
 		{
@@ -1865,17 +1867,39 @@ skip_dynamic_range_lvalue_expansion:;
 		}
 
 		for (auto child : decl->children)
-			if (child->type == AST_WIRE)
+			if (child->type == AST_WIRE || child->type == AST_PARAMETER || child->type == AST_LOCALPARAM)
 			{
-				AstNode *wire = child->clone();
-				wire->str = prefix + wire->str;
-				wire->port_id = 0;
-				wire->is_input = false;
-				wire->is_output = false;
-				current_ast_mod->children.push_back(wire);
-				while (wire->simplify(true, false, false, 1, -1, false, false)) { }
+				AstNode *wire = nullptr;
+
+				if (wire_cache.count(child->str))
+				{
+					wire = wire_cache.at(child->str);
+					if (wire->children.empty()) {
+						for (auto c : child->children)
+							wire->children.push_back(c->clone());
+					} else {
+						if (!child->children.empty())
+							log_error("Incompatible re-declaration of wire %s at %s:%d.\n", child->str.c_str(), filename.c_str(), linenum);
+					}
+				}
+				else
+				{
+					wire = child->clone();
+					wire->str = prefix + wire->str;
+					wire->port_id = 0;
+					wire->is_input = false;
+					wire->is_output = false;
+					wire_cache[child->str] = wire;
+
+					current_ast_mod->children.push_back(wire);
+					added_mod_children.push_back(wire);
+				}
+
+				if (child->type == AST_WIRE)
+					while (wire->simplify(true, false, false, 1, -1, false, false)) { }
 
 				replace_rules[child->str] = wire->str;
+				current_scope[wire->str] = wire;
 
 				if ((child->is_input || child->is_output) && arg_count < children.size())
 				{
@@ -1895,8 +1919,13 @@ skip_dynamic_range_lvalue_expansion:;
 				}
 			}
 
+		for (auto child : added_mod_children) {
+			child->replace_ids(prefix, replace_rules);
+			while (child->simplify(true, false, false, 1, -1, false, false)) { }
+		}
+
 		for (auto child : decl->children)
-			if (child->type != AST_WIRE)
+			if (child->type != AST_WIRE && child->type != AST_PARAMETER && child->type != AST_LOCALPARAM)
 			{
 				AstNode *stmt = child->clone();
 				stmt->replace_ids(prefix, replace_rules);
@@ -2043,7 +2072,7 @@ skip_dynamic_range_lvalue_expansion:;
 		if (0) { case AST_GE:  const_func = RTLIL::const_ge; }
 		if (0) { case AST_GT:  const_func = RTLIL::const_gt; }
 			if (children[0]->type == AST_CONSTANT && children[1]->type == AST_CONSTANT) {
-				int cmp_width = std::max(children[0]->bits.size(), children[1]->bits.size());
+				int cmp_width = max(children[0]->bits.size(), children[1]->bits.size());
 				bool cmp_signed = children[0]->is_signed && children[1]->is_signed;
 				RTLIL::Const y = const_func(children[0]->bitsAsConst(cmp_width, cmp_signed),
 						children[1]->bitsAsConst(cmp_width, cmp_signed), cmp_signed, cmp_signed, 1);
@@ -2236,7 +2265,7 @@ AstNode *AstNode::readmem(bool is_readmemh, std::string mem_filename, AstNode *m
 
 	log_assert(GetSize(memory->children) == 2 && memory->children[1]->type == AST_RANGE && memory->children[1]->range_valid);
 	int range_left =  memory->children[1]->range_left, range_right =  memory->children[1]->range_right;
-	int range_min = std::min(range_left, range_right), range_max = std::max(range_left, range_right);
+	int range_min = min(range_left, range_right), range_max = max(range_left, range_right);
 
 	if (start_addr < 0)
 		start_addr = range_min;
@@ -2720,7 +2749,7 @@ void AstNode::meminfo(int &mem_width, int &mem_size, int &addr_bits)
 
 	if (mem_size < 0)
 		mem_size *= -1;
-	mem_size += std::min(children[1]->range_left, children[1]->range_right) + 1;
+	mem_size += min(children[1]->range_left, children[1]->range_right) + 1;
 
 	addr_bits = 1;
 	while ((1 << addr_bits) < mem_size)
@@ -2756,8 +2785,8 @@ void AstNode::replace_variables(std::map<std::string, AstNode::varinfo_t> &varia
 			if (!children.at(0)->range_valid)
 				log_error("Non-constant range in %s:%d (called from %s:%d).\n",
 						filename.c_str(), linenum, fcall->filename.c_str(), fcall->linenum);
-			offset = std::min(children.at(0)->range_left, children.at(0)->range_right);
-			width = std::min(std::abs(children.at(0)->range_left - children.at(0)->range_right) + 1, width);
+			offset = min(children.at(0)->range_left, children.at(0)->range_right);
+			width = min(std::abs(children.at(0)->range_left - children.at(0)->range_right) + 1, width);
 		}
 		offset -= variables.at(str).offset;
 		std::vector<RTLIL::State> &var_bits = variables.at(str).val.bits;
@@ -2797,7 +2826,7 @@ AstNode *AstNode::eval_const_function(AstNode *fcall)
 				log_error("Can't determine size of variable %s in %s:%d (called from %s:%d).\n",
 						child->str.c_str(), child->filename.c_str(), child->linenum, fcall->filename.c_str(), fcall->linenum);
 			variables[child->str].val = RTLIL::Const(RTLIL::State::Sx, abs(child->range_left - child->range_right)+1);
-			variables[child->str].offset = std::min(child->range_left, child->range_right);
+			variables[child->str].offset = min(child->range_left, child->range_right);
 			variables[child->str].is_signed = child->is_signed;
 			if (child->is_input && argidx < fcall->children.size())
 				variables[child->str].val = fcall->children.at(argidx++)->bitsAsConst(variables[child->str].val.bits.size());
@@ -2856,7 +2885,7 @@ AstNode *AstNode::eval_const_function(AstNode *fcall)
 				if (!range->range_valid)
 					log_error("Non-constant range in %s:%d (called from %s:%d).\n",
 							range->filename.c_str(), range->linenum, fcall->filename.c_str(), fcall->linenum);
-				int offset = std::min(range->range_left, range->range_right);
+				int offset = min(range->range_left, range->range_right);
 				int width = std::abs(range->range_left - range->range_right) + 1;
 				varinfo_t &v = variables[stmt->children.at(0)->str];
 				RTLIL::Const r = stmt->children.at(1)->bitsAsConst(v.val.bits.size());
