@@ -22,6 +22,7 @@ Homepage: http://www.clifford.at/yosys
 Package: yosys
 Architecture: any
 Depends: ${shlibs:Depends},
+         ${python3:Depends},
          ${misc:Depends},
          berkeley-abc (>= 1.01),
          xdot
