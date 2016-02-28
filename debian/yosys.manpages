@@ -2,3 +2,4 @@ debian/yosys.1
 debian/yosys-config.1
 debian/yosys-filterlib.1
 debian/yosys-abc.1
+debian/man/*.1
