@@ -6,6 +6,7 @@ yosys (0.6-1) UNRELEASED; urgency=medium
   * debian/rules:
     - don't run make as part of dh_auto_configure, it'll get run by
         dh_auto_build later
+    - enable parallel build
 
  -- Sebastian Kuzminsky <seb@highlab.com>  Sun, 28 Feb 2016 10:48:44 -0700
 
