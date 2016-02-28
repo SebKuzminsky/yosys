@@ -3,6 +3,9 @@ yosys (0.6-1) UNRELEASED; urgency=medium
   * New upstream release: 0.6 (5869d26)
     - 01_gitrevision.patch: refresh
     - spelling-fixes.patch: fix upstream spelling mistakes
+  * debian/rules:
+    - don't run make as part of dh_auto_configure, it'll get run by
+        dh_auto_build later
 
  -- Sebastian Kuzminsky <seb@highlab.com>  Sun, 28 Feb 2016 10:48:44 -0700
 
