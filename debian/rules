@@ -5,9 +5,20 @@
 
 export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 
+CHANGELOG_DATE ?= $(shell LC_ALL=C date -u -d "`dpkg-parsechangelog --show-field Date`" +"%d %B %Y")
+
+
 %:
 	PREFIX=/usr dh $@ --parallel
 
 
+override_dh_auto_clean:
+	dh_auto_clean
+	$(RM) debian/man/*.1
+
 override_dh_auto_configure:
 	make config-gcc
+
+override_dh_installman:
+	cd debian/man ; CHANGELOG_DATE="$(CHANGELOG_DATE)" ./genmanpages.sh
+	dh_installman
