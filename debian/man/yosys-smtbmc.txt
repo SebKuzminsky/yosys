@@ -1,0 +1,44 @@
+NAME
+  yosys-smtbmc - write design to SMT2-LIBv2 file
+
+SYNOPSIS
+  yosys-smtbmc [options] <yosys_smt2_output>
+
+OPTIONS
+
+  -t [<skip_steps>:]<num_steps>  
+      default: skip_steps=0, num_steps=20
+
+  -u <start_step>  
+      assume asserts in skipped steps in BMC
+
+  -S <step_size>  
+      proof <step_size> time steps at once
+
+  -c <vcd_filename>  
+      write counter-example to this VCD file (hint: use 'write_smt2
+      -wires' for maximum coverage of signals in generated VCD file)
+
+  -i  
+      instead of BMC run temporal induction
+
+  -m <module_name>  
+      name of the top module
+
+  -s <solver>  
+      Set SMT solver: z3, cvc4, yices, mathsat. default: z3
+
+  -v  
+      enable debug output
+
+  -p  
+      disable timer display during solving
+
+  -d <filename>  
+      write smt2 statements to file
+
+ 
+AUTHOR
+
+  This manual page was written by Sebastian Kuzminsky <seb@highlab.com>
+  for the Debian project (and may be used by others).
