@@ -9,7 +9,7 @@ CHANGELOG_DATE ?= $(shell LC_ALL=C date -u -d "`dpkg-parsechangelog --show-field
 
 
 %:
-	PREFIX=/usr dh $@ --parallel
+	PREFIX=/usr dh $@ --parallel --with=python3
 
 
 override_dh_auto_clean:
