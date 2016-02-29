@@ -1,3 +1,10 @@
+yosys (0.6-2) UNRELEASED; urgency=medium
+
+  * Start work on splitting yosys.deb into yosys, yosys-doc, and
+    yosys-dev.
+
+ -- Sebastian Kuzminsky <seb@highlab.com>  Mon, 29 Feb 2016 10:18:55 -0700
+
 yosys (0.6-1) unstable; urgency=medium
 
   * Uploaded to unstable.
