@@ -13,7 +13,7 @@ Index: yosys/passes/techmap/abc.cc
  		log_push();
  
 -		std::string exe_file = proc_self_dirname() + "yosys-abc";
-+		std::string exe_file = proc_self_dirname() + "berkeley-abc";
++		std::string exe_file = "berkeley-abc";
  		std::string script_file, liberty_file, constr_file, clk_str, delay_target;
  		bool fast_mode = false, dff_mode = false, keepff = false, cleanup = true;
  		bool show_tempdir = false;
