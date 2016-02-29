@@ -22,3 +22,7 @@ override_dh_auto_configure:
 override_dh_installman:
 	cd debian/man ; CHANGELOG_DATE="$(CHANGELOG_DATE)" ./genmanpages.sh
 	dh_installman
+
+override_dh_auto_build:
+	$(MAKE) -j24
+	$(MAKE) manual
