@@ -1,0 +1,16 @@
+Description: build the manual using the headers from the source tree, not
+ the installed ones.
+Author: Sebastian Kuzminsky <seb@highlab.com>
+Index: yosys/manual/PRESENTATION_Prog/Makefile
+===================================================================
+--- yosys.orig/manual/PRESENTATION_Prog/Makefile	2016-02-28 22:25:29.557021857 -0700
++++ yosys/manual/PRESENTATION_Prog/Makefile	2016-02-28 22:25:36.096960466 -0700
+@@ -2,7 +2,7 @@
+ all: test0.log test1.log test2.log
+ 
+ my_cmd.so: my_cmd.cc
+-	../../yosys-config --exec --cxx --cxxflags --ldflags -o my_cmd.so -shared my_cmd.cc --ldlibs
++	../../yosys-config --exec --cxx --cxxflags -I../.. --ldflags -o my_cmd.so -shared my_cmd.cc --ldlibs
+ 
+ test0.log: my_cmd.so
+ 	../../yosys -Ql test0.log_new -m ./my_cmd.so -p 'my_cmd foo bar' absval_ref.v
