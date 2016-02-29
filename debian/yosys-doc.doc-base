@@ -1,0 +1,9 @@
+Document: yosys-manual
+Title: Yosys Manual
+Author: Clifford Wolf
+Abstract: This manual describes what yosys is and how it can be used to
+ compile Verilog code for FPGAs
+Section: Science/Electronics
+
+Format: PDF
+Files: /usr/share/doc/yosys-doc/*.pdf
