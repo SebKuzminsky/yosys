@@ -1,0 +1,67 @@
+Description: Switch the yosys manual font from luximono (non-free) to libertine (free)
+Author: Sebastian Kuzminsky <seb@highlab.com>
+Index: yosys/manual/APPNOTE_010_Verilog_to_BLIF.tex
+===================================================================
+--- yosys.orig/manual/APPNOTE_010_Verilog_to_BLIF.tex	2016-02-28 22:17:25.000000000 -0700
++++ yosys/manual/APPNOTE_010_Verilog_to_BLIF.tex	2016-02-28 22:23:10.302328932 -0700
+@@ -4,7 +4,7 @@
+ \documentclass[9pt,technote,a4paper]{IEEEtran}
+ 
+ \usepackage[T1]{fontenc}   % required for luximono!
+-\usepackage[scaled=0.8]{luximono}  % typewriter font with bold face
++\usepackage[scaled=0.8]{libertine}  % typewriter font with bold face
+ 
+ % To install the luximono font files:
+ % getnonfreefonts-sys --all        or
+Index: yosys/manual/APPNOTE_011_Design_Investigation.tex
+===================================================================
+--- yosys.orig/manual/APPNOTE_011_Design_Investigation.tex	2016-02-28 22:17:25.000000000 -0700
++++ yosys/manual/APPNOTE_011_Design_Investigation.tex	2016-02-28 22:23:10.302328932 -0700
+@@ -4,7 +4,7 @@
+ \documentclass[9pt,technote,a4paper]{IEEEtran}
+ 
+ \usepackage[T1]{fontenc}   % required for luximono!
+-\usepackage[scaled=0.8]{luximono}  % typewriter font with bold face
++\usepackage[scaled=0.8]{libertine}  % typewriter font with bold face
+ 
+ % To install the luximono font files:
+ % getnonfreefonts-sys --all        or
+Index: yosys/manual/APPNOTE_012_Verilog_to_BTOR.tex
+===================================================================
+--- yosys.orig/manual/APPNOTE_012_Verilog_to_BTOR.tex	2016-02-28 22:17:25.000000000 -0700
++++ yosys/manual/APPNOTE_012_Verilog_to_BTOR.tex	2016-02-28 22:23:10.302328932 -0700
+@@ -4,7 +4,7 @@
+ \documentclass[9pt,technote,a4paper]{IEEEtran}
+ 
+ \usepackage[T1]{fontenc}   % required for luximono!
+-\usepackage[scaled=0.8]{luximono}  % typewriter font with bold face
++\usepackage[scaled=0.8]{libertine}  % typewriter font with bold face
+ 
+ % To install the luximono font files:
+ % getnonfreefonts-sys --all        or
+Index: yosys/manual/manual.tex
+===================================================================
+--- yosys.orig/manual/manual.tex	2016-02-28 22:17:25.000000000 -0700
++++ yosys/manual/manual.tex	2016-02-28 22:23:10.306328895 -0700
+@@ -2,7 +2,7 @@
+ 
+ \usepackage[T1]{fontenc}   % required for luximono!
+ \usepackage{lmodern}
+-\usepackage[scaled=0.8]{luximono}  % typewriter font with bold face
++\usepackage[scaled=0.8]{libertine}  % typewriter font with bold face
+ 
+ % To install the luximono font files:
+ % getnonfreefonts-sys --all        or
+Index: yosys/manual/presentation.tex
+===================================================================
+--- yosys.orig/manual/presentation.tex	2016-02-28 22:19:51.000000000 -0700
++++ yosys/manual/presentation.tex	2016-02-28 22:23:10.306328895 -0700
+@@ -3,7 +3,7 @@
+ 
+ \usepackage[T1]{fontenc}   % required for luximono!
+ \usepackage{lmodern}
+-\usepackage[scaled=0.8]{luximono}  % typewriter font with bold face
++\usepackage[scaled=0.8]{libertine}  % typewriter font with bold face
+ 
+ % To install the luximono font files:
+ % getnonfreefonts-sys --all        or
