@@ -41,6 +41,7 @@
 
 #include <map>
 #include <set>
+#include <tuple>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -138,7 +139,13 @@ YOSYS_NAMESPACE_BEGIN
 
 using std::vector;
 using std::string;
+using std::tuple;
 using std::pair;
+
+using std::make_tuple;
+using std::make_pair;
+using std::min;
+using std::max;
 
 // A primitive shared string implementation that does not
 // move its .c_str() when the object is copied or moved.
@@ -164,6 +171,7 @@ using hashlib::hash_obj_ops;
 using hashlib::dict;
 using hashlib::idict;
 using hashlib::pool;
+using hashlib::mfp;
 
 namespace RTLIL {
 	struct IdString;
@@ -214,6 +222,7 @@ extern bool memhasher_active;
 inline void memhasher() { if (memhasher_active) memhasher_do(); }
 
 void yosys_banner();
+int ceil_log2(int x);
 std::string stringf(const char *fmt, ...) YS_ATTRIBUTE(format(printf, 1, 2));
 std::string vstringf(const char *fmt, va_list ap);
 int readsome(std::istream &f, char *s, int n);
@@ -242,6 +251,8 @@ YOSYS_NAMESPACE_END
 YOSYS_NAMESPACE_BEGIN
 
 using RTLIL::State;
+using RTLIL::SigChunk;
+using RTLIL::SigSig;
 
 namespace hashlib {
 	template<> struct hash_ops<RTLIL::State> : hash_ops<int> {};

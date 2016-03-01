@@ -49,7 +49,7 @@ void apply_prefix(std::string prefix, std::string &id)
 
 void apply_prefix(std::string prefix, RTLIL::SigSpec &sig, RTLIL::Module *module)
 {
-	std::vector<RTLIL::SigChunk> chunks = sig;
+	vector<SigChunk> chunks = sig;
 	for (auto &chunk : chunks)
 		if (chunk.wire != NULL) {
 			std::string wire_name = chunk.wire->name.str();
@@ -313,7 +313,7 @@ struct TechmapWorker
 
 			if (c->type == "$memrd" || c->type == "$memwr" || c->type == "$meminit") {
 				IdString memid = c->getParam("\\MEMID").decode_string();
-				log_assert(memory_renames.count(memid));
+				log_assert(memory_renames.count(memid) != 0);
 				c->setParam("\\MEMID", Const(memory_renames[memid].str()));
 			}
 

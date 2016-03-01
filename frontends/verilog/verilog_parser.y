@@ -759,7 +759,7 @@ assign_expr_list:
 	assign_expr | assign_expr_list ',' assign_expr;
 
 assign_expr:
-	expr '=' expr {
+	lvalue '=' expr {
 		ast_stack.back()->children.push_back(new AstNode(AST_ASSIGN, $1, $3));
 	};
 
@@ -963,7 +963,7 @@ simple_behavioral_stmt:
 
 // this production creates the obligatory if-else shift/reduce conflict
 behavioral_stmt:
-	defattr | assert | wire_decl |
+	defattr | assert | wire_decl | param_decl | localparam_decl |
 	non_opt_delay behavioral_stmt |
 	simple_behavioral_stmt ';' | ';' |
 	hierarchical_id attr {

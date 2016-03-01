@@ -68,7 +68,7 @@ struct DffinitPass : public Pass {
 			for (auto wire : module->selected_wires()) {
 				if (wire->attributes.count("\\init")) {
 					Const value = wire->attributes.at("\\init");
-					for (int i = 0; i < std::min(GetSize(value), GetSize(wire)); i++)
+					for (int i = 0; i < min(GetSize(value), GetSize(wire)); i++)
 						init_bits[sigmap(SigBit(wire, i))] = value[i];
 				}
 				if (wire->port_output)
@@ -100,7 +100,7 @@ struct DffinitPass : public Pass {
 					for (int i = 0; i < GetSize(sig); i++) {
 						if (init_bits.count(sig[i]) == 0)
 							continue;
-						while (GetSize(value.bits) < i)
+						while (GetSize(value.bits) <= i)
 							value.bits.push_back(State::S0);
 						value.bits[i] = init_bits.at(sig[i]);
 						cleanup_bits.insert(sig[i]);
@@ -116,7 +116,7 @@ struct DffinitPass : public Pass {
 				if (wire->attributes.count("\\init")) {
 					Const &value = wire->attributes.at("\\init");
 					bool do_cleanup = true;
-					for (int i = 0; i < std::min(GetSize(value), GetSize(wire)); i++) {
+					for (int i = 0; i < min(GetSize(value), GetSize(wire)); i++) {
 						SigBit bit = sigmap(SigBit(wire, i));
 						if (cleanup_bits.count(bit) || !used_bits.count(bit))
 							value[i] = State::Sx;

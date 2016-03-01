@@ -51,6 +51,7 @@ struct WreduceWorker
 
 	std::set<Cell*, IdString::compare_ptr_by_name<Cell>> work_queue_cells;
 	std::set<SigBit> work_queue_bits;
+	pool<SigBit> keep_bits;
 
 	WreduceWorker(WreduceConfig *config, Module *module) :
 			config(config), module(module), mi(module) { }
@@ -65,10 +66,13 @@ struct WreduceWorker
 		SigSpec sig_y = mi.sigmap(cell->getPort("\\Y"));
 		std::vector<SigBit> bits_removed;
 
+		if (sig_y.has_const())
+			return;
+
 		for (int i = GetSize(sig_y)-1; i >= 0; i--)
 		{
 			auto info = mi.query(sig_y[i]);
-			if (!info->is_output && GetSize(info->ports) <= 1) {
+			if (!info->is_output && GetSize(info->ports) <= 1 && !keep_bits.count(mi.sigmap(sig_y[i]))) {
 				bits_removed.push_back(Sx);
 				continue;
 			}
@@ -172,6 +176,11 @@ struct WreduceWorker
 		if (cell->type.in("$mux", "$pmux"))
 			return run_cell_mux(cell);
 
+		SigSpec sig = mi.sigmap(cell->getPort("\\Y"));
+
+		if (sig.has_const())
+			return;
+
 
 		// Reduce size of ports A and B based on constant input bits and size of output port
 
@@ -179,8 +188,8 @@ struct WreduceWorker
 		int max_port_b_size = cell->hasPort("\\B") ? GetSize(cell->getPort("\\B")) : -1;
 
 		if (cell->type.in("$not", "$pos", "$neg", "$and", "$or", "$xor", "$add", "$sub")) {
-			max_port_a_size = std::min(max_port_a_size, GetSize(cell->getPort("\\Y")));
-			max_port_b_size = std::min(max_port_b_size, GetSize(cell->getPort("\\Y")));
+			max_port_a_size = min(max_port_a_size, GetSize(sig));
+			max_port_b_size = min(max_port_b_size, GetSize(sig));
 		}
 
 		bool port_a_signed = false;
@@ -192,10 +201,33 @@ struct WreduceWorker
 		if (max_port_b_size >= 0)
 			run_reduce_inport(cell, 'B', max_port_b_size, port_b_signed, did_something);
 
+		if (cell->hasPort("\\A") && cell->hasPort("\\B") && port_a_signed && port_b_signed) {
+			SigSpec sig_a = mi.sigmap(cell->getPort("\\A")), sig_b = mi.sigmap(cell->getPort("\\B"));
+			if (GetSize(sig_a) > 0 && sig_a[GetSize(sig_a)-1] == State::S0 &&
+					GetSize(sig_b) > 0 && sig_b[GetSize(sig_b)-1] == State::S0) {
+				log("Converting cell %s.%s (%s) from signed to unsigned.\n",
+						log_id(module), log_id(cell), log_id(cell->type));
+				cell->setParam("\\A_SIGNED", 0);
+				cell->setParam("\\B_SIGNED", 0);
+				port_a_signed = false;
+				port_b_signed = false;
+				did_something = true;
+			}
+		}
+
+		if (cell->hasPort("\\A") && !cell->hasPort("\\B") && port_a_signed) {
+			SigSpec sig_a = mi.sigmap(cell->getPort("\\A"));
+			if (GetSize(sig_a) > 0 && sig_a[GetSize(sig_a)-1] == State::S0) {
+				log("Converting cell %s.%s (%s) from signed to unsigned.\n",
+						log_id(module), log_id(cell), log_id(cell->type));
+				cell->setParam("\\A_SIGNED", 0);
+				port_a_signed = false;
+				did_something = true;
+			}
+		}
+
 
 		// Reduce size of port Y based on sizes for A and B and unused bits in Y
-
-		SigSpec sig = mi.sigmap(cell->getPort("\\Y"));
 
 		int bits_removed = 0;
 		if (port_a_signed && cell->type == "$shr") {
@@ -221,7 +253,7 @@ struct WreduceWorker
 			if (cell->hasPort("\\A")) a_size = GetSize(cell->getPort("\\A"));
 			if (cell->hasPort("\\B")) b_size = GetSize(cell->getPort("\\B"));
 
-			int max_y_size = std::max(a_size, b_size);
+			int max_y_size = max(a_size, b_size);
 
 			if (cell->type == "$add")
 				max_y_size++;
@@ -265,6 +297,11 @@ struct WreduceWorker
 
 	void run()
 	{
+		for (auto w : module->wires())
+			if (w->get_bool_attribute("\\keep"))
+				for (auto bit : mi.sigmap(w))
+					keep_bits.insert(bit);
+
 		for (auto c : module->selected_cells())
 			work_queue_cells.insert(c);
 
@@ -352,10 +389,12 @@ struct WreducePass : public Pass {
 						"$lt", "$le", "$eq", "$ne", "$eqx", "$nex", "$ge", "$gt",
 						"$logic_not", "$logic_and", "$logic_or") && GetSize(c->getPort("\\Y")) > 1) {
 					SigSpec sig = c->getPort("\\Y");
-					c->setPort("\\Y", sig[0]);
-					c->setParam("\\Y_WIDTH", 1);
-					sig.remove(0);
-					module->connect(sig, Const(0, GetSize(sig)));
+					if (!sig.has_const()) {
+						c->setPort("\\Y", sig[0]);
+						c->setParam("\\Y_WIDTH", 1);
+						sig.remove(0);
+						module->connect(sig, Const(0, GetSize(sig)));
+					}
 				}
 
 			WreduceWorker worker(&config, module);

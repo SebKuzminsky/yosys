@@ -192,12 +192,12 @@ namespace RTLIL
 			return std::string(global_id_storage_.at(index_));
 		}
 
-		bool operator<(IdString rhs) const {
+		bool operator<(const IdString &rhs) const {
 			return index_ < rhs.index_;
 		}
 
-		bool operator==(IdString rhs) const { return index_ == rhs.index_; }
-		bool operator!=(IdString rhs) const { return index_ != rhs.index_; }
+		bool operator==(const IdString &rhs) const { return index_ == rhs.index_; }
+		bool operator!=(const IdString &rhs) const { return index_ != rhs.index_; }
 
 		// The methods below are just convenience functions for better compatibility with std::string.
 
@@ -460,7 +460,7 @@ struct RTLIL::Const
 	Const(std::string str);
 	Const(int val, int width = 32);
 	Const(RTLIL::State bit, int width = 1);
-	Const(const std::vector<RTLIL::State> &bits) : bits(bits) { flags = CONST_FLAG_NONE; };
+	Const(const std::vector<RTLIL::State> &bits) : bits(bits) { flags = CONST_FLAG_NONE; }
 	Const(const std::vector<bool> &bits);
 
 	bool operator <(const RTLIL::Const &other) const;
@@ -476,7 +476,7 @@ struct RTLIL::Const
 
 	inline int size() const { return bits.size(); }
 	inline RTLIL::State &operator[](int index) { return bits.at(index); }
-	inline const RTLIL::State &operator[](int index) const { return bits.at(index); };
+	inline const RTLIL::State &operator[](int index) const { return bits.at(index); }
 
 	inline RTLIL::Const extract(int offset, int len = 1, RTLIL::State padding = RTLIL::State::S0) const {
 		RTLIL::Const ret;
@@ -669,6 +669,7 @@ public:
 	void remove(const pool<RTLIL::SigBit> &pattern);
 	void remove(const pool<RTLIL::SigBit> &pattern, RTLIL::SigSpec *other) const;
 	void remove2(const pool<RTLIL::SigBit> &pattern, RTLIL::SigSpec *other);
+	void remove2(const std::set<RTLIL::SigBit> &pattern, RTLIL::SigSpec *other);
 
 	void remove(int offset, int length = 1);
 	void remove_const();
@@ -690,6 +691,7 @@ public:
 
 	bool is_wire() const;
 	bool is_chunk() const;
+	inline bool is_bit() const { return width_ == 1; }
 
 	bool is_fully_const() const;
 	bool is_fully_zero() const;
@@ -704,6 +706,7 @@ public:
 	RTLIL::Const as_const() const;
 	RTLIL::Wire *as_wire() const;
 	RTLIL::SigChunk as_chunk() const;
+	RTLIL::SigBit as_bit() const;
 
 	bool match(std::string pattern) const;
 
@@ -712,7 +715,6 @@ public:
 	std::vector<RTLIL::SigBit> to_sigbit_vector() const;
 	std::map<RTLIL::SigBit, RTLIL::SigBit> to_sigbit_map(const RTLIL::SigSpec &other) const;
 	dict<RTLIL::SigBit, RTLIL::SigBit> to_sigbit_dict(const RTLIL::SigSpec &other) const;
-	RTLIL::SigBit to_single_sigbit() const;
 
 	static bool parse(RTLIL::SigSpec &sig, RTLIL::Module *module, std::string str);
 	static bool parse_sel(RTLIL::SigSpec &sig, RTLIL::Design *design, RTLIL::Module *module, std::string str);
@@ -1014,6 +1016,7 @@ public:
 	RTLIL::Cell* addDlatchsr (RTLIL::IdString name, RTLIL::SigSpec sig_en, RTLIL::SigSpec sig_set, RTLIL::SigSpec sig_clr,
 			RTLIL::SigSpec sig_d, RTLIL::SigSpec sig_q, bool en_polarity = true, bool set_polarity = true, bool clr_polarity = true);
 
+	RTLIL::Cell* addBufGate  (RTLIL::IdString name, RTLIL::SigBit sig_a, RTLIL::SigBit sig_y);
 	RTLIL::Cell* addNotGate  (RTLIL::IdString name, RTLIL::SigBit sig_a, RTLIL::SigBit sig_y);
 	RTLIL::Cell* addAndGate  (RTLIL::IdString name, RTLIL::SigBit sig_a, RTLIL::SigBit sig_b, RTLIL::SigBit sig_y);
 	RTLIL::Cell* addNandGate (RTLIL::IdString name, RTLIL::SigBit sig_a, RTLIL::SigBit sig_b, RTLIL::SigBit sig_y);
@@ -1085,6 +1088,7 @@ public:
 	RTLIL::SigSpec Mux      (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_s);
 	RTLIL::SigSpec Pmux     (RTLIL::IdString name, RTLIL::SigSpec sig_a, RTLIL::SigSpec sig_b, RTLIL::SigSpec sig_s);
 
+	RTLIL::SigBit BufGate  (RTLIL::IdString name, RTLIL::SigBit sig_a);
 	RTLIL::SigBit NotGate  (RTLIL::IdString name, RTLIL::SigBit sig_a);
 	RTLIL::SigBit AndGate  (RTLIL::IdString name, RTLIL::SigBit sig_a, RTLIL::SigBit sig_b);
 	RTLIL::SigBit NandGate (RTLIL::IdString name, RTLIL::SigBit sig_a, RTLIL::SigBit sig_b);

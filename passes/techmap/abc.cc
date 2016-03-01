@@ -100,6 +100,7 @@ SigMap assign_map;
 RTLIL::Module *module;
 std::vector<gate_t> signal_list;
 std::map<RTLIL::SigBit, int> signal_map;
+pool<std::string> enabled_gates;
 
 bool clk_polarity, en_polarity;
 RTLIL::SigSpec clk_sig, en_sig;
@@ -591,7 +592,7 @@ struct abc_output_filter
 };
 
 void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::string script_file, std::string exe_file,
-		std::string liberty_file, std::string constr_file, bool cleanup, int lut_mode, int lut_mode2, bool dff_mode, std::string clk_str,
+		std::string liberty_file, std::string constr_file, bool cleanup, vector<int> lut_costs, bool dff_mode, std::string clk_str,
 		bool keepff, std::string delay_target, bool fast_mode, const std::vector<RTLIL::Cell*> &cells, bool show_tempdir)
 {
 	module = current_module;
@@ -625,7 +626,7 @@ void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::strin
 		if (!constr_file.empty())
 			abc_script += stringf("read_constr -v %s; ", constr_file.c_str());
 	} else
-	if (lut_mode)
+	if (!lut_costs.empty())
 		abc_script += stringf("read_lut %s/lutdefs.txt; ", tempdir_name.c_str());
 	else
 		abc_script += stringf("read_library %s/stdcells.genlib; ", tempdir_name.c_str());
@@ -641,7 +642,7 @@ void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::strin
 					abc_script += script_file[i];
 		} else
 			abc_script += stringf("source %s", script_file.c_str());
-	} else if (lut_mode)
+	} else if (!lut_costs.empty())
 		abc_script += fast_mode ? ABC_FAST_COMMAND_LUT : ABC_COMMAND_LUT;
 	else if (!liberty_file.empty())
 		abc_script += constr_file.empty() ? (fast_mode ? ABC_FAST_COMMAND_LIB : ABC_COMMAND_LIB) : (fast_mode ? ABC_FAST_COMMAND_CTR : ABC_COMMAND_CTR);
@@ -837,17 +838,28 @@ void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::strin
 		fprintf(f, "GATE ONE   1 Y=CONST1;\n");
 		fprintf(f, "GATE BUF  %d Y=A;                  PIN * NONINV  1 999 1 0 1 0\n", get_cell_cost("$_BUF_"));
 		fprintf(f, "GATE NOT  %d Y=!A;                 PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_NOT_"));
-		fprintf(f, "GATE AND  %d Y=A*B;                PIN * NONINV  1 999 1 0 1 0\n", get_cell_cost("$_AND_"));
-		fprintf(f, "GATE NAND %d Y=!(A*B);             PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_NAND_"));
-		fprintf(f, "GATE OR   %d Y=A+B;                PIN * NONINV  1 999 1 0 1 0\n", get_cell_cost("$_OR_"));
-		fprintf(f, "GATE NOR  %d Y=!(A+B);             PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_NOR_"));
-		fprintf(f, "GATE XOR  %d Y=(A*!B)+(!A*B);      PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_XOR_"));
-		fprintf(f, "GATE XNOR %d Y=(A*B)+(!A*!B);      PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_XNOR_"));
-		fprintf(f, "GATE AOI3 %d Y=!((A*B)+C);         PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_AOI3_"));
-		fprintf(f, "GATE OAI3 %d Y=!((A+B)*C);         PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_OAI3_"));
-		fprintf(f, "GATE AOI4 %d Y=!((A*B)+(C*D));     PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_AOI4_"));
-		fprintf(f, "GATE OAI4 %d Y=!((A+B)*(C+D));     PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_OAI4_"));
-		fprintf(f, "GATE MUX  %d Y=(A*B)+(S*B)+(!S*A); PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_MUX_"));
+		if (enabled_gates.empty() || enabled_gates.count("AND"))
+			fprintf(f, "GATE AND  %d Y=A*B;                PIN * NONINV  1 999 1 0 1 0\n", get_cell_cost("$_AND_"));
+		if (enabled_gates.empty() || enabled_gates.count("NAND"))
+			fprintf(f, "GATE NAND %d Y=!(A*B);             PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_NAND_"));
+		if (enabled_gates.empty() || enabled_gates.count("OR"))
+			fprintf(f, "GATE OR   %d Y=A+B;                PIN * NONINV  1 999 1 0 1 0\n", get_cell_cost("$_OR_"));
+		if (enabled_gates.empty() || enabled_gates.count("NOR"))
+			fprintf(f, "GATE NOR  %d Y=!(A+B);             PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_NOR_"));
+		if (enabled_gates.empty() || enabled_gates.count("XOR"))
+			fprintf(f, "GATE XOR  %d Y=(A*!B)+(!A*B);      PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_XOR_"));
+		if (enabled_gates.empty() || enabled_gates.count("XNOR"))
+			fprintf(f, "GATE XNOR %d Y=(A*B)+(!A*!B);      PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_XNOR_"));
+		if (enabled_gates.empty() || enabled_gates.count("AOI3"))
+			fprintf(f, "GATE AOI3 %d Y=!((A*B)+C);         PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_AOI3_"));
+		if (enabled_gates.empty() || enabled_gates.count("OAI3"))
+			fprintf(f, "GATE OAI3 %d Y=!((A+B)*C);         PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_OAI3_"));
+		if (enabled_gates.empty() || enabled_gates.count("AOI4"))
+			fprintf(f, "GATE AOI4 %d Y=!((A*B)+(C*D));     PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_AOI4_"));
+		if (enabled_gates.empty() || enabled_gates.count("OAI4"))
+			fprintf(f, "GATE OAI4 %d Y=!((A+B)*(C+D));     PIN * INV     1 999 1 0 1 0\n", get_cell_cost("$_OAI4_"));
+		if (enabled_gates.empty() || enabled_gates.count("MUX"))
+			fprintf(f, "GATE MUX  %d Y=(A*B)+(S*B)+(!S*A); PIN * UNKNOWN 1 999 1 0 1 0\n", get_cell_cost("$_MUX_"));
 		if (map_mux4)
 			fprintf(f, "GATE MUX4 %d Y=(!S*!T*A)+(S*!T*B)+(!S*T*C)+(S*T*D); PIN * UNKNOWN 1 999 1 0 1 0\n", 2*get_cell_cost("$_MUX_"));
 		if (map_mux8)
@@ -856,15 +868,13 @@ void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::strin
 			fprintf(f, "GATE MUX16 %d Y=(!S*!T*!U*!V*A)+(S*!T*!U*!V*B)+(!S*T*!U*!V*C)+(S*T*!U*!V*D)+(!S*!T*U*!V*E)+(S*!T*U*!V*F)+(!S*T*U*!V*G)+(S*T*U*!V*H)+(!S*!T*!U*V*I)+(S*!T*!U*V*J)+(!S*T*!U*V*K)+(S*T*!U*V*L)+(!S*!T*U*V*M)+(S*!T*U*V*N)+(!S*T*U*V*O)+(S*T*U*V*P); PIN * UNKNOWN 1 999 1 0 1 0\n", 8*get_cell_cost("$_MUX_"));
 		fclose(f);
 
-		if (lut_mode) {
+		if (!lut_costs.empty()) {
 			buffer = stringf("%s/lutdefs.txt", tempdir_name.c_str());
 			f = fopen(buffer.c_str(), "wt");
 			if (f == NULL)
 				log_error("Opening %s for writing failed: %s\n", buffer.c_str(), strerror(errno));
-			for (int i = 0; i < lut_mode; i++)
-				fprintf(f, "%d 1.00 1.00\n", i+1);
-			for (int i = lut_mode; i < lut_mode2; i++)
-				fprintf(f, "%d %d.00 1.00\n", i+1, 2 << (i - lut_mode));
+			for (int i = 0; i < GetSize(lut_costs); i++)
+				fprintf(f, "%d %d.00 1.00\n", i+1, lut_costs.at(i));
 			fclose(f);
 		}
 
@@ -882,7 +892,7 @@ void abc_module(RTLIL::Design *design, RTLIL::Module *current_module, std::strin
 		if (ifs.fail())
 			log_error("Can't open ABC output file `%s'.\n", buffer.c_str());
 
-		bool builtin_lib = liberty_file.empty() && script_file.empty() && !lut_mode;
+		bool builtin_lib = liberty_file.empty() && script_file.empty() && lut_costs.empty();
 		RTLIL::Design *mapped_design = new RTLIL::Design;
 		parse_blif(mapped_design, ifs, builtin_lib ? "\\DFF" : "\\_dff_");
 
@@ -1226,10 +1236,19 @@ struct AbcPass : public Pass {
 		log("        the area cost doubles with each additional input bit. the delay cost\n");
 		log("        is still constant for all lut widths.\n");
 		log("\n");
+		log("    -luts <cost1>,<cost2>,<cost3>,<sizeN>:<cost4-N>,..\n");
+		log("        generate netlist using luts. Use the specified costs for luts with 1,\n");
+		log("        2, 3, .. inputs.\n");
+		log("\n");
 		// log("    -mux4, -mux8, -mux16\n");
 		// log("        try to extract 4-input, 8-input, and/or 16-input muxes\n");
 		// log("        (ignored when used with -liberty or -lut)\n");
 		// log("\n");
+		log("    -g type1,type2,...\n");
+		log("        Map the the specified list of gate types. Supported gates types are:\n");
+		log("        AND, NAND, OR, NOR, XOR, XNOR, MUX, AOI3, OAI3, AOI4, OAI4.\n");
+		log("        (The NOT gate is always added to this list automatically.)\n");
+		log("\n");
 		log("    -dff\n");
 		log("        also pass $_DFF_?_ and $_DFFE_??_ cells through ABC. modules with many\n");
 		log("        clock domains are automatically partitioned in clock domains and each\n");
@@ -1274,12 +1293,13 @@ struct AbcPass : public Pass {
 		std::string script_file, liberty_file, constr_file, clk_str, delay_target;
 		bool fast_mode = false, dff_mode = false, keepff = false, cleanup = true;
 		bool show_tempdir = false;
-		int lut_mode = 0, lut_mode2 = 0;
+		vector<int> lut_costs;
 		markgroups = false;
 
 		map_mux4 = false;
 		map_mux8 = false;
 		map_mux16 = false;
+		enabled_gates.clear();
 
 #ifdef _WIN32
 		if (!check_file_exists(exe_file + ".exe") && check_file_exists(proc_self_dirname() + "..\\yosys-abc.exe"))
@@ -1323,12 +1343,34 @@ struct AbcPass : public Pass {
 			if (arg == "-lut" && argidx+1 < args.size()) {
 				string arg = args[++argidx];
 				size_t pos = arg.find_first_of(':');
+				int lut_mode = 0, lut_mode2 = 0;
 				if (pos != string::npos) {
 					lut_mode = atoi(arg.substr(0, pos).c_str());
 					lut_mode2 = atoi(arg.substr(pos+1).c_str());
 				} else {
 					lut_mode = atoi(arg.c_str());
 					lut_mode2 = lut_mode;
+				}
+				lut_costs.clear();
+				for (int i = 0; i < lut_mode; i++)
+					lut_costs.push_back(1);
+				for (int i = lut_mode; i < lut_mode2; i++)
+					lut_costs.push_back(2 << (i - lut_mode));
+				continue;
+			}
+			if (arg == "-luts" && argidx+1 < args.size()) {
+				lut_costs.clear();
+				for (auto &tok : split_tokens(args[++argidx], ",")) {
+					auto parts = split_tokens(tok, ":");
+					if (GetSize(parts) == 0 && !lut_costs.empty())
+						lut_costs.push_back(lut_costs.back());
+					else if (GetSize(parts) == 1)
+						lut_costs.push_back(atoi(parts.at(0).c_str()));
+					else if (GetSize(parts) == 2)
+						while (GetSize(lut_costs) < atoi(parts.at(0).c_str()))
+							lut_costs.push_back(atoi(parts.at(1).c_str()));
+					else
+						log_cmd_error("Invalid -luts syntax.\n");
 				}
 				continue;
 			}
@@ -1342,6 +1384,25 @@ struct AbcPass : public Pass {
 			}
 			if (arg == "-mux16") {
 				map_mux16 = true;
+				continue;
+			}
+			if (arg == "-g" && argidx+1 < args.size()) {
+				for (auto g : split_tokens(args[++argidx], ",")) {
+					if (g == "AND") goto ok_gate;
+					if (g == "NAND") goto ok_gate;
+					if (g == "OR") goto ok_gate;
+					if (g == "NOR") goto ok_gate;
+					if (g == "XOR") goto ok_gate;
+					if (g == "XNOR") goto ok_gate;
+					if (g == "MUX") goto ok_gate;
+					if (g == "AOI3") goto ok_gate;
+					if (g == "OAI3") goto ok_gate;
+					if (g == "AOI4") goto ok_gate;
+					if (g == "OAI4") goto ok_gate;
+					cmd_error(args, argidx, stringf("Unsupported gate type: %s", g.c_str()));
+				ok_gate:
+					enabled_gates.insert(g);
+				}
 				continue;
 			}
 			if (arg == "-fast") {
@@ -1377,7 +1438,7 @@ struct AbcPass : public Pass {
 		}
 		extra_args(args, argidx, design);
 
-		if (lut_mode != 0 && !liberty_file.empty())
+		if (!lut_costs.empty() && !liberty_file.empty())
 			log_cmd_error("Got -lut and -liberty! This two options are exclusive.\n");
 		if (!constr_file.empty() && liberty_file.empty())
 			log_cmd_error("Got -constr but no -liberty!\n");
@@ -1386,7 +1447,7 @@ struct AbcPass : public Pass {
 			if (mod->processes.size() > 0)
 				log("Skipping module %s as it contains processes.\n", log_id(mod));
 			else if (!dff_mode || !clk_str.empty())
-				abc_module(design, mod, script_file, exe_file, liberty_file, constr_file, cleanup, lut_mode, lut_mode2, dff_mode, clk_str, keepff, delay_target, fast_mode, mod->selected_cells(), show_tempdir);
+				abc_module(design, mod, script_file, exe_file, liberty_file, constr_file, cleanup, lut_costs, dff_mode, clk_str, keepff, delay_target, fast_mode, mod->selected_cells(), show_tempdir);
 			else
 			{
 				assign_map.set(mod);
@@ -1399,7 +1460,7 @@ struct AbcPass : public Pass {
 				std::set<RTLIL::Cell*> expand_queue_up, next_expand_queue_up;
 				std::set<RTLIL::Cell*> expand_queue_down, next_expand_queue_down;
 
-				typedef std::tuple<bool, RTLIL::SigSpec, bool, RTLIL::SigSpec> clkdomain_t;
+				typedef tuple<bool, RTLIL::SigSpec, bool, RTLIL::SigSpec> clkdomain_t;
 				std::map<clkdomain_t, std::vector<RTLIL::Cell*>> assigned_cells;
 				std::map<RTLIL::Cell*, clkdomain_t> assigned_cells_reverse;
 
@@ -1530,7 +1591,7 @@ struct AbcPass : public Pass {
 					clk_sig = assign_map(std::get<1>(it.first));
 					en_polarity = std::get<2>(it.first);
 					en_sig = assign_map(std::get<3>(it.first));
-					abc_module(design, mod, script_file, exe_file, liberty_file, constr_file, cleanup, lut_mode, lut_mode2,
+					abc_module(design, mod, script_file, exe_file, liberty_file, constr_file, cleanup, lut_costs,
 							!clk_sig.empty(), "$", keepff, delay_target, fast_mode, it.second, show_tempdir);
 					assign_map.set(mod);
 				}

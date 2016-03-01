@@ -18,6 +18,14 @@ ENABLE_LIBYOSYS := 0
 ENABLE_GPROF := 0
 ENABLE_NDEBUG := 0
 
+# clang sanitizers
+SANITIZER =
+# SANITIZER = address
+# SANITIZER = memory
+# SANITIZER = undefined
+# SANITIZER = cfi
+
+
 PREFIX ?= /usr/local
 INSTALL_SUDO :=
 
@@ -54,13 +62,13 @@ ifeq (Darwin,$(findstring Darwin,$(shell uname)))
 	LDFLAGS += $(shell PKG_CONFIG_PATH=$$(brew list libffi | grep pkgconfig | xargs dirname) pkg-config --silence-errors --libs libffi)
 	# use bison installed by homebrew if available
 	BISON = $(shell (brew list bison | grep -m1 "bin/bison") || echo bison)
-	SED = gsed
+	SED = sed
 else
 	LDFLAGS += -rdynamic
 	LDLIBS += -lrt
 endif
 
-YOSYS_VER := 0.5+$(shell cd $(YOSYS_SRC) && test -d .git && { git log --author=clifford@clifford.at --oneline c3c9fbfb8c678.. | wc -l; })
+YOSYS_VER := 0.6
 GIT_REV := $(shell cd $(YOSYS_SRC) && git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
 OBJS = kernel/version_$(GIT_REV).o
 
@@ -70,7 +78,7 @@ OBJS = kernel/version_$(GIT_REV).o
 # is just a symlink to your actual ABC working directory, as 'make mrproper'
 # will remove the 'abc' directory and you do not want to accidentally
 # delete your work on ABC..
-ABCREV = c3698e053a7a
+ABCREV = ae7d65e71adc
 ABCPULL = 1
 ABCMKARGS = CC="$(CXX)" CXX="$(CXX)"
 
@@ -86,18 +94,39 @@ endif
 
 ifeq ($(CONFIG),clang)
 CXX = clang
+LD = clang++
 CXXFLAGS += -std=c++11 -Os
+
+ifneq ($(SANITIZER),)
+$(info [Clang Sanitizer] $(SANITIZER))
+CXXFLAGS += -g -O1 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=$(SANITIZER)
+LDFLAGS += -g -fsanitize=$(SANITIZER)
+ifeq ($(SANITIZER),address)
+ENABLE_COVER := 0
+endif
+ifeq ($(SANITIZER),memory)
+CXXFLAGS += -fPIE
+LDFLAGS += -fPIE
+endif
+ifeq ($(SANITIZER),cfi)
+CXXFLAGS += -flto
+LDFLAGS += -flto
+endif
+endif
 
 else ifeq ($(CONFIG),gcc)
 CXX = gcc
+LD = gcc
 CXXFLAGS += -std=gnu++0x -Os
 
 else ifeq ($(CONFIG),gcc-4.6)
 CXX = gcc-4.6
+LD = gcc-4.6
 CXXFLAGS += -std=gnu++0x -Os
 
 else ifeq ($(CONFIG),emcc)
 CXX = emcc
+LD = emcc
 CXXFLAGS := -std=c++11 $(filter-out -fPIC -ggdb,$(CXXFLAGS))
 EMCCFLAGS := -Os -Wno-warn-absolute-paths
 EMCCFLAGS += --memory-init-file 0 --embed-file share -s NO_EXIT_RUNTIME=1
@@ -127,12 +156,13 @@ yosys.html: misc/yosys.html
 
 else ifeq ($(CONFIG),mxe)
 CXX = /usr/local/src/mxe/usr/bin/i686-pc-mingw32-gcc
+LD = /usr/local/src/mxe/usr/bin/i686-pc-mingw32-gcc
 CXXFLAGS += -std=gnu++0x -Os -D_POSIX_SOURCE
 CXXFLAGS := $(filter-out -fPIC,$(CXXFLAGS))
 LDFLAGS := $(filter-out -rdynamic,$(LDFLAGS)) -s
 LDLIBS := $(filter-out -lrt,$(LDLIBS))
 ABCMKARGS += ARCHFLAGS="-DSIZEOF_VOID_P=4 -DSIZEOF_LONG=4 -DSIZEOF_INT=4 -DWIN32_NO_DLL -x c++ -fpermissive -w"
-ABCMKARGS += LIBS="lib/x86/pthreadVC2.lib -s" READLINE=0 CC="$(CXX)" CXX="$(CXX)"
+ABCMKARGS += LIBS="lib/x86/pthreadVC2.lib -s" ABC_USE_NO_READLINE=1 CC="$(CXX)" CXX="$(CXX)"
 EXE = .exe
 
 else ifneq ($(CONFIG),none)
@@ -179,7 +209,7 @@ endif
 
 ifeq ($(ENABLE_VERIFIC),1)
 VERIFIC_DIR ?= /usr/local/src/verific_lib_eval
-VERIFIC_COMPONENTS ?= verilog vhdl database util containers
+VERIFIC_COMPONENTS ?= verilog vhdl database util containers sdf
 CXXFLAGS += $(patsubst %,-I$(VERIFIC_DIR)/%,$(VERIFIC_COMPONENTS)) -DYOSYS_ENABLE_VERIFIC
 LDLIBS += $(patsubst %,$(VERIFIC_DIR)/%/*-linux.a,$(VERIFIC_COMPONENTS))
 endif
@@ -300,10 +330,10 @@ yosys.js: $(filter-out yosysjs-$(YOSYS_VER).zip,$(EXTRA_TARGETS))
 endif
 
 yosys$(EXE): $(OBJS)
-	$(P) $(CXX) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
+	$(P) $(LD) -o yosys$(EXE) $(LDFLAGS) $(OBJS) $(LDLIBS)
 
 libyosys.so: $(filter-out kernel/driver.o,$(OBJS))
-	$(P) $(CXX) -o libyosys.so -shared -Wl,-soname,libyosys.so $(LDFLAGS) $^ $(LDLIBS)
+	$(P) $(LD) -o libyosys.so -shared -Wl,-soname,libyosys.so $(LDFLAGS) $^ $(LDLIBS)
 
 %.o: %.cc
 	$(Q) mkdir -p $(dir $@)
