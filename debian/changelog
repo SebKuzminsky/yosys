@@ -1,5 +1,6 @@
-yosys (0.6-1) UNRELEASED; urgency=medium
+yosys (0.6-1) unstable; urgency=medium
 
+  * Uploaded to unstable.
   * New upstream release: 0.6 (5869d26)
     - 01_gitrevision.patch: refresh
     - spelling-fixes.patch: fix upstream spelling mistakes
