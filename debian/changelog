@@ -8,6 +8,8 @@ yosys (0.6-1~2) unstable; urgency=medium
         dh_auto_build later
     - enable parallel build
     - handle the new python dependencies of yosys-smtbmc
+  * debian/control:
+    - add Sebastian Kuzminsky to Uploaders
   * add a manpage for the new yosys-smtbmc executable
 
  -- Sebastian Kuzminsky <seb@highlab.com>  Sun, 28 Feb 2016 10:48:44 -0700
