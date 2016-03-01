@@ -14,7 +14,7 @@ Index: yosys/Makefile
  
  YOSYS_VER := 0.6
 -GIT_REV := $(shell cd $(YOSYS_SRC) && git rev-parse --short HEAD 2> /dev/null || echo UNKNOWN)
-+GIT_REV := 5869d26d
++GIT_REV := 5869d26
  OBJS = kernel/version_$(GIT_REV).o
  
  # set 'ABCREV = default' to use abc/ as it is
