@@ -1,6 +1,7 @@
 Source: yosys
 Maintainer: Debian Science Maintainers <debian-science-maintainers@lists.alioth.debian.org>
-Uploaders: Ruben Undheim <ruben.undheim@gmail.com>
+Uploaders: Ruben Undheim <ruben.undheim@gmail.com>,
+           Sebastian Kuzminsky <seb@highlab.com>
 Section: electronics
 Priority: optional
 Testsuite: autopkgtest
