@@ -1,10 +1,14 @@
 yosys (0.6-1~2) unstable; urgency=medium
 
   * New upstream release: 0.6 (5869d26)
-    - refreshed patches
-    - fix upstream spelling mistakes
-    - add a manpage for yosys-smtbmc
+    - 01_gitrevision.patch: refresh
+    - spelling-fixes.patch: fix upstream spelling mistakes
+  * debian/rules:
+    - don't run make as part of dh_auto_configure, it'll get run by
+        dh_auto_build later
+    - enable parallel build
     - handle the new python dependencies of yosys-smtbmc
+  * add a manpage for the new yosys-smtbmc executable
 
  -- Sebastian Kuzminsky <seb@highlab.com>  Sun, 28 Feb 2016 10:48:44 -0700
 
