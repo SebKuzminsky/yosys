@@ -75,7 +75,7 @@ slist *indents[MAXINDENT];
 
 struct vrange *new_vrange(enum vrangeType t)
 {
-  struct vrange *v=xmalloc(sizeof(vrange));
+  struct vrange *v=(vrange*)xmalloc(sizeof(vrange));
   v->vtype=t;
   v->nlo = NULL;
   v->nhi = NULL;
@@ -115,7 +115,7 @@ void slprint(slist *sl){
 slist *copysl(slist *sl){
   if(sl){
     slist *newsl;
-    newsl = xmalloc(sizeof(slist));
+    newsl = (slist*)xmalloc(sizeof(slist));
     *newsl = *sl;
     if (sl->slst != NULL) {
       assert(sl != sl->slst);
@@ -129,7 +129,7 @@ slist *copysl(slist *sl){
       }
       break;
     case 1 : case 4 :
-      newsl->data.txt = xmalloc(strlen(sl->data.txt) + 1);
+      newsl->data.txt = (char*)xmalloc(strlen(sl->data.txt) + 1);
       strcpy(newsl->data.txt, sl->data.txt);
       break;
     }
@@ -143,10 +143,10 @@ slist *addtxt(slist *sl, const char *s){
 
   if(s == NULL)
     return sl;
-  p = xmalloc(sizeof *p);
+  p = (slist*)xmalloc(sizeof *p);
   p->type = 1;
   p->slst = sl;
-  p->data.txt = xmalloc(strlen(s) + 1);
+  p->data.txt = (char*)xmalloc(strlen(s) + 1);
   strcpy(p->data.txt, s);
 
   return p;
@@ -157,10 +157,10 @@ slist *addothers(slist *sl, char *s){
 
   if(s == NULL)
     return sl;
-  p = xmalloc(sizeof *p);
+  p = (slist*)xmalloc(sizeof *p);
   p->type = 4;
   p->slst = sl;
-  p->data.txt = xmalloc(strlen(s) + 1);
+  p->data.txt = (char*)xmalloc(strlen(s) + 1);
   strcpy(p->data.txt, s);
 
   return p;
@@ -172,7 +172,7 @@ slist *addptxt(slist *sl, char **s){
   if(s == NULL)
     return sl;
 
-  p = xmalloc(sizeof *p);
+  p = (slist*)xmalloc(sizeof *p);
   p->type = 3;
   p->slst = sl;
   p->data.ptxt = s;
@@ -183,7 +183,7 @@ slist *addptxt(slist *sl, char **s){
 slist *addval(slist *sl, int val){
   slist *p;
 
-  p = xmalloc(sizeof(slist));
+  p = (slist*)xmalloc(sizeof(slist));
   p->type = 2;
   p->slst = sl;
   p->data.val = val;
@@ -194,7 +194,7 @@ slist *addval(slist *sl, int val){
 slist *addsl(slist *sl, slist *sl2){
   slist *p;
   if(sl2 == NULL) return sl;
-  p = xmalloc(sizeof(slist));
+  p = (slist*)xmalloc(sizeof(slist));
   p->type = 0;
   p->slst = sl;
   p->data.sl = sl2;
@@ -305,7 +305,7 @@ slist *s;
 expdata *addnest(struct expdata *inner)
 {
   expdata *e;
-  e=xmalloc(sizeof(expdata));
+  e=(expdata*)xmalloc(sizeof(expdata));
   if (inner->op == 'c') {
     e->sl=addwrap("{",inner->sl,"}");
   } else {
@@ -499,7 +499,7 @@ void fixothers(slist *size_expr, slist *sl) {
       /* found an (OTHERS => 'x') clause - change to type 0, and insert the
        * size_expr for the corresponding signal */
       slist *p;
-      slist *size_copy = xmalloc(sizeof(slist));
+      slist *size_copy = (slist*)xmalloc(sizeof(slist));
       size_copy = copysl(size_expr);
       if (0) {
         fprintf(stderr,"fixothers type 4 size_expr ");
@@ -593,7 +593,7 @@ int find_msb(int n)
     return k;
 }
 
-static char time_unit[2]="\0\0", new_unit[2]="\0\0";
+static char time_unit[2]= { '\0', '\0' }, new_unit[2]= { '\0', '\0' };
 static void set_timescale(const char *s)
 {
     if (0) fprintf(stderr,"set_timescale (%s)\n", s);
@@ -1065,11 +1065,11 @@ vec_range : simple_expr updown simple_expr {
                  * create an expression that calculates:
                  *   size expr = (simple_expr1) - (simple_expr2) + 1
                  */
-                expdata *size_expr1  = xmalloc(sizeof(expdata));
-                expdata *size_expr2  = xmalloc(sizeof(expdata));
-                expdata *diff12  = xmalloc(sizeof(expdata));
-                expdata *plusone = xmalloc(sizeof(expdata));
-                expdata *finalexpr = xmalloc(sizeof(expdata));
+                expdata *size_expr1  = (expdata*)xmalloc(sizeof(expdata));
+                expdata *size_expr2  = (expdata*)xmalloc(sizeof(expdata));
+                expdata *diff12  = (expdata*)xmalloc(sizeof(expdata));
+                expdata *plusone = (expdata*)xmalloc(sizeof(expdata));
+                expdata *finalexpr = (expdata*)xmalloc(sizeof(expdata));
                 size_expr1->sl = addwrap("(",$1->sl,")");
                 size_expr2->sl = addwrap("(",$3->sl,")");
                 plusone->op='t';
@@ -1211,7 +1211,7 @@ a_decl    : {$$=NULL;}
               sl=addsl(sl2,sl);
               sl=addsl($1,sl);
               $$=addrem(sl,$9);
-              p=xmalloc(sizeof(sglist));
+              p=(sglist*)xmalloc(sizeof(sglist));
               p->name=$3;
               if(k>0) {
                 p->range=new_vrange(tVRANGE);
@@ -1228,7 +1228,7 @@ a_decl    : {$$=NULL;}
             slist *sl=NULL;
             sglist *p;
               $$=addrem(sl,$12);
-              p=xmalloc(sizeof(sglist));
+              p=(sglist*)xmalloc(sizeof(sglist));
               p->name=$3;
               p->range=$10;
               p->range->xhi=$7->nhi;
@@ -1261,7 +1261,7 @@ yeslist : /*Empty*/ {dolist = 1;}
 s_list : NAME rem {
          sglist * sg;
            if(dolist){
-             sg=xmalloc(sizeof(sglist));
+             sg=(sglist*)xmalloc(sizeof(sglist));
              sg->name=$1;
              sg->next=NULL;
              $$=sg;
@@ -1274,7 +1274,7 @@ s_list : NAME rem {
        | NAME ',' rem s_list {
          sglist * sg;
            if(dolist){
-             sg=xmalloc(sizeof(sglist));
+             sg=(sglist*)xmalloc(sizeof(sglist));
              sg->name=$1;
              sg->next=$4;
              $$=sg;
@@ -1567,8 +1567,8 @@ optname : rem {$$=$1;}
 gen_optname : rem {$$=$1;}
         | rem NAME ':' {
            blknamelist *tname_list;
-           tname_list = xmalloc (sizeof(blknamelist));
-           tname_list->name = xmalloc(strlen($2));
+           tname_list = (blknamelist*)xmalloc (sizeof(blknamelist));
+           tname_list->name = (char*)xmalloc(strlen($2));
            strcpy(tname_list->name, $2);
            tname_list->next = blkname_list;
            blkname_list=tname_list;
@@ -1982,7 +1982,7 @@ generic_map_item : NAME '=' '>' expr {
 signal : NAME {
          slist *sl;
          slval *ss;
-           ss=xmalloc(sizeof(slval));
+           ss=(slval*)xmalloc(sizeof(slval));
            sl=addtxt(NULL,$1);
            if(dowith){
              slwith=sl;
@@ -1996,7 +1996,7 @@ signal : NAME {
        | NAME '(' vec_range ')' {
          slval *ss;
          slist *sl;
-           ss=xmalloc(sizeof(slval));
+           ss=(slval*)xmalloc(sizeof(slval));
            sl=addtxt(NULL,$1);
            sl=addpar_snug(sl,$3);
            if(dowith){
@@ -2020,7 +2020,7 @@ signal : NAME {
        | NAME '(' vec_range ')' '(' vec_range ')' {
          slval *ss;
          slist *sl;
-           ss=xmalloc(sizeof(slval));
+           ss=(slval*)xmalloc(sizeof(slval));
            sl=addtxt(NULL,$1);
            sl=addpar_snug2(sl,$3, $6);
            if(dowith){
@@ -2041,7 +2041,7 @@ signal : NAME {
 /* Expressions */
 expr : signal {
          expdata *e;
-           e=xmalloc(sizeof(expdata));
+           e=(expdata*)xmalloc(sizeof(expdata));
            e->op='t'; /* Terminal symbol */
            e->sl=$1->sl;
            free($1);
@@ -2049,27 +2049,27 @@ expr : signal {
          }
      | STRING {
          expdata *e;
-           e=xmalloc(sizeof(expdata));
+           e=(expdata*)xmalloc(sizeof(expdata));
            e->op='t'; /* Terminal symbol */
            e->sl=addvec(NULL,$1);
            $$=e;
          }
      | FLOAT {
-         expdata *e=xmalloc(sizeof(expdata));
+         expdata *e=(expdata*)xmalloc(sizeof(expdata));
            e->op='t'; /* Terminal symbol */
            e->sl=addtxt(NULL,$1);
            $$=e;
          }
      | NATURAL {
-         expdata *e=xmalloc(sizeof(expdata));
+         expdata *e=(expdata*)xmalloc(sizeof(expdata));
            e->op='t'; /* Terminal symbol */
            e->sl=addval(NULL,$1);
            $$=e;
          }
      | NATURAL BASED {  /* e.g. 16#55aa# */
          /* XXX unify this code with addvec_base */
-         expdata *e=xmalloc(sizeof(expdata));
-         char *natval = xmalloc(strlen($2)+34);
+         expdata *e=(expdata*)xmalloc(sizeof(expdata));
+         char *natval = (char*)xmalloc(strlen($2)+34);
            e->op='t'; /* Terminal symbol */
            switch($1) {
            case  2:
@@ -2092,14 +2092,14 @@ expr : signal {
            $$=e;
          }
      | NAME STRING {
-         expdata *e=xmalloc(sizeof(expdata));
+         expdata *e=(expdata*)xmalloc(sizeof(expdata));
            e->op='t'; /* Terminal symbol */
            e->sl=addvec_base(NULL,$1,$2);
            $$=e;
          }
      | '(' OTHERS '=' '>' STRING ')' {
          expdata *e;
-           e=xmalloc(sizeof(expdata));
+           e=(expdata*)xmalloc(sizeof(expdata));
            e->op='o'; /* others */
            e->sl=addothers(NULL,$5);
            $$=e;
@@ -2128,7 +2128,7 @@ expr : signal {
      | BITVECT '(' expr ')' {
        /* single argument type conversion function e.g. std_ulogic_vector(x) */
        expdata *e;
-       e=xmalloc(sizeof(expdata));
+       e=(expdata*)xmalloc(sizeof(expdata));
        if ($3->op == 'c') {
          e->sl=addwrap("{",$3->sl,"}");
        } else {
@@ -2277,7 +2277,7 @@ conf : expr '=' expr %prec EQUAL {
 
 simple_expr : signal {
          expdata *e;
-         e=xmalloc(sizeof(expdata));
+         e=(expdata*)xmalloc(sizeof(expdata));
          e->op='t'; /* Terminal symbol */
          e->sl=$1->sl;
          free($1);
@@ -2285,14 +2285,14 @@ simple_expr : signal {
       }
      | STRING {
          expdata *e;
-         e=xmalloc(sizeof(expdata));
+         e=(expdata*)xmalloc(sizeof(expdata));
          e->op='t'; /* Terminal symbol */
          e->sl=addvec(NULL,$1);
          $$=e;
       }
      | NATURAL {
          expdata *e;
-         e=xmalloc(sizeof(expdata));
+         e=(expdata*)xmalloc(sizeof(expdata));
          e->op='n'; /* natural */
          e->value=$1;
          e->sl=addval(NULL,$1);
@@ -2306,7 +2306,7 @@ simple_expr : signal {
               }
               if(sg) {
                 expdata *e;
-                e=xmalloc(sizeof(expdata));
+                e=(expdata*)xmalloc(sizeof(expdata));
                 e->sl=addwrap("(",sg->range->nhi,")");  /* XXX left vs. high? */
                 $$=e;
               } else {
@@ -2329,13 +2329,13 @@ simple_expr : signal {
      | CONVFUNC_1 '(' simple_expr ')' {
        /* one argument type conversion e.g. conv_integer(x) */
        expdata *e;
-       e=xmalloc(sizeof(expdata));
+       e=(expdata*)xmalloc(sizeof(expdata));
        e->sl=addwrap("(",$3->sl,")");
        $$=e;
       }
      | '(' simple_expr ')' {
        expdata *e;
-       e=xmalloc(sizeof(expdata));
+       e=(expdata*)xmalloc(sizeof(expdata));
        e->sl=addwrap("(",$2->sl,")");
        $$=e;
       }
@@ -2355,8 +2355,8 @@ int status;
   /* Init the indentation variables */
   indents[0]=NULL;
   for(i=1;i<MAXINDENT;i++){
-    indents[i]=sl=xmalloc(sizeof(slist));
-    sl->data.txt=s=xmalloc(sizeof(char) *((i<<1)+1));
+    indents[i]=sl=(slist*)xmalloc(sizeof(slist));
+    sl->data.txt=s=(char*)xmalloc(sizeof(char) *((i<<1)+1));
     for(j=0;j<(i<<1);j++)
       *s++=' ';
     *s=0;

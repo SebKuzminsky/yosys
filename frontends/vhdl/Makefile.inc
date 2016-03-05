@@ -51,23 +51,22 @@
 #	rm -f lex.yy.c vhd2vl.tab.c vhd2vl.tab.h vhd2vl.output  vhd2vl
 
 
-GENFILES += frontends/vhdl/vhdl_parser.tab.cc
-GENFILES += frontends/vhdl/vhdl_parser.tab.h
+GENFILES += frontends/vhdl/vhdl_parser.cc
+GENFILES += frontends/vhdl/vhdl_parser.h
 GENFILES += frontends/vhdl/vhdl_parser.output
 GENFILES += frontends/vhdl/vhdl_lexer.cc
 
-frontends/vhdl/vhdl_parser.tab.cc: frontends/vhdl/vhdl_parser.y
+frontends/vhdl/vhdl_parser.cc frontends/vhdl/vhdl_parser.h: frontends/vhdl/vhdl_parser.y frontends/vhdl/def.h
 	$(Q) mkdir -p $(dir $@)
 	$(P) $(BISON) -d -v -t -r all -b frontends/vhdl/vhdl_parser $<
-	$(Q) mv frontends/vhdl/vhdl_parser.tab.c frontends/vhdl/vhdl_parser.tab.cc
+	$(Q) mv frontends/vhdl/vhdl_parser.tab.c frontends/vhdl/vhdl_parser.cc
+	$(Q) mv frontends/vhdl/vhdl_parser.tab.h frontends/vhdl/vhdl_parser.h
 
-frontends/vhdl/vhdl_parser.tab.h: frontends/vhdl/vhdl_parser.tab.cc
-
-frontends/vhdl/vhdl_lexer.cc: frontends/vhdl/vhdl_lexer.l
+frontends/vhdl/vhdl_lexer.cc: frontends/vhdl/vhdl_lexer.l frontends/vhdl/def.h
 	$(Q) mkdir -p $(dir $@)
 	$(P) flex -i -o frontends/vhdl/vhdl_lexer.cc $<
 
-OBJS += frontends/vhdl/vhdl_parser.tab.o
+OBJS += frontends/vhdl/vhdl_parser.o
 OBJS += frontends/vhdl/vhdl_lexer.o
 #OBJS += frontends/verilog/preproc.o
 #OBJS += frontends/verilog/verilog_frontend.o

@@ -27,7 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "def.h"
-#include "vhd2vl.tab.h"
+#include "vhdl_parser.h"
 
 extern int lineno;
 
@@ -48,7 +48,7 @@ void getbasedstring(unsigned skip);
      * e.g. in expressions - this makes the grammar much simpler
      */
     size_t l=strlen(yytext);
-    yylval.txt=malloc(l+1);
+    yylval.txt=(char*)malloc(l+1);
     strcpy(yylval.txt, yytext);
     yylval.txt[0]='/';
     yylval.txt[1]='/';
@@ -138,7 +138,7 @@ void getbasedstring(unsigned skip);
 }
 
 [a-zA-Z_$][a-zA-Z0-9_$.]* {
-  yylval.txt=malloc(strlen(yytext)+1);
+  yylval.txt=(char*)malloc(strlen(yytext)+1);
   strcpy(yylval.txt, yytext);
   return NAME;
 }
@@ -162,7 +162,7 @@ void getstring(unsigned skip){
   unsigned i;
   for(i=skip; yytext[i]!='"' && yytext[i]!='\'' && yytext[i]!=0; i++);
   yytext[i]=0;
-  yylval.txt=malloc(i+1);
+  yylval.txt=(char*)malloc(i+1);
   strcpy(yylval.txt, yytext+skip);
 }
 
@@ -171,7 +171,7 @@ void getbasedstring(unsigned skip){
   unsigned i;
   for(i=skip; yytext[i]!='#' && yytext[i]!=0; i++);
   yytext[i]=0;
-  yylval.txt=malloc(i+1);
+  yylval.txt=(char*)malloc(i+1);
   strcpy(yylval.txt, yytext+skip);
 }
 
