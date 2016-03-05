@@ -56,18 +56,22 @@ GENFILES += frontends/vhdl/vhdl_parser.h
 GENFILES += frontends/vhdl/vhdl_parser.output
 GENFILES += frontends/vhdl/vhdl_lexer.cc
 
-frontends/vhdl/vhdl_parser.cc frontends/vhdl/vhdl_parser.h: frontends/vhdl/vhdl_parser.y frontends/vhdl/def.h
+frontends/vhdl/vhdl_parser.tab.c frontends/vhdl/vhdl_parser.tab.h: frontends/vhdl/vhdl_parser.y frontends/vhdl/def.h
 	$(Q) mkdir -p $(dir $@)
 	$(P) $(BISON) -d -v -t -r all -b frontends/vhdl/vhdl_parser $<
-	$(Q) mv frontends/vhdl/vhdl_parser.tab.c frontends/vhdl/vhdl_parser.cc
-	$(Q) mv frontends/vhdl/vhdl_parser.tab.h frontends/vhdl/vhdl_parser.h
 
-frontends/vhdl/vhdl_lexer.cc: frontends/vhdl/vhdl_lexer.l frontends/vhdl/def.h
-	$(Q) mkdir -p $(dir $@)
-	$(P) flex -i -o frontends/vhdl/vhdl_lexer.cc $<
+frontends/vhdl/vhdl_parser.cc: frontends/vhdl/vhdl_parser.tab.c
+	$(Q) mv $< $@
+
+frontends/vhdl/vhdl_parser.h: frontends/vhdl/vhdl_parser.tab.h
+	$(Q) mv $< $@
+
+frontends/vhdl/vhdl_lexer.cc: frontends/vhdl/vhdl_lexer.l frontends/vhdl/def.h frontends/vhdl/vhdl_parser.h
+	$(P) flex -i -o $@ $<
 
 OBJS += frontends/vhdl/vhdl_parser.o
 OBJS += frontends/vhdl/vhdl_lexer.o
+
 #OBJS += frontends/verilog/preproc.o
 #OBJS += frontends/verilog/verilog_frontend.o
 #OBJS += frontends/verilog/const2ast.o
