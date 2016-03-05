@@ -297,6 +297,7 @@ include $(YOSYS_SRC)/techlibs/*/Makefile.inc
 else
 
 include frontends/verilog/Makefile.inc
+include frontends/vhdl/Makefile.inc
 include frontends/ilang/Makefile.inc
 include frontends/ast/Makefile.inc
 include frontends/blif/Makefile.inc
