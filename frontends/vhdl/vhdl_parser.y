@@ -30,9 +30,6 @@
 #include "frontends/vhdl/vhdl_frontend.h"
 #include "def.h"
 
-int yylex(void);
-void yyerror(const char *s);
-
 int vlog_ver=0;  /* default is -g1995 */
 
 /* You will of course want to tinker with this if you use a debugging
@@ -683,6 +680,8 @@ slist *emit_io_list(slist *sl)
 }
 %}
 
+%name-prefix "frontend_vhdl_yy"
+
 %union {
   char * txt; /* String */
   int n;      /* Value */
@@ -746,6 +745,8 @@ slist *emit_io_list(slist *sl)
 /* rule for "...ELSE IF edge THEN..." causes 1 shift/reduce conflict */
 /* rule for opt_begin causes 1 shift/reduce conflict */
 %expect 2
+
+%debug
 
 /* glr-parser is needed because processes can start with if statements, but
  * not have edges in them - more than one level of look-ahead is needed in that case

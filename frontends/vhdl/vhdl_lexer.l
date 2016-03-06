@@ -22,6 +22,8 @@
 
 %option noinput
 %option nounput
+%option noyywrap
+%option prefix="frontend_vhdl_yy"
 
 %{
 
@@ -43,6 +45,7 @@ void getstring(unsigned skip);
 void getbasedstring(unsigned skip);
 
 %}
+
 %%
 
 [ \t] {;}
@@ -54,13 +57,13 @@ void getbasedstring(unsigned skip);
      * e.g. in expressions - this makes the grammar much simpler
      */
     size_t l=strlen(yytext);
-    yylval.txt=(char*)malloc(l+1);
-    strcpy(yylval.txt, yytext);
-    yylval.txt[0]='/';
-    yylval.txt[1]='/';
-    if(yylval.txt[l-2]=='\r') {
-       yylval.txt[l-2]='\n';
-       yylval.txt[l-1]='\0';
+    frontend_vhdl_yylval.txt=(char*)malloc(l+1);
+    strcpy(frontend_vhdl_yylval.txt, yytext);
+    frontend_vhdl_yylval.txt[0]='/';
+    frontend_vhdl_yylval.txt[1]='/';
+    if(frontend_vhdl_yylval.txt[l-2]=='\r') {
+       frontend_vhdl_yylval.txt[l-2]='\n';
+       frontend_vhdl_yylval.txt[l-1]='\0';
     }
     return REM;
   }
@@ -144,13 +147,13 @@ void getbasedstring(unsigned skip);
 }
 
 [a-zA-Z_$][a-zA-Z0-9_$.]* {
-  yylval.txt=(char*)malloc(strlen(yytext)+1);
-  strcpy(yylval.txt, yytext);
+  frontend_vhdl_yylval.txt=(char*)malloc(strlen(yytext)+1);
+  strcpy(frontend_vhdl_yylval.txt, yytext);
   return NAME;
 }
 
 [0-9]+ {
-  sscanf(yytext, "%d", &yylval.n);
+  sscanf(yytext, "%d", &frontend_vhdl_yylval.n);
   return NATURAL;
 }
 
@@ -168,8 +171,8 @@ void getstring(unsigned skip){
   unsigned i;
   for(i=skip; yytext[i]!='"' && yytext[i]!='\'' && yytext[i]!=0; i++);
   yytext[i]=0;
-  yylval.txt=(char*)malloc(i+1);
-  strcpy(yylval.txt, yytext+skip);
+  frontend_vhdl_yylval.txt=(char*)malloc(i+1);
+  strcpy(frontend_vhdl_yylval.txt, yytext+skip);
 }
 
 void getbasedstring(unsigned skip){
@@ -177,8 +180,8 @@ void getbasedstring(unsigned skip){
   unsigned i;
   for(i=skip; yytext[i]!='#' && yytext[i]!=0; i++);
   yytext[i]=0;
-  yylval.txt=(char*)malloc(i+1);
-  strcpy(yylval.txt, yytext+skip);
+  frontend_vhdl_yylval.txt=(char*)malloc(i+1);
+  strcpy(frontend_vhdl_yylval.txt, yytext+skip);
 }
 
 void yyerror(char *s){
