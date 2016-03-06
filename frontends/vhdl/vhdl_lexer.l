@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "def.h"
-#include "vhdl_parser.h"
+#include "vhdl_parser.tab.h"
 
 extern int lineno;
 
