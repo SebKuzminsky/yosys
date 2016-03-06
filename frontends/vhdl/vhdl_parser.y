@@ -2348,6 +2348,7 @@ simple_expr : signal {
 const char *outfile;    /* Output file */
 const char *sourcefile; /* Input file */
 
+#if 0
 int main(int argc, char *argv[]){
 int i,j;
 char *s;
@@ -2433,3 +2434,4 @@ int status;
   if (status != 0 && strcmp(outfile,"-")!=0) unlink(outfile);
   return status;
 }
+#endif
