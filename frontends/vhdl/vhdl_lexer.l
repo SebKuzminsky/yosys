@@ -24,6 +24,12 @@
 %option nounput
 
 %{
+
+#ifdef __clang__
+// bison generates code using the 'register' storage class specifier
+#pragma clang diagnostic ignored "-Wdeprecated-register"
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include "def.h"
