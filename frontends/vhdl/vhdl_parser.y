@@ -27,6 +27,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
+#include "frontends/vhdl/vhdl_frontend.h"
 #include "def.h"
 
 int yylex(void);
@@ -2372,7 +2373,7 @@ int status;
 
   while (argc >= 2) {
      if (strcmp(argv[1], "-d") == 0) {
-       yydebug = 1;
+       frontend_vhdl_yydebug = 1;
      } else if (strcmp(argv[1], "-g1995") == 0) {
        vlog_ver = 0;
      } else if (strcmp(argv[1], "-g2001") == 0) {
