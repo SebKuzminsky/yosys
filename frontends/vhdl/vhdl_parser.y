@@ -22,13 +22,22 @@
 */
 
 %{
+
+#include <assert.h>
+#include <list>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <assert.h>
+
+#include "kernel/log.h"
+
 #include "frontends/vhdl/vhdl_frontend.h"
 #include "def.h"
+
+USING_YOSYS_NAMESPACE
+using namespace AST;
+using namespace VHDL_FRONTEND;
 
 int vlog_ver=0;  /* default is -g1995 */
 

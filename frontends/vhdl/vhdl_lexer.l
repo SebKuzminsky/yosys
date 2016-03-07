@@ -34,8 +34,17 @@
 
 #include <stdio.h>
 #include <string.h>
+
+#include "kernel/log.h"
+#include "frontends/vhdl/vhdl_frontend.h"
+#include "frontends/ast/ast.h"
+
 #include "def.h"
 #include "vhdl_parser.tab.h"
+
+USING_YOSYS_NAMESPACE
+using namespace AST;
+using namespace VHDL_FRONTEND;
 
 extern int lineno;
 
