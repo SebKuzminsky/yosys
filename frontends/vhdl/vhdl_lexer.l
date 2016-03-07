@@ -4,6 +4,7 @@
     Copyright (C) 2001 Vincenzo Liguori - Ocean Logic Pty Ltd - http://www.ocean-logic.com
     Modifications Copyright (C) 2006 Mark Gonzales - PMC Sierra Inc
     Modifications Copyright (C) 2008-2010 Larry Doolittle - LBNL
+    Copyright (C) 2016 Sebastian Kuzminsky <seb@highlab.com>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -52,6 +53,9 @@ extern int skipRem;
 
 void getstring(unsigned skip);
 void getbasedstring(unsigned skip);
+
+#define YY_INPUT(buf,result,max_size) \
+    result = readsome(*VHDL_FRONTEND::lexin, buf, max_size)
 
 %}
 
