@@ -62,10 +62,6 @@ struct VHDLFrontend : public Frontend {
 		log("        enable support for SystemVerilog features. (only a small subset\n");
 		log("        of SystemVerilog is supported)\n");
 		log("\n");
-		log("    -formal\n");
-		log("        enable support for assert() and assume() from SystemVerilog\n");
-		log("        replace the implicit -D SYNTHESIS with -D FORMAL\n");
-		log("\n");
 		log("    -dump_ast1\n");
 		log("        dump abstract syntax tree (before simplification)\n");
 		log("\n");
@@ -182,7 +178,6 @@ struct VHDLFrontend : public Frontend {
 		std::list<std::string> attributes;
 
 		frontend_vhdl_yydebug = false;
-		formal_mode = false;
 		default_nettype_wire = true;
 
 		log_header("Executing VHDL frontend.\n");
@@ -192,10 +187,6 @@ struct VHDLFrontend : public Frontend {
 		size_t argidx;
 		for (argidx = 1; argidx < args.size(); argidx++) {
 			std::string arg = args[argidx];
-			if (arg == "-formal") {
-				formal_mode = true;
-				continue;
-			}
 			if (arg == "-dump_ast1") {
 				flag_dump_ast1 = true;
 				continue;

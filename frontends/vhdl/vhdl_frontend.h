@@ -49,9 +49,6 @@ namespace VHDL_FRONTEND
 	// state of `default_nettype
 	extern bool default_nettype_wire;
 
-	// running in -formal mode
-	extern bool formal_mode;
-
 	// lexer input stream
 	extern std::istream *lexin;
 }
