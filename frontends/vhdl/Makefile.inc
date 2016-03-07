@@ -15,6 +15,6 @@ frontends/vhdl/vhdl_lexer.cc: frontends/vhdl/vhdl_lexer.l frontends/vhdl/def.h f
 OBJS += frontends/vhdl/vhdl_parser.tab.o
 OBJS += frontends/vhdl/vhdl_lexer.o
 OBJS += frontends/vhdl/vhdl_frontend.o
+OBJS += frontends/vhdl/preproc.o
 
-#OBJS += frontends/verilog/preproc.o
 #OBJS += frontends/verilog/const2ast.o

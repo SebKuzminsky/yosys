@@ -39,6 +39,26 @@ USING_YOSYS_NAMESPACE
 using namespace AST;
 using namespace VHDL_FRONTEND;
 
+YOSYS_NAMESPACE_BEGIN
+namespace VHDL_FRONTEND {
+        // int port_counter;
+        // std::map<std::string, int> port_stubs;
+        // std::map<std::string, AstNode*> attr_list, default_attr_list;
+        // std::map<std::string, AstNode*> *albuf;
+        // std::vector<AstNode*> ast_stack;
+        // struct AstNode *astbuf1, *astbuf2, *astbuf3;
+        // struct AstNode *current_function_or_task;
+        struct AstNode *current_ast;
+        // struct AstNode *current_ast_mod;
+        // int current_function_or_task_port_id;
+        // std::vector<char> case_type_stack;
+        // bool do_not_require_port_stubs;
+        bool default_nettype_wire;
+        std::istream *lexin;
+}
+YOSYS_NAMESPACE_END
+
+
 int vlog_ver=0;  /* default is -g1995 */
 
 /* You will of course want to tinker with this if you use a debugging
