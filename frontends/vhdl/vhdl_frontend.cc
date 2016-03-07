@@ -182,7 +182,6 @@ struct VHDLFrontend : public Frontend {
 		std::list<std::string> attributes;
 
 		frontend_vhdl_yydebug = false;
-		sv_mode = false;
 		formal_mode = false;
 		default_nettype_wire = true;
 
@@ -193,10 +192,6 @@ struct VHDLFrontend : public Frontend {
 		size_t argidx;
 		for (argidx = 1; argidx < args.size(); argidx++) {
 			std::string arg = args[argidx];
-			if (arg == "-sv") {
-				sv_mode = true;
-				continue;
-			}
 			if (arg == "-formal") {
 				formal_mode = true;
 				continue;
@@ -305,8 +300,7 @@ struct VHDLFrontend : public Frontend {
 		}
 		extra_args(f, filename, args, argidx);
 
-		log("Parsing %s%s input from `%s' to AST representation.\n",
-				formal_mode ? "formal " : "", sv_mode ? "SystemVerilog" : "Verilog", filename.c_str());
+		log("Parsing VHDL input from `%s' to AST representation.\n", filename.c_str());
 
 		AST::current_filename = filename;
 		AST::set_line_num = &frontend_vhdl_yyset_lineno;
