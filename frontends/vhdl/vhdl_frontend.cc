@@ -49,7 +49,7 @@ static void error_on_dpi_function(AST::AstNode *node)
 }
 
 struct VHDLFrontend : public Frontend {
-	VHDLFrontend() : Frontend("VHDL", "read modules from VHDL file") { }
+	VHDLFrontend() : Frontend("vhdl", "read modules from VHDL file") { }
 	virtual void help()
 	{
 		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
