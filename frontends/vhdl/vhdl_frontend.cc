@@ -58,10 +58,6 @@ struct VHDLFrontend : public Frontend {
 		log("\n");
 		log("Load modules from a VHDL file to the current design.\n");
 		log("\n");
-		log("    -sv\n");
-		log("        enable support for SystemVerilog features. (only a small subset\n");
-		log("        of SystemVerilog is supported)\n");
-		log("\n");
 		log("    -dump_ast1\n");
 		log("        dump abstract syntax tree (before simplification)\n");
 		log("\n");
