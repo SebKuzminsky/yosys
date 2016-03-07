@@ -26,6 +26,8 @@
 %option noyywrap
 %option prefix="frontend_vhdl_yy"
 
+%x SYNOPSYS_TRANSLATE_OFF
+
 %{
 
 #ifdef __clang__
@@ -47,6 +49,14 @@ USING_YOSYS_NAMESPACE
 using namespace AST;
 using namespace VHDL_FRONTEND;
 
+YOSYS_NAMESPACE_BEGIN
+namespace VHDL_FRONTEND {
+        std::vector<std::string> fn_stack;
+        std::vector<int> ln_stack;
+}
+YOSYS_NAMESPACE_END
+
+
 extern int lineno;
 
 extern int skipRem;
@@ -60,6 +70,25 @@ void getbasedstring(unsigned skip);
 %}
 
 %%
+
+<INITIAL,SYNOPSYS_TRANSLATE_OFF>"`file_push "[^\n]* {
+        fn_stack.push_back(current_filename);
+        ln_stack.push_back(frontend_vhdl_yyget_lineno());
+        current_filename = yytext+11;
+        if (!current_filename.empty() && current_filename.front() == '"')
+                current_filename = current_filename.substr(1);
+        if (!current_filename.empty() && current_filename.back() == '"')
+                current_filename = current_filename.substr(0, current_filename.size()-1);
+        frontend_vhdl_yyset_lineno(0);
+}
+
+<INITIAL,SYNOPSYS_TRANSLATE_OFF>"`file_pop"[^\n]*\n {
+        current_filename = fn_stack.back();
+        fn_stack.pop_back();
+        frontend_vhdl_yyset_lineno(ln_stack.back());
+        ln_stack.pop_back();
+}
+
 
 [ \t] {;}
 
