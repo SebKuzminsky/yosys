@@ -10,7 +10,7 @@ frontends/vhdl/vhdl_parser.tab.cc frontends/vhdl/vhdl_parser.tab.h: frontends/vh
 	$(Q) mv frontends/vhdl/vhdl_parser.tab.c frontends/vhdl/vhdl_parser.tab.cc
 
 frontends/vhdl/vhdl_lexer.cc: frontends/vhdl/vhdl_lexer.l frontends/vhdl/def.h frontends/vhdl/vhdl_parser.tab.h
-	$(P) flex -o $@ $<
+	$(P) flex -d -i -o $@ $<
 
 OBJS += frontends/vhdl/vhdl_parser.tab.o
 OBJS += frontends/vhdl/vhdl_lexer.o
