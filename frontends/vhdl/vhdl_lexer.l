@@ -25,6 +25,7 @@
 %option nounput
 %option noyywrap
 %option prefix="frontend_vhdl_yy"
+%option debug
 
 %x SYNOPSYS_TRANSLATE_OFF
 
