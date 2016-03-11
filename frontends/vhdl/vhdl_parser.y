@@ -754,6 +754,14 @@ slist *emit_io_list(slist *sl)
               // sl=addtxt(sl,");\n\n");
               return sl;
 }
+
+void print_signal_list(std::map<std::string, int> *signal_list) {
+	printf("signal list %p:\n", signal_list);
+	for (auto &i: *signal_list) {
+		printf("    port %s (%d)\n", i.first.c_str(), i.second);
+	}
+}
+
 %}
 
 %name-prefix "frontend_vhdl_yy"
