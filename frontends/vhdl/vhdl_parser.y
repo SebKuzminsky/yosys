@@ -101,25 +101,6 @@ void *xmalloc(size_t size) {
 	return p;
 }
 
-const char *print_type(const struct vrange *type) {
-    static char str[1024];
-
-    str[0] = '\0';
-
-    switch (type->vtype) {
-        case tSCALAR:
-            break;
-        case tSUBSCRIPT:
-            break;
-        case tVRANGE:
-            break;
-        default:
-            break;
-    }
-
-    return str;
-}
-
 int skipRem = 0;
 int lineno=1;
 
@@ -785,6 +766,26 @@ void print_signal_list(std::map<std::string, int> *signal_list) {
 	}
 }
 
+
+void print_type(struct vrange *vrange) {
+	printf("vrange %p:", vrange);
+	switch (vrange->vtype) {
+		case tSCALAR:
+			printf(" tSCALAR");
+			break;
+		case tSUBSCRIPT:
+			printf(" tSCUBSCRIPT");
+			break;
+		case tVRANGE:
+			printf(" tVRANGE");
+			break;
+		default:
+			printf(" (unknown type)");
+			break;
+	}
+	printf("\n");
+}
+
 %}
 
 %name-prefix "frontend_vhdl_yy"
@@ -1111,8 +1112,9 @@ genlist  : s_list ':' type ':' '=' expr rem {
           /* 1      2   3   4    5 */
 portlist  : s_list ':' dir type rem {
 	std::map<std::string, int> *signal_list = $1;
-	printf("portlist 1: dir=%d (%s), type=%s, s_list=%p\n", $3, port_dir_str[$3], print_type($4), signal_list);
+	printf("portlist 1: dir=%d (%s)\n", $3, port_dir_str[$3]);
 	print_signal_list(signal_list);
+	print_type($4);
 	for (auto &i: *signal_list) {
 		add_wire(i.first, i.second, (port_dir_t)$dir, $type);
 	}
@@ -1133,6 +1135,7 @@ portlist  : s_list ':' dir type rem {
 	std::map<std::string, int> *signal_list = $1;
 	printf("portlist 2: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
 	print_signal_list(signal_list);
+	print_type($4);
 	for (auto &i: *signal_list) {
 		add_wire(i.first, i.second, (port_dir_t)$dir, $type);
 	}
@@ -1152,6 +1155,7 @@ portlist  : s_list ':' dir type rem {
 	std::map<std::string, int> *signal_list = $1;
 	printf("portlist 3: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
 	print_signal_list(signal_list);
+	print_type($4);
             // slist *sl;
               // fprintf(stderr,"Warning on line %d: "
                 // "port default initialization ignored\n",lineno);
@@ -1169,6 +1173,7 @@ portlist  : s_list ':' dir type rem {
 	std::map<std::string, int> *signal_list = $1;
 	printf("portlist 4: dir=%d (%s) s_list=%p\n", $3, port_dir_str[$3], $s_list);
 	print_signal_list(signal_list);
+	print_type($4);
             // slist *sl;
               // fprintf(stderr,"Warning on line %d: "
                 // "port default initialization ignored\n",lineno);
