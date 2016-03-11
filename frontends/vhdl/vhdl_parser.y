@@ -1087,11 +1087,9 @@ genlist  : s_list ':' type ':' '=' expr rem {
 
           /* 1      2   3   4    5 */
 portlist  : s_list ':' dir type rem {
-        std::map<std::string, int> *signal_list = $1;
-	printf("portlist: dir=%d (%s), type=%s\n", $3, port_dir_str[$3], print_type($4));
-	for (auto &i: *signal_list) {
-		printf("    port %s (%d)\n", i.first.c_str(), i.second);
-	}
+	std::map<std::string, int> *signal_list = $1;
+	printf("portlist 1: dir=%d (%s), type=%s, s_list=%p\n", $3, port_dir_str[$3], print_type($4), signal_list);
+	print_signal_list(signal_list);
 
             // slist *sl;
 
@@ -1106,7 +1104,9 @@ portlist  : s_list ':' dir type rem {
             }
           /* 1      2   3   4    5   6   7     */
           | s_list ':' dir type ';' rem portlist {
-	printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
+	std::map<std::string, int> *signal_list = $1;
+	printf("portlist 2: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
+	print_signal_list(signal_list);
             // slist *sl;
 
               // if(dolist){
@@ -1120,7 +1120,9 @@ portlist  : s_list ':' dir type rem {
             }
           /* 1      2   3   4    5   6   7    8 */
           | s_list ':' dir type ':' '=' expr rem {
-	printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
+	std::map<std::string, int> *signal_list = $1;
+	printf("portlist 3: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
+	print_signal_list(signal_list);
             // slist *sl;
               // fprintf(stderr,"Warning on line %d: "
                 // "port default initialization ignored\n",lineno);
@@ -1135,7 +1137,9 @@ portlist  : s_list ':' dir type rem {
             }
           /* 1      2   3   4    5   6   7    8   9   10     */
           | s_list ':' dir type ':' '=' expr ';' rem portlist {
-	printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
+	std::map<std::string, int> *signal_list = $1;
+	printf("portlist 4: dir=%d (%s) s_list=%p\n", $3, port_dir_str[$3], $s_list);
+	print_signal_list(signal_list);
             // slist *sl;
               // fprintf(stderr,"Warning on line %d: "
                 // "port default initialization ignored\n",lineno);
@@ -1395,10 +1399,9 @@ yeslist : /*Empty*/ {dolist = 1;}
 
 /* XXX wishlist: record comments into slist, play them back later */
 s_list : NAME rem {
-        std::map<std::string, int> *signal_list;
-        signal_list = new std::map<std::string, int>;
+	std::map<std::string, int> *signal_list;
+	signal_list = new std::map<std::string, int>;
 	(*signal_list)[$1] = ++port_counter;
-	printf("signal name: %s (%d)\n", $1, port_counter);
 	$$ = signal_list;
 
          // sglist * sg;
@@ -1418,7 +1421,7 @@ s_list : NAME rem {
 		frontend_vhdl_yyerror("Duplicate entity signal `%s'.", $1);
 	}
 	(*signal_list)[$1] = ++port_counter;
-	printf("signal name (in list): %s\n", $1);
+	$$ = signal_list;
 
          // sglist * sg;
            // if(dolist){
