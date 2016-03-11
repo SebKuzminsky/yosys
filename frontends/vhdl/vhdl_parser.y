@@ -19,6 +19,25 @@
     You should have received a copy of the GNU General Public License along
     with this program; if not, write to the Free Software Foundation, Inc.,
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+    ---
+
+    The VHDL frontend.
+
+    This frontend is using the AST frontend library (see frontends/ast/).
+    Thus this frontend does not generate RTLIL code directly but creates an
+    AST directly from the VHDL parse tree and then passes this AST to
+    the AST frontend library.
+
+    ---
+
+    This is the actual bison parser for VHDL code. It is based on the
+    "vhd2vl" parser (by Vincenzo Liguori, Mark Gonzales, Shankar Giri,
+    and Larry Doolittle) and the Yosys Verilog Frontend (by Clifford
+    Wolf).  The AST ist created directly from the bison reduce functions
+    here. Note that this code uses a few global variables to hold the
+    state of the AST generator and therefore this parser is not reentrant.
+
 */
 
 %{
