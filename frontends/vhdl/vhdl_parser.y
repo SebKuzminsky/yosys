@@ -755,6 +755,29 @@ slist *emit_io_list(slist *sl)
               return sl;
 }
 
+
+void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type) {
+	struct AstNode *node;
+	node = new AstNode(AST_WIRE);
+	node->str = name;
+	node->port_id = port_id;
+	switch (dir) {
+		case DIR_IN:
+			node->is_input = true;
+			break;
+		case DIR_OUT:
+			node->is_output = true;
+			break;
+		case DIR_INOUT:
+			node->is_input = true;
+			node->is_output = true;
+			break;
+	}
+	// FIXME: handle ranges here
+	ast_stack.back()->children.push_back(node);
+}
+
+
 void print_signal_list(std::map<std::string, int> *signal_list) {
 	printf("signal list %p:\n", signal_list);
 	for (auto &i: *signal_list) {
@@ -1090,6 +1113,9 @@ portlist  : s_list ':' dir type rem {
 	std::map<std::string, int> *signal_list = $1;
 	printf("portlist 1: dir=%d (%s), type=%s, s_list=%p\n", $3, port_dir_str[$3], print_type($4), signal_list);
 	print_signal_list(signal_list);
+	for (auto &i: *signal_list) {
+		add_wire(i.first, i.second, (port_dir_t)$dir, $type);
+	}
 
             // slist *sl;
 
@@ -1107,6 +1133,9 @@ portlist  : s_list ':' dir type rem {
 	std::map<std::string, int> *signal_list = $1;
 	printf("portlist 2: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
 	print_signal_list(signal_list);
+	for (auto &i: *signal_list) {
+		add_wire(i.first, i.second, (port_dir_t)$dir, $type);
+	}
             // slist *sl;
 
               // if(dolist){
