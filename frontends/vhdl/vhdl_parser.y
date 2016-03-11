@@ -61,15 +61,15 @@ using namespace VHDL_FRONTEND;
 
 YOSYS_NAMESPACE_BEGIN
 namespace VHDL_FRONTEND {
-        // int port_counter;
-        // std::map<std::string, int> port_stubs;
-        // std::map<std::string, AstNode*> attr_list, default_attr_list;
+        int port_counter;
+        // std::map<std::string, AstNode*> attr_list;
+        std::map<std::string, AstNode*> default_attr_list;
         // std::map<std::string, AstNode*> *albuf;
-        // std::vector<AstNode*> ast_stack;
-        // struct AstNode *astbuf1, *astbuf2, *astbuf3;
+        std::vector<AstNode*> ast_stack;
+        struct AstNode *astbuf1, *astbuf2, *astbuf3;
         // struct AstNode *current_function_or_task;
         struct AstNode *current_ast;
-        // struct AstNode *current_ast_mod;
+        struct AstNode *current_ast_mod;
         // int current_function_or_task_port_id;
         // std::vector<char> case_type_stack;
         // bool do_not_require_port_stubs;
@@ -99,6 +99,25 @@ void *xmalloc(size_t size) {
 		exit(2);
 	}
 	return p;
+}
+
+const char *print_type(const struct vrange *type) {
+    static char str[1024];
+
+    str[0] = '\0';
+
+    switch (type->vtype) {
+        case tSCALAR:
+            break;
+        case tSUBSCRIPT:
+            break;
+        case tVRANGE:
+            break;
+        default:
+            break;
+    }
+
+    return str;
 }
 
 int skipRem = 0;
@@ -142,25 +161,25 @@ struct vrange *new_vrange(enum vrangeType t)
 }
 
 void fslprint(FILE *fp,slist *sl){
-  if(sl){
-    assert(sl != sl->slst);
-    fslprint(fp,sl->slst);
-    switch(sl->type){
-    case 0 :
-      assert(sl != sl->data.sl);
-      fslprint(fp,sl->data.sl);
-      break;
-    case 1 : case 4 :
-      fprintf(fp,"%s",sl->data.txt);
-      break;
-    case 2 :
-      fprintf(fp,"%d",sl->data.val);
-      break;
-    case 3 :
-      fprintf(fp,"%s",*(sl->data.ptxt));
-      break;
-    }
-  }
+  // if(sl){
+    // assert(sl != sl->slst);
+    // fslprint(fp,sl->slst);
+    // switch(sl->type){
+    // case 0 :
+      // assert(sl != sl->data.sl);
+      // fslprint(fp,sl->data.sl);
+      // break;
+    // case 1 : case 4 :
+      // fprintf(fp,"%s",sl->data.txt);
+      // break;
+    // case 2 :
+      // fprintf(fp,"%d",sl->data.val);
+      // break;
+    // case 3 :
+      // fprintf(fp,"%s",*(sl->data.ptxt));
+      // break;
+    // }
+  // }
 }
 
 void slprint(slist *sl){
@@ -713,26 +732,26 @@ slist *setup_port(sglist *s_list, int dir, vrange *type) {
 
 slist *emit_io_list(slist *sl)
 {
-              sglist *p;
-              sl=addtxt(sl,"(\n");
-              p=io_list;
-              for(;;){
-                if (vlog_ver == 1) {
-                  sl=addtxt(sl,p->dir);
-                  sl=addtxt(sl," ");
-                  sl=addptxt(sl,&(p->type));
-                  sl=addpar(sl,p->range);
-                }
-                sl=addtxt(sl,p->name);
-                p=p->next;
-                if(p)
-                  sl=addtxt(sl,",\n");
-                else{
-                  sl=addtxt(sl,"\n");
-                  break;
-                }
-              }
-              sl=addtxt(sl,");\n\n");
+              // sglist *p;
+              // sl=addtxt(sl,"(\n");
+              // p=io_list;
+              // for(;;){
+                // if (vlog_ver == 1) {
+                  // sl=addtxt(sl,p->dir);
+                  // sl=addtxt(sl," ");
+                  // sl=addptxt(sl,&(p->type));
+                  // sl=addpar(sl,p->range);
+                // }
+                // sl=addtxt(sl,p->name);
+                // p=p->next;
+                // if(p)
+                  // sl=addtxt(sl,",\n");
+                // else{
+                  // sl=addtxt(sl,"\n");
+                  // break;
+                // }
+              // }
+              // sl=addtxt(sl,");\n\n");
               return sl;
 }
 %}
@@ -740,6 +759,11 @@ slist *emit_io_list(slist *sl)
 %name-prefix "frontend_vhdl_yy"
 
 %union {
+	std::string *string;
+	struct Yosys::AST::AstNode *ast;
+	std::map<std::string, Yosys::AST::AstNode*> *al;
+	std::map<std::string, int> *map_string_int;
+	bool boolean;
   char * txt; /* String */
   int n;      /* Value */
   vrange *v;  /* Signal range */
@@ -772,7 +796,7 @@ slist *emit_io_list(slist *sl)
 %type <sl> edge
 %type <sl> elsepart wlist wvalue cases
 %type <sl> with_item with_list
-%type <sg> s_list
+%type <map_string_int> s_list
 %type <n> dir delay
 %type <v> type vec_range
 %type <n> updown
@@ -812,8 +836,22 @@ slist *emit_io_list(slist *sl)
  */
 %%
 
+input: {
+	printf("input start\n");
+	ast_stack.clear();
+	ast_stack.push_back(current_ast);
+} trad {
+	ast_stack.pop_back();
+	log_assert(GetSize(ast_stack) == 0);
+	for (auto &it : default_attr_list)
+		delete it.second;
+	default_attr_list.clear();
+	printf("input end\n");
+};
+
 /* Input file must contain entity declaration followed by architecture */
 trad  : rem entity rem architecture rem {
+    printf("trad: entity architecture\n");
         slist *sl;
           sl=output_timescale($1);
           sl=addsl(sl,$2);
@@ -829,6 +867,7 @@ trad  : rem entity rem architecture rem {
  * - let them take care of that manually
  */
       | rem entity rem  {
+    printf("trad: entity\n");
         slist *sl;
           sl=addsl($1,$2);
           sl=addsl(sl,$3);
@@ -837,6 +876,7 @@ trad  : rem entity rem architecture rem {
           $$=0;
         }
       | rem architecture rem {
+    printf("trad: architecture\n");
         slist *sl;
           sl=addsl($1,$2);
           sl=addsl(sl,$3);
@@ -874,206 +914,231 @@ endgenerate    : END GENERATE;
 norem : /*Empty*/ {skipRem = 1;}
 yesrem : /*Empty*/ {skipRem = 0;}
 
+entity_name: ENTITY NAME {
+	printf("entity, name='%s'\n", $2);
+	current_ast_mod = new AstNode(AST_MODULE);
+	ast_stack.back()->children.push_back(current_ast_mod);
+	ast_stack.push_back(current_ast_mod);
+	port_counter = 0;
+	current_ast_mod->str = $2;
+	delete $2;
+};
+
 /* Entity */
-/*          1      2    3  4     5  6   7         8   9  10  11  12    13 */
-entity    : ENTITY NAME IS rem PORT '(' rem portlist ')' ';' rem END opt_entity oname ';' {
-            slist *sl;
-            sglist *p;
-              sl=addtxt(NULL,"\nmodule ");
-              sl=addtxt(sl,$2); /* NAME */
-              /* Add the signal list */
-              sl=emit_io_list(sl);
-              sl=addsl(sl,$7); /* rem */
-              sl=addsl(sl,$8); /* portlist */
-              sl=addtxt(sl,"\n");
-              p=io_list;
-              if (vlog_ver == 0) {
-                do{
-                sl=addptxt(sl,&(p->type));
-                /*sl=addtxt(sl,p->type);*/
-                sl=addpar(sl,p->range);
-                sl=addtxt(sl,p->name);
-                /* sl=addpost(sl,p->range); */
-                sl=addtxt(sl,";\n");
-                p=p->next;
-                } while(p!=NULL);
-              }
-              sl=addtxt(sl,"\n");
-              sl=addsl(sl,$11); /* rem2 */
-              $$=addtxt(sl,"\n");
+entity:
+/*      1           2  3   4    5   6   7        8   9   10  11  12 */
+	entity_name IS rem PORT '(' rem portlist ')' ';' rem END opt_entity oname ';' {
+		printf("done with entity %s\n", current_ast_mod->str.c_str());
+		ast_stack.pop_back();
+		log_assert(ast_stack.size() == 1);
+
+            // slist *sl;
+            // sglist *p;
+              // sl=addtxt(NULL,"\nmodule ");
+              // sl=addtxt(sl,current_ast_mod->str.c_str()); /* NAME */
+              // /* Add the signal list */
+              // sl=emit_io_list(sl);
+              // sl=addsl(sl,$6); /* rem */
+              // sl=addsl(sl,$7); /* portlist */
+              // sl=addtxt(sl,"\n");
+              // p=io_list;
+              // if (vlog_ver == 0) {
+                // do{
+                // sl=addptxt(sl,&(p->type));
+                // /*sl=addtxt(sl,p->type);*/
+                // sl=addpar(sl,p->range);
+                // sl=addtxt(sl,p->name);
+                // /* sl=addpost(sl,p->range); */
+                // sl=addtxt(sl,";\n");
+                // p=p->next;
+                // } while(p!=NULL);
+              // }
+              // sl=addtxt(sl,"\n");
+              // sl=addsl(sl,$10); /* rem2 */
+              // $$=addtxt(sl,"\n");
+		current_ast_mod = NULL;
             }
- /*         1      2    3  4       5        6   7  8         9  10  11   12      13  14  15       16   17 18  19  20  21    22 */
-          | ENTITY NAME IS GENERIC yeslist '(' rem genlist  ')' ';' rem PORT yeslist '(' rem portlist ')' ';' rem END opt_entity oname ';' {
-            slist *sl;
-            sglist *p;
-              if (0) fprintf(stderr,"matched ENTITY GENERIC\n");
-              sl=addtxt(NULL,"\nmodule ");
-              sl=addtxt(sl,$2); /* NAME */
-              sl=emit_io_list(sl);
-              sl=addsl(sl,$7);  /* rem */
-              sl=addsl(sl,$8);  /* genlist */
-              sl=addsl(sl,$11); /* rem */
-              sl=addsl(sl,$15); /* rem */
-              sl=addsl(sl,$16); /* portlist */
-              sl=addtxt(sl,"\n");
-              p=io_list;
-              if (vlog_ver == 0) {
-                do{
-                sl=addptxt(sl,&(p->type));
-                /*sl=addtxt(sl,p->type);*/
-                sl=addpar(sl,p->range);
-                sl=addtxt(sl,p->name);
-                sl=addtxt(sl,";\n");
-                p=p->next;
-                } while(p!=NULL);
-              }
-              sl=addtxt(sl,"\n");
-              sl=addsl(sl,$19); /* rem2 */
-              $$=addtxt(sl,"\n");
-            }
-          ;
+ /*         1           2  3       4       5   6   7        8   9   10  11   12      13  14  15       16  17  18  19  20         21    22 */
+          | entity_name IS GENERIC yeslist '(' rem genlist  ')' ';' rem PORT yeslist '(' rem portlist ')' ';' rem END opt_entity oname ';' {
+		printf("done with entity %s\n", current_ast_mod->str.c_str());
+		ast_stack.pop_back();
+		log_assert(ast_stack.size() == 1);
+
+            // slist *sl;
+            // sglist *p;
+              // if (0) fprintf(stderr,"matched ENTITY GENERIC\n");
+              // sl=addtxt(NULL,"\nmodule ");
+              // sl=addtxt(sl,current_ast_mod->str.c_str()); /* NAME */
+              // sl=emit_io_list(sl);
+              // sl=addsl(sl,$6);  /* rem */
+              // sl=addsl(sl,$7);  /* genlist */
+              // sl=addsl(sl,$10); /* rem */
+              // sl=addsl(sl,$14); /* rem */
+              // sl=addsl(sl,$15); /* portlist */
+              // sl=addtxt(sl,"\n");
+              // p=io_list;
+              // if (vlog_ver == 0) {
+                // do{
+                // sl=addptxt(sl,&(p->type));
+                // /*sl=addtxt(sl,p->type);*/
+                // sl=addpar(sl,p->range);
+                // sl=addtxt(sl,p->name);
+                // sl=addtxt(sl,";\n");
+                // p=p->next;
+                // } while(p!=NULL);
+              // }
+              // sl=addtxt(sl,"\n");
+              // sl=addsl(sl,$18); /* rem2 */
+              // $$=addtxt(sl,"\n");
+		current_ast_mod = NULL;
+	};
 
           /* 1     2  3     4   5  6    7 */
 genlist  : s_list ':' type ':' '=' expr rem {
-          if(dolist){
-            slist *sl;
-            sglist *p;
-            sl=addtxt(NULL,"parameter");
-            sl=addpar(sl,$3); /* type */
-            p=$1;
-            for(;;){
-              sl=addtxt(sl,p->name);
-              sl=addtxt(sl,"=");
-              sl=addsl(sl, $6->sl); /* expr */
-              sl=addtxt(sl,";\n");
-              p=p->next;
-              if(p==NULL) break;
-            }
-            $$=addsl(sl,$7); /* rem */
-          } else {
-            $$=NULL;
-          }
+          // if(dolist){
+            // slist *sl;
+            // sglist *p;
+            // sl=addtxt(NULL,"parameter");
+            // sl=addpar(sl,$3); /* type */
+            // p=$1;
+            // for(;;){
+              // sl=addtxt(sl,p->name);
+              // sl=addtxt(sl,"=");
+              // sl=addsl(sl, $6->sl); /* expr */
+              // sl=addtxt(sl,";\n");
+              // p=p->next;
+              // if(p==NULL) break;
+            // }
+            // $$=addsl(sl,$7); /* rem */
+          // } else {
+            // $$=NULL;
+          // }
          }
           /* 1     2  3     4   5  6     7  8    9 */
          | s_list ':' type ':' '=' expr ';' rem genlist {
-          if(dolist){
-            slist *sl;
-            sglist *p;
-            sl=addtxt(NULL,"parameter");
-            sl=addpar(sl,$3); /* type */
-            p=$1;
-            for(;;){
-              sl=addtxt(sl,p->name);
-              sl=addtxt(sl,"=");
-              sl=addsl(sl, $6->sl); /* expr */
-              sl=addtxt(sl,";\n");
-              p=p->next;
-              if(p==NULL) break;
-            }
-            $$=addsl(sl,$8); /* rem */
-            $$=addsl(sl,$9); /* genlist */
-          } else {
-            $$=NULL;
-          }
+          // if(dolist){
+            // slist *sl;
+            // sglist *p;
+            // sl=addtxt(NULL,"parameter");
+            // sl=addpar(sl,$3); /* type */
+            // p=$1;
+            // for(;;){
+              // sl=addtxt(sl,p->name);
+              // sl=addtxt(sl,"=");
+              // sl=addsl(sl, $6->sl); /* expr */
+              // sl=addtxt(sl,";\n");
+              // p=p->next;
+              // if(p==NULL) break;
+            // }
+            // $$=addsl(sl,$8); /* rem */
+            // $$=addsl(sl,$9); /* genlist */
+          // } else {
+            // $$=NULL;
+          // }
          }
           /* 1     2  3     4   5  6 */
          | s_list ':' type ';' rem genlist {
-          if(dolist){
-            slist *sl;
-            sglist *p;
-            sl=addtxt(NULL,"parameter");
-            sl=addpar(sl,$3); /* type */
-            p=$1;
-            for(;;){
-              sl=addtxt(sl,p->name);
-              sl=addtxt(sl,";\n");
-              p=p->next;
-              if(p==NULL) break;
-            }
-            $$=addsl(sl,$5); /* rem */
-            $$=addsl(sl,$6); /* genlist */
-          } else {
-            $$=NULL;
-          }
+          // if(dolist){
+            // slist *sl;
+            // sglist *p;
+            // sl=addtxt(NULL,"parameter");
+            // sl=addpar(sl,$3); /* type */
+            // p=$1;
+            // for(;;){
+              // sl=addtxt(sl,p->name);
+              // sl=addtxt(sl,";\n");
+              // p=p->next;
+              // if(p==NULL) break;
+            // }
+            // $$=addsl(sl,$5); /* rem */
+            // $$=addsl(sl,$6); /* genlist */
+          // } else {
+            // $$=NULL;
+          // }
          }
           /* 1     2  3    4   */
          | s_list ':' type rem  {
-          if(dolist){
-            slist *sl;
-            sglist *p;
-            sl=addtxt(NULL,"parameter");
-            sl=addpar(sl,$3); /* type */
-            p=$1;
-            for(;;){
-              sl=addtxt(sl,p->name);
-              sl=addtxt(sl,";\n");
-              p=p->next;
-              if(p==NULL) break;
-            }
-            $$=addsl(sl,$4); /* rem */
-          } else {
-            $$=NULL;
-          }
+          // if(dolist){
+            // slist *sl;
+            // sglist *p;
+            // sl=addtxt(NULL,"parameter");
+            // sl=addpar(sl,$3); /* type */
+            // p=$1;
+            // for(;;){
+              // sl=addtxt(sl,p->name);
+              // sl=addtxt(sl,";\n");
+              // p=p->next;
+              // if(p==NULL) break;
+            // }
+            // $$=addsl(sl,$4); /* rem */
+          // } else {
+            // $$=NULL;
+          // }
          }
         ;
 
           /* 1      2   3   4    5 */
 portlist  : s_list ':' dir type rem {
-    printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
-            slist *sl;
+        std::map<std::string, int> *signal_list = $1;
+	printf("portlist: dir=%d (%s), type=%s\n", $3, port_dir_str[$3], print_type($4));
+	for (auto &i: *signal_list) {
+		printf("    port %s (%d)\n", i.first.c_str(), i.second);
+	}
 
-              if(dolist){
-                io_list=NULL;
-                sl=setup_port($1,$3,$4);  /* modifies io_list global */
-                $$=addsl(sl,$5);
-              } else{
-                free($5);
-                free($4);
-              }
+            // slist *sl;
+
+              // if(dolist){
+                // io_list=NULL;
+                // sl=setup_port($1,$3,$4);  /* modifies io_list global */
+                // $$=addsl(sl,$5);
+              // } else{
+                // free($5);
+                // free($4);
+              // }
             }
           /* 1      2   3   4    5   6   7     */
           | s_list ':' dir type ';' rem portlist {
-    printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
-            slist *sl;
+	printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
+            // slist *sl;
 
-              if(dolist){
-                sl=setup_port($1,$3,$4);  /* modifies io_list global */
-                sl=addsl(sl,$6);
-                $$=addsl(sl,$7);
-              } else{
-                free($6);
-                free($4);
-              }
+              // if(dolist){
+                // sl=setup_port($1,$3,$4);  /* modifies io_list global */
+                // sl=addsl(sl,$6);
+                // $$=addsl(sl,$7);
+              // } else{
+                // free($6);
+                // free($4);
+              // }
             }
           /* 1      2   3   4    5   6   7    8 */
           | s_list ':' dir type ':' '=' expr rem {
-    printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
-            slist *sl;
-              fprintf(stderr,"Warning on line %d: "
-                "port default initialization ignored\n",lineno);
-              if(dolist){
-                io_list=NULL;
-                sl=setup_port($1,$3,$4);  /* modifies io_list global */
-                $$=addsl(sl,$8);
-              } else{
-                free($8);
-                free($4);
-              }
+	printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
+            // slist *sl;
+              // fprintf(stderr,"Warning on line %d: "
+                // "port default initialization ignored\n",lineno);
+              // if(dolist){
+                // io_list=NULL;
+                // sl=setup_port($1,$3,$4);  /* modifies io_list global */
+                // $$=addsl(sl,$8);
+              // } else{
+                // free($8);
+                // free($4);
+              // }
             }
           /* 1      2   3   4    5   6   7    8   9   10     */
           | s_list ':' dir type ':' '=' expr ';' rem portlist {
-    printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
-            slist *sl;
-              fprintf(stderr,"Warning on line %d: "
-                "port default initialization ignored\n",lineno);
-              if(dolist){
-                sl=setup_port($1,$3,$4);  /* modifies io_list global */
-                sl=addsl(sl,$9);
-                $$=addsl(sl,$10);
-              } else{
-                free($9);
-                free($4);
-              }
+	printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
+            // slist *sl;
+              // fprintf(stderr,"Warning on line %d: "
+                // "port default initialization ignored\n",lineno);
+              // if(dolist){
+                // sl=setup_port($1,$3,$4);  /* modifies io_list global */
+                // sl=addsl(sl,$9);
+                // $$=addsl(sl,$10);
+              // } else{
+                // free($9);
+                // free($4);
+              // }
             }
           ;
 
@@ -1191,101 +1256,101 @@ unindent : /* Empty */ {indent= indent > 0 ? indent - 1 : indent;}
 /* Declarative part of the architecture */
 a_decl    : {$$=NULL;}
           | a_decl SIGNAL s_list ':' type ';' rem {
-            sglist *sg;
-            slist *sl;
-
-              sl=$1;
-              sg=$3;
-              for(;;){
-                sg->type=wire;
-                sg->range=$5;
-                sl=addptxt(sl,&(sg->type));
-                sl=addpar(sl,$5);
-                sl=addtxt(sl,sg->name);
-                sl=addpost(sl,$5);
-                sl=addtxt(sl,";");
-                if(sg->next == NULL)
-                  break;
-                sl=addtxt(sl," ");
-                sg=sg->next;
-              }
-              sg->next=sig_list;
-              sig_list=$3;
-              $$=addrem(sl,$7);
+            // sglist *sg;
+            // slist *sl;
+// 
+              // sl=$1;
+              // sg=$3;
+              // for(;;){
+                // sg->type=wire;
+                // sg->range=$5;
+                // sl=addptxt(sl,&(sg->type));
+                // sl=addpar(sl,$5);
+                // sl=addtxt(sl,sg->name);
+                // sl=addpost(sl,$5);
+                // sl=addtxt(sl,";");
+                // if(sg->next == NULL)
+                  // break;
+                // sl=addtxt(sl," ");
+                // sg=sg->next;
+              // }
+              // sg->next=sig_list;
+              // sig_list=$3;
+              // $$=addrem(sl,$7);
             }
           | a_decl SIGNAL s_list ':' type ':' '=' expr ';' rem {
-            sglist *sg;
-            slist *sl;
-
-              sl=$1;
-              sg=$3;
-              for(;;){
-                sg->type=wire;
-                sg->range=$5;
-                sl=addptxt(sl,&(sg->type));
-                sl=addpar(sl,$5);
-                sl=addtxt(sl,sg->name);
-                sl=addpost(sl,$5);
-                sl=addtxt(sl," = ");
-                sl=addsl(sl,$8->sl);
-                sl=addtxt(sl,";");
-                if(sg->next == NULL)
-                  break;
-                sl=addtxt(sl," ");
-                sg=sg->next;
-              }
-              sg->next=sig_list;
-              sig_list=$3;
-              $$=addrem(sl,$10);
+            // sglist *sg;
+            // slist *sl;
+// 
+              // sl=$1;
+              // sg=$3;
+              // for(;;){
+                // sg->type=wire;
+                // sg->range=$5;
+                // sl=addptxt(sl,&(sg->type));
+                // sl=addpar(sl,$5);
+                // sl=addtxt(sl,sg->name);
+                // sl=addpost(sl,$5);
+                // sl=addtxt(sl," = ");
+                // sl=addsl(sl,$8->sl);
+                // sl=addtxt(sl,";");
+                // if(sg->next == NULL)
+                  // break;
+                // sl=addtxt(sl," ");
+                // sg=sg->next;
+              // }
+              // sg->next=sig_list;
+              // sig_list=$3;
+              // $$=addrem(sl,$10);
             }
           | a_decl CONSTANT NAME ':' type ':' '=' expr ';' rem {
-            slist * sl;
-              sl=addtxt($1,"parameter ");
-              sl=addtxt(sl,$3);
-              sl=addtxt(sl," = ");
-              sl=addsl(sl,$8->sl);
-              sl=addtxt(sl,";");
-              $$=addrem(sl,$10);
+            // slist * sl;
+              // sl=addtxt($1,"parameter ");
+              // sl=addtxt(sl,$3);
+              // sl=addtxt(sl," = ");
+              // sl=addsl(sl,$8->sl);
+              // sl=addtxt(sl,";");
+              // $$=addrem(sl,$10);
             }
           | a_decl TYPE NAME IS '(' s_list ')' ';' rem {
-            slist *sl, *sl2;
-            sglist *p;
-            int n,k;
-              n=0;
-              sl=NULL;
-              p=$6;
-              for(;;){
-                sl=addtxt(sl,"  ");
-                sl=addtxt(sl,p->name);
-                sl=addtxt(sl," = ");
-                sl=addval(sl,n++);
-                p=p->next;
-                if(p==NULL){
-                  sl=addtxt(sl,";\n");
-                  break;
-                } else
-                  sl=addtxt(sl,",\n");
-              }
-              n--;
-              k=find_msb(n);
-              sl2=addtxt(NULL,"parameter [");
-              sl2=addval(sl2,k);
-              sl2=addtxt(sl2,":0]\n");
-              sl=addsl(sl2,sl);
-              sl=addsl($1,sl);
-              $$=addrem(sl,$9);
-              p=(sglist*)xmalloc(sizeof(sglist));
-              p->name=$3;
-              if(k>0) {
-                p->range=new_vrange(tVRANGE);
-                p->range->sizeval = k+1;
-                p->range->nhi=addval(NULL,k);
-                p->range->nlo=addtxt(NULL,"0");
-              } else {
-                p->range=new_vrange(tSCALAR);
-              }
-              p->next=type_list;
-              type_list=p;
+            // slist *sl, *sl2;
+            // sglist *p;
+            // int n,k;
+              // n=0;
+              // sl=NULL;
+              // p=$6;
+              // for(;;){
+                // sl=addtxt(sl,"  ");
+                // sl=addtxt(sl,p->name);
+                // sl=addtxt(sl," = ");
+                // sl=addval(sl,n++);
+                // p=p->next;
+                // if(p==NULL){
+                  // sl=addtxt(sl,";\n");
+                  // break;
+                // } else
+                  // sl=addtxt(sl,",\n");
+              // }
+              // n--;
+              // k=find_msb(n);
+              // sl2=addtxt(NULL,"parameter [");
+              // sl2=addval(sl2,k);
+              // sl2=addtxt(sl2,":0]\n");
+              // sl=addsl(sl2,sl);
+              // sl=addsl($1,sl);
+              // $$=addrem(sl,$9);
+              // p=(sglist*)xmalloc(sizeof(sglist));
+              // p->name=$3;
+              // if(k>0) {
+                // p->range=new_vrange(tVRANGE);
+                // p->range->sizeval = k+1;
+                // p->range->nhi=addval(NULL,k);
+                // p->range->nlo=addtxt(NULL,"0");
+              // } else {
+                // p->range=new_vrange(tSCALAR);
+              // }
+              // p->next=type_list;
+              // type_list=p;
             }
           | a_decl TYPE NAME IS ARRAY '(' vec_range ')' OF type ';' rem {
             slist *sl=NULL;
@@ -1322,32 +1387,43 @@ yeslist : /*Empty*/ {dolist = 1;}
 
 /* XXX wishlist: record comments into slist, play them back later */
 s_list : NAME rem {
-         sglist * sg;
-           if(dolist){
-             sg=(sglist*)xmalloc(sizeof(sglist));
-             sg->name=$1;
-             sg->next=NULL;
-             $$=sg;
-           } else{
-             free($1);
-             $$=NULL;
-           }
-           free($2);
-         }
-       | NAME ',' rem s_list {
-         sglist * sg;
-           if(dolist){
-             sg=(sglist*)xmalloc(sizeof(sglist));
-             sg->name=$1;
-             sg->next=$4;
-             $$=sg;
-           } else{
-             free($1);
-             $$=NULL;
-           }
-           free($3);
-         }
-       ;
+        std::map<std::string, int> *signal_list;
+        signal_list = new std::map<std::string, int>;
+	(*signal_list)[$1] = ++port_counter;
+	printf("signal name: %s (%d)\n", $1, port_counter);
+	$$ = signal_list;
+
+         // sglist * sg;
+           // if(dolist){
+             // sg=(sglist*)xmalloc(sizeof(sglist));
+             // sg->name=$1;
+             // sg->next=NULL;
+             // $$=sg;
+           // } else{
+             // free($1);
+             // $$=NULL;
+           // }
+           // free($2);
+ } | NAME ',' rem s_list {
+	std::map<std::string, int> *signal_list = $4;
+	if (signal_list->count($1) != 0) {
+		frontend_vhdl_yyerror("Duplicate entity signal `%s'.", $1);
+	}
+	(*signal_list)[$1] = ++port_counter;
+	printf("signal name (in list): %s\n", $1);
+
+         // sglist * sg;
+           // if(dolist){
+             // sg=(sglist*)xmalloc(sizeof(sglist));
+             // sg->name=$1;
+             // sg->next=$4;
+             // $$=sg;
+           // } else{
+             // free($1);
+             // $$=NULL;
+           // }
+           // free($3);
+};
 
 a_body : rem {$$=addind($1);}
        /* 1   2     3    4  5   6     7         8     9 */
@@ -1708,46 +1784,46 @@ with_item : expr delay WHEN wlist {
 
 p_decl : rem {$$=$1;}
        | rem VARIABLE s_list ':' type ';' p_decl {
-         slist *sl;
-         sglist *sg, *p;
-           sl=addtxt($1,"    reg");
-           sl=addpar(sl,$5);
-           free($5);
-           sg=$3;
-           for(;;){
-             sl=addtxt(sl,sg->name);
-             p=sg;
-             sg=sg->next;
-             free(p);
-             if(sg)
-               sl=addtxt(sl,", ");
-             else
-               break;
-           }
-           sl=addtxt(sl,";\n");
-           $$=addsl(sl,$7);
+         // slist *sl;
+         // sglist *sg, *p;
+           // sl=addtxt($1,"    reg");
+           // sl=addpar(sl,$5);
+           // free($5);
+           // sg=$3;
+           // for(;;){
+             // sl=addtxt(sl,sg->name);
+             // p=sg;
+             // sg=sg->next;
+             // free(p);
+             // if(sg)
+               // sl=addtxt(sl,", ");
+             // else
+               // break;
+           // }
+           // sl=addtxt(sl,";\n");
+           // $$=addsl(sl,$7);
          }
        | rem VARIABLE s_list ':' type ':' '=' expr ';' p_decl {
-         slist *sl;
-         sglist *sg, *p;
-           sl=addtxt($1,"    reg");
-           sl=addpar(sl,$5);
-           free($5);
-           sg=$3;
-           for(;;){
-             sl=addtxt(sl,sg->name);
-             p=sg;
-             sg=sg->next;
-             free(p);
-             if(sg)
-               sl=addtxt(sl,", ");
-             else
-               break;
-           }
-           sl=addtxt(sl," = ");
-           sl=addsl(sl,$8->sl);
-           sl=addtxt(sl,";\n");
-           $$=addsl(sl,$10);
+         // slist *sl;
+         // sglist *sg, *p;
+           // sl=addtxt($1,"    reg");
+           // sl=addpar(sl,$5);
+           // free($5);
+           // sg=$3;
+           // for(;;){
+             // sl=addtxt(sl,sg->name);
+             // p=sg;
+             // sg=sg->next;
+             // free(p);
+             // if(sg)
+               // sl=addtxt(sl,", ");
+             // else
+               // break;
+           // }
+           // sl=addtxt(sl," = ");
+           // sl=addsl(sl,$8->sl);
+           // sl=addtxt(sl,";\n");
+           // $$=addsl(sl,$10);
          }
        ;
 
