@@ -74,6 +74,13 @@ namespace VHDL_FRONTEND {
         // bool do_not_require_port_stubs;
         bool default_nettype_wire;
         std::istream *lexin;
+
+    typedef enum {
+        DIR_IN = 0,
+        DIR_OUT = 1
+    } port_dir_t;
+
+    const char *port_dir_str[] = { "IN", "OUT" };
 }
 YOSYS_NAMESPACE_END
 
@@ -1010,6 +1017,7 @@ genlist  : s_list ':' type ':' '=' expr rem {
 
           /* 1      2   3   4    5 */
 portlist  : s_list ':' dir type rem {
+    printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
             slist *sl;
 
               if(dolist){
@@ -1023,6 +1031,7 @@ portlist  : s_list ':' dir type rem {
             }
           /* 1      2   3   4    5   6   7     */
           | s_list ':' dir type ';' rem portlist {
+    printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
             slist *sl;
 
               if(dolist){
@@ -1036,6 +1045,7 @@ portlist  : s_list ':' dir type rem {
             }
           /* 1      2   3   4    5   6   7    8 */
           | s_list ':' dir type ':' '=' expr rem {
+    printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
             slist *sl;
               fprintf(stderr,"Warning on line %d: "
                 "port default initialization ignored\n",lineno);
@@ -1050,6 +1060,7 @@ portlist  : s_list ':' dir type rem {
             }
           /* 1      2   3   4    5   6   7    8   9   10     */
           | s_list ':' dir type ':' '=' expr ';' rem portlist {
+    printf("portlist: dir=%d (%s)\n", $3, port_dir_str[$3]);
             slist *sl;
               fprintf(stderr,"Warning on line %d: "
                 "port default initialization ignored\n",lineno);
