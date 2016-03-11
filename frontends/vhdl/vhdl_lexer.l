@@ -190,8 +190,10 @@ void getbasedstring(unsigned skip);
 }
 
 [a-zA-Z_$][a-zA-Z0-9_$.]* {
-  frontend_vhdl_yylval.txt=(char*)malloc(strlen(yytext)+1);
-  strcpy(frontend_vhdl_yylval.txt, yytext);
+  frontend_vhdl_yylval.txt=(char*)malloc(strlen(yytext)+2);
+  frontend_vhdl_yylval.txt[0] = '\\';
+  frontend_vhdl_yylval.txt[1] = '\0';
+  strcat(frontend_vhdl_yylval.txt, yytext);
   return NAME;
 }
 
