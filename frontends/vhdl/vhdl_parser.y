@@ -77,10 +77,11 @@ namespace VHDL_FRONTEND {
 
     typedef enum {
         DIR_IN = 0,
-        DIR_OUT = 1
+        DIR_OUT = 1,
+        DIR_INOUT = 2
     } port_dir_t;
 
-    const char *port_dir_str[] = { "IN", "OUT" };
+    const char *port_dir_str[] = { "IN", "OUT", "INOUT" };
 }
 YOSYS_NAMESPACE_END
 
@@ -1075,9 +1076,9 @@ portlist  : s_list ':' dir type rem {
             }
           ;
 
-dir         : IN { $$=0;}
-            | OUT { $$=1; }
-            | INOUT { $$=2; }
+dir         : IN    { $$ = DIR_IN; }
+            | OUT   { $$ = DIR_OUT; }
+            | INOUT { $$ = DIR_INOUT; }
             ;
 
 type        : BIT {
