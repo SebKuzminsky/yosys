@@ -2154,18 +2154,33 @@ map_item : mvalue {$$=$1;}
            }
          ;
 
-mvalue : STRING {$$=addvec(NULL,$1);}
-       | signal {$$=addsl(NULL,$1->sl);}
-       | NATURAL {$$=addval(NULL,$1);}
-       | NAME STRING {$$=addvec_base(NULL,$1,$2);}
-       | OPEN {$$=addtxt(NULL,"/* open */");}
-       | '(' OTHERS '=' '>' STRING ')' {
-             $$=addtxt(NULL,"{broken{");
-             $$=addtxt($$,$5);
-             $$=addtxt($$,"}}");
-             fprintf(stderr,"Warning on line %d: broken width on port with OTHERS\n",lineno);
-           }
-       ;
+mvalue : STRING {
+		printf("mvalue1: STRING\n");
+		$$=addvec(NULL,$1);
+	}
+	| signal {
+		printf("mvalue2: signal\n");
+		// $$=addsl(NULL,$1->sl);
+	}
+	| NATURAL {
+		printf("mvalue3: NATURAL\n");
+		$$=addval(NULL,$1);
+	}
+	| NAME STRING {
+		printf("mvalue4: NAME STRING\n");
+		$$=addvec_base(NULL,$1,$2);
+	}
+	| OPEN {
+		printf("mvalue5: OPEN\n");
+		$$=addtxt(NULL,"/* open */");
+	}
+	| '(' OTHERS '=' '>' STRING ')' {
+		printf("mvalue6: OTHERS => STRING\n");
+             // $$=addtxt(NULL,"{broken{");
+             // $$=addtxt($$,$5);
+             // $$=addtxt($$,"}}");
+             // fprintf(stderr,"Warning on line %d: broken width on port with OTHERS\n",lineno);
+	};
 
 
 generic_map_list : rem generic_map_item {
