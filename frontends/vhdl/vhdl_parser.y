@@ -2210,10 +2210,10 @@ generic_map_item : NAME '=' '>' expr {
          ;
 
 signal : NAME {
-	printf("signal1: NAME\n");
 	AstNode *wire = new AstNode(AST_IDENTIFIER);
 	wire->str = $NAME;
 	$$ = wire;
+	printf("signal1: NAME(=%s)\n", $signal->str.c_str());
          // slist *sl;
          // slval *ss;
            // ss=(slval*)xmalloc(sizeof(slval));
