@@ -2074,12 +2074,16 @@ wvalue : STRING {$$=addvec(NULL,$1);}
        | NAME {$$=addtxt(NULL,$1);}
        ;
 
-sign_list : signal {$$=$1->sl; free($1);}
-          | signal ',' sign_list {
-            slist *sl;
-              sl=addtxt($1->sl," or ");
-              free($1);
-              $$=addsl(sl,$3);
+sign_list : signal {
+		printf("sign_list1: signal\n");
+		// $$=$1->sl;
+		// free($1);
+	} | signal ',' sign_list {
+		printf("sign_list2: signal , sign_list\n");
+            // slist *sl;
+              // sl=addtxt($1->sl," or ");
+              // free($1);
+              // $$=addsl(sl,$3);
             }
           ;
 
