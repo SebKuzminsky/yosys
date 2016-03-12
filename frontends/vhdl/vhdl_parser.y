@@ -1286,10 +1286,11 @@ updown : DOWNTO {$$=-1;}
 /* Architecture */
 architecture : ARCHITECTURE NAME OF NAME IS rem a_decl
                BEGN doindent a_body END opt_architecture oname ';' unindent {
-               slist *sl;
-                 sl=addsl($6,$7);
-                 sl=addtxt(sl,"\n");
-                 $$=addsl(sl,$10);
+	printf("got architecture\n");
+               // slist *sl;
+                 // sl=addsl($6,$7);
+                 // sl=addtxt(sl,"\n");
+                 // $$=addsl(sl,$10);
                }
              ;
 
@@ -1473,113 +1474,120 @@ s_list : NAME rem {
 a_body : rem {$$=addind($1);}
        /* 1   2     3    4  5   6     7         8     9 */
        | rem signal '<' '=' rem norem sigvalue yesrem a_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"assign ");
-           sl=addsl(sl,$2->sl);
-           findothers($2,$7);
-           free($2);
-           sl=addtxt(sl," = ");
-           sl=addsl(sl,$7);
-           sl=addtxt(sl,";\n");
-           $$=addsl(sl,$9);
+	printf("a_body1\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"assign ");
+           // sl=addsl(sl,$2->sl);
+           // findothers($2,$7);
+           // free($2);
+           // sl=addtxt(sl," = ");
+           // sl=addsl(sl,$7);
+           // sl=addtxt(sl,";\n");
+           // $$=addsl(sl,$9);
          }
        | rem BEGN signal '<' '=' rem norem sigvalue yesrem a_body END NAME ';' {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"assign ");
-           sl=addsl(sl,$3->sl);
-           findothers($3,$8);
-           free($3);
-           sl=addtxt(sl," = ");
-           sl=addsl(sl,$8);
-           sl=addtxt(sl,";\n");
-           $$=addsl(sl,$10);
+	printf("a_body2\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"assign ");
+           // sl=addsl(sl,$3->sl);
+           // findothers($3,$8);
+           // free($3);
+           // sl=addtxt(sl," = ");
+           // sl=addsl(sl,$8);
+           // sl=addtxt(sl,";\n");
+           // $$=addsl(sl,$10);
          }
        /* 1   2     3    4    5   6       7       8   9     10     11 */
        | rem WITH expr SELECT rem yeswith signal '<' '=' with_list a_body {
-         slist *sl;
-         sglist *sg;
-         char *s;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"always @(*) begin\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"  case(");
-           sl=addsl(sl,$3->sl);
-           free($3);
-           sl=addtxt(sl,")\n");
-           if($5)
-             sl=addsl(sl,$5);
-           s=sbottom($7->sl);
-           if((sg=lookup(io_list,s))==NULL)
-             sg=lookup(sig_list,s);
-           if(sg)
-             sg->type=reg;
-           findothers($7,$10);
-           free($7);
-           sl=addsl(sl,$10);
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"  endcase\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"end\n\n");
-           $$=addsl(sl,$11);
+	printf("a_body3\n");
+         // slist *sl;
+         // sglist *sg;
+         // char *s;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"always @(*) begin\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"  case(");
+           // sl=addsl(sl,$3->sl);
+           // free($3);
+           // sl=addtxt(sl,")\n");
+           // if($5)
+             // sl=addsl(sl,$5);
+           // s=sbottom($7->sl);
+           // if((sg=lookup(io_list,s))==NULL)
+             // sg=lookup(sig_list,s);
+           // if(sg)
+             // sg->type=reg;
+           // findothers($7,$10);
+           // free($7);
+           // sl=addsl(sl,$10);
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"  endcase\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"end\n\n");
+           // $$=addsl(sl,$11);
          }
        /* 1   2   3     4  5   6    7    8   9         10     11  12  13  14       15 */
        | rem NAME ':' NAME rem PORT MAP '(' doindent map_list rem ')' ';' unindent a_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,$4); /* NAME2 */
-           sl=addtxt(sl," ");
-           sl=addtxt(sl,$2); /* NAME1 */
-           sl=addtxt(sl,"(\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addsl(sl,$10);  /* map_list */
-           sl=addtxt(sl,");\n\n");
-           $$=addsl(sl,$15); /* a_body */
+	printf("a_body4\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,$4); /* NAME2 */
+           // sl=addtxt(sl," ");
+           // sl=addtxt(sl,$2); /* NAME1 */
+           // sl=addtxt(sl,"(\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addsl(sl,$10);  /* map_list */
+           // sl=addtxt(sl,");\n\n");
+           // $$=addsl(sl,$15); /* a_body */
          }
        /* 1   2   3     4  5   6        7  8    9       10               11  12       13   14   15     16   17       18  19  20       21 */
        | rem NAME ':' NAME rem GENERIC MAP '(' doindent generic_map_list ')' unindent PORT MAP '(' doindent map_list ')' ';' unindent a_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,$4); /* NAME2 (component name) */
-           if ($5) {
-             sl=addsl(sl,$5);
-             sl=addsl(sl,indents[indent]);
-           }
-           sl=addtxt(sl," #(\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addsl(sl,$10); /* (generic) map_list */
-           sl=addtxt(sl,")\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,$2); /* NAME1 (instance name) */
-           sl=addtxt(sl,"(\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addsl(sl,$17); /* map_list */
-           sl=addtxt(sl,");\n\n");
-           $$=addsl(sl,$21); /* a_body */
+	printf("a_body5\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,$4); /* NAME2 (component name) */
+           // if ($5) {
+             // sl=addsl(sl,$5);
+             // sl=addsl(sl,indents[indent]);
+           // }
+           // sl=addtxt(sl," #(\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addsl(sl,$10); /* (generic) map_list */
+           // sl=addtxt(sl,")\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,$2); /* NAME1 (instance name) */
+           // sl=addtxt(sl,"(\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addsl(sl,$17); /* map_list */
+           // sl=addtxt(sl,");\n\n");
+           // $$=addsl(sl,$21); /* a_body */
          }
        | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent p_body END PROCESS oname ';' unindent a_body {
-         slist *sl;
-           if (0) fprintf(stderr,"process style 1\n");
-           sl=add_always($1,$4,$6,0);
-           sl=addsl(sl,$10);
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"end\n\n");
-           $$=addsl(sl,$16);
+	printf("a_body6\n");
+         // slist *sl;
+           // if (0) fprintf(stderr,"process style 1\n");
+           // sl=add_always($1,$4,$6,0);
+           // sl=addsl(sl,$10);
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"end\n\n");
+           // $$=addsl(sl,$16);
          }
        | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
            rem IF edge THEN p_body END IF ';' END PROCESS oname ';' unindent a_body {
-           slist *sl;
-             if (0) fprintf(stderr,"process style 2: if then end if\n");
-             sl=add_always($1,$4,$6,1);
-             if($10){
-               sl=addsl(sl,indents[indent]);
-               sl=addsl(sl,$10);
-             }
-             sl=addsl(sl,$14);
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"end\n\n");
-             $$=addsl(sl,$23);
+	printf("a_body7\n");
+           // slist *sl;
+             // if (0) fprintf(stderr,"process style 2: if then end if\n");
+             // sl=add_always($1,$4,$6,1);
+             // if($10){
+               // sl=addsl(sl,indents[indent]);
+               // sl=addsl(sl,$10);
+             // }
+             // sl=addsl(sl,$14);
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"end\n\n");
+             // $$=addsl(sl,$23);
          }
        /* 1      2        3  4          5  6       7      8     9 */
        | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
@@ -1587,26 +1595,27 @@ a_body : rem {$$=addind($1);}
            rem IF exprc THEN doindent p_body unindent ELSIF edge THEN doindent p_body unindent END IF ';'
          /* 26      27    28 29       30   31    */
            END PROCESS oname ';' unindent a_body {
-           slist *sl;
-             if (0) fprintf(stderr,"process style 3: if then elsif then end if\n");
-             sl=add_always($1,$4,$6,1);
-             if($10){
-               sl=addsl(sl,indents[indent]);
-               sl=addsl(sl,$10);
-             }
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"  if(");
-             sl=addsl(sl,$12);
-             sl=addtxt(sl,") begin\n");
-             sl=addsl(sl,$15);
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"  end else begin\n");
-             sl=addsl(sl,$21);
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"  end\n");
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"end\n\n");
-             $$=addsl(sl,$31);
+	printf("a_body8\n");
+           // slist *sl;
+             // if (0) fprintf(stderr,"process style 3: if then elsif then end if\n");
+             // sl=add_always($1,$4,$6,1);
+             // if($10){
+               // sl=addsl(sl,indents[indent]);
+               // sl=addsl(sl,$10);
+             // }
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"  if(");
+             // sl=addsl(sl,$12);
+             // sl=addtxt(sl,") begin\n");
+             // sl=addsl(sl,$15);
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"  end else begin\n");
+             // sl=addsl(sl,$21);
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"  end\n");
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"end\n\n");
+             // $$=addsl(sl,$31);
          }
        /* 1      2        3  4          5  6       7      8     9 */
        | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
@@ -1614,130 +1623,134 @@ a_body : rem {$$=addind($1);}
            rem IF exprc THEN doindent p_body unindent ELSE IF edge THEN doindent p_body unindent END IF ';' END IF ';'
          /* 30      31    32 33       34   35    */
            END PROCESS oname ';' unindent a_body {
-           slist *sl;
-             if (0) fprintf(stderr,"process style 4: if then else if then end if\n");
-             sl=add_always($1,$4,$6,1);
-             if($10){
-               sl=addsl(sl,indents[indent]);
-               sl=addsl(sl,$10);
-             }
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"  if(");
-             sl=addsl(sl,$12); /* exprc */
-             sl=addtxt(sl,") begin\n");
-             sl=addsl(sl,$15); /* p_body:1 */
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"  end else begin\n");
-             sl=addsl(sl,$22); /* p_body:2 */
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"  end\n");
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"end\n\n");
-             $$=addsl(sl,$35); /* a_body */
+	printf("a_body9\n");
+           // slist *sl;
+             // if (0) fprintf(stderr,"process style 4: if then else if then end if\n");
+             // sl=add_always($1,$4,$6,1);
+             // if($10){
+               // sl=addsl(sl,indents[indent]);
+               // sl=addsl(sl,$10);
+             // }
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"  if(");
+             // sl=addsl(sl,$12); /* exprc */
+             // sl=addtxt(sl,") begin\n");
+             // sl=addsl(sl,$15); /* p_body:1 */
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"  end else begin\n");
+             // sl=addsl(sl,$22); /* p_body:2 */
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"  end\n");
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"end\n\n");
+             // $$=addsl(sl,$35); /* a_body */
          }
 
        /* note vhdl does not allow an else in an if generate statement */
        /* 1       2   3          4       5       6        7     8        9   10   11  12 */
        | gen_optname IF exprc generate  doindent a_body  unindent endgenerate oname ';' a_body {
-         slist *sl;
-         blknamelist *tname_list;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"generate ");
-           sl=addtxt(sl,"if (");
-           sl=addsl(sl,$3); /* exprc */
-           sl=addtxt(sl,") begin: ");
-           tname_list=blkname_list;
-           sl=addtxt(sl,tname_list->name);
-           blkname_list=blkname_list->next;
-           if (tname_list!=NULL) {
-           free(tname_list->name);
-           free(tname_list);
-           }
-           sl=addtxt(sl,"\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addsl(sl,$6);   /* a_body:1 */
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"end\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"endgenerate\n");
-           $$=addsl(sl,$11);    /* a_body:2 */
+	printf("a_body10\n");
+         // slist *sl;
+         // blknamelist *tname_list;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"generate ");
+           // sl=addtxt(sl,"if (");
+           // sl=addsl(sl,$3); /* exprc */
+           // sl=addtxt(sl,") begin: ");
+           // tname_list=blkname_list;
+           // sl=addtxt(sl,tname_list->name);
+           // blkname_list=blkname_list->next;
+           // if (tname_list!=NULL) {
+           // free(tname_list->name);
+           // free(tname_list);
+           // }
+           // sl=addtxt(sl,"\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addsl(sl,$6);   /* a_body:1 */
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"end\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"endgenerate\n");
+           // $$=addsl(sl,$11);    /* a_body:2 */
          }
        /* 1       2       3    4 5    6   7  8        9      10      11       12    13     14    15  16 */
        | gen_optname FOR  signal IN expr TO expr generate doindent a_body  unindent endgenerate oname ';' a_body {
-         slist *sl;
-         blknamelist *tname_list;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"genvar ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl,";\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"generate ");
-           sl=addtxt(sl,"for (");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl,"=");
-           sl=addsl(sl,$5->sl); /* expr:1 */
-           sl=addtxt(sl,"; ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," <= ");
-           sl=addsl(sl,$7->sl); /* expr:2 */
-           sl=addtxt(sl,"; ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," = ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," + 1) begin: ");
-           tname_list=blkname_list;
-           sl=addtxt(sl,tname_list->name);
-           blkname_list=blkname_list->next;
-           if (tname_list!=NULL) {
-           free(tname_list->name);
-           free(tname_list);
-           }
-           sl=addtxt(sl,"\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addsl(sl,$10);   /* a_body:1 */
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"end\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"endgenerate\n");
-           $$=addsl(sl,$15);    /* a_body:2 */
+	printf("a_body11\n");
+         // slist *sl;
+         // blknamelist *tname_list;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"genvar ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl,";\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"generate ");
+           // sl=addtxt(sl,"for (");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl,"=");
+           // sl=addsl(sl,$5->sl); /* expr:1 */
+           // sl=addtxt(sl,"; ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," <= ");
+           // sl=addsl(sl,$7->sl); /* expr:2 */
+           // sl=addtxt(sl,"; ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," = ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," + 1) begin: ");
+           // tname_list=blkname_list;
+           // sl=addtxt(sl,tname_list->name);
+           // blkname_list=blkname_list->next;
+           // if (tname_list!=NULL) {
+           // free(tname_list->name);
+           // free(tname_list);
+           // }
+           // sl=addtxt(sl,"\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addsl(sl,$10);   /* a_body:1 */
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"end\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"endgenerate\n");
+           // $$=addsl(sl,$15);    /* a_body:2 */
          }
        /* 1           2       3   4   5    6     7      8        9      10      11       12    13     14    15  16 */
        | gen_optname FOR  signal IN expr DOWNTO expr generate doindent a_body  unindent endgenerate oname ';' a_body {
-         slist *sl;
-           blknamelist* tname_list;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"genvar ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl,";\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"generate ");
-           sl=addtxt(sl,"for (");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl,"=");
-           sl=addsl(sl,$5->sl); /* expr:1 */
-           sl=addtxt(sl,"; ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," >= ");
-           sl=addsl(sl,$7->sl); /* expr:2 */
-           sl=addtxt(sl,"; ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," = ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," - 1) begin: ");
-           tname_list=blkname_list;
-           sl=addtxt(sl,tname_list->name);
-           blkname_list=blkname_list->next;
-           if (tname_list!=NULL) {
-           free(tname_list->name);
-           free(tname_list);
-           }
-           sl=addtxt(sl,"\n");
-           sl=addsl(sl,$10);   /* a_body:1 */
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"end\n");
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"endgenerate\n");
-           $$=addsl(sl,$15);    /* a_body:2 */
+	printf("a_body12\n");
+         // slist *sl;
+           // blknamelist* tname_list;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"genvar ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl,";\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"generate ");
+           // sl=addtxt(sl,"for (");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl,"=");
+           // sl=addsl(sl,$5->sl); /* expr:1 */
+           // sl=addtxt(sl,"; ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," >= ");
+           // sl=addsl(sl,$7->sl); /* expr:2 */
+           // sl=addtxt(sl,"; ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," = ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," - 1) begin: ");
+           // tname_list=blkname_list;
+           // sl=addtxt(sl,tname_list->name);
+           // blkname_list=blkname_list->next;
+           // if (tname_list!=NULL) {
+           // free(tname_list->name);
+           // free(tname_list);
+           // }
+           // sl=addtxt(sl,"\n");
+           // sl=addsl(sl,$10);   /* a_body:1 */
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"end\n");
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"endgenerate\n");
+           // $$=addsl(sl,$15);    /* a_body:2 */
          }
        ;
 
