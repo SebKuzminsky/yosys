@@ -2270,12 +2270,13 @@ signal : NAME {
 
 /* Expressions */
 expr : signal {
-         expdata *e;
-           e=(expdata*)xmalloc(sizeof(expdata));
-           e->op='t'; /* Terminal symbol */
-           e->sl=$1->sl;
-           free($1);
-           $$=e;
+	printf("expr1: signal\n");
+         // expdata *e;
+           // e=(expdata*)xmalloc(sizeof(expdata));
+           // e->op='t'; /* Terminal symbol */
+           // e->sl=$1->sl;
+           // free($1);
+           // $$=e;
          }
      | STRING {
          expdata *e;
@@ -2506,12 +2507,13 @@ conf : expr '=' expr %prec EQUAL {
      ;
 
 simple_expr : signal {
-         expdata *e;
-         e=(expdata*)xmalloc(sizeof(expdata));
-         e->op='t'; /* Terminal symbol */
-         e->sl=$1->sl;
-         free($1);
-         $$=e;
+	printf("simple_expr1: signal\n");
+         // expdata *e;
+         // e=(expdata*)xmalloc(sizeof(expdata));
+         // e->op='t'; /* Terminal symbol */
+         // e->sl=$1->sl;
+         // free($1);
+         // $$=e;
       }
      | STRING {
          expdata *e;
