@@ -834,7 +834,7 @@ void print_type(struct vrange *vrange) {
 %type <n> updown
 %type <e> expr
 %type <e> simple_expr
-%type <ss> signal
+%type <ast> signal
 %type <txt> opt_is opt_generic opt_entity opt_architecture opt_begin
 %type <txt> generate endgenerate
 
@@ -2210,61 +2210,67 @@ generic_map_item : NAME '=' '>' expr {
          ;
 
 signal : NAME {
-         slist *sl;
-         slval *ss;
-           ss=(slval*)xmalloc(sizeof(slval));
-           sl=addtxt(NULL,$1);
-           if(dowith){
-             slwith=sl;
-             dowith=0;
-           }
-           ss->sl=sl;
-           ss->val=-1;
-           ss->range=NULL;
-           $$=ss;
+	printf("signal1: NAME\n");
+	AstNode *wire = new AstNode(AST_IDENTIFIER);
+	wire->str = $NAME;
+	$$ = wire;
+         // slist *sl;
+         // slval *ss;
+           // ss=(slval*)xmalloc(sizeof(slval));
+           // sl=addtxt(NULL,$1);
+           // if(dowith){
+             // slwith=sl;
+             // dowith=0;
+           // }
+           // ss->sl=sl;
+           // ss->val=-1;
+           // ss->range=NULL;
+           // $$=ss;
          }
        | NAME '(' vec_range ')' {
-         slval *ss;
-         slist *sl;
-           ss=(slval*)xmalloc(sizeof(slval));
-           sl=addtxt(NULL,$1);
-           sl=addpar_snug(sl,$3);
-           if(dowith){
-             slwith=sl;
-             dowith=0;
-           }
-           ss->sl=sl;
-           ss->range=$3;
-           if($3->vtype==tVRANGE) {
-             if (0) {
-               fprintf(stderr,"ss->val set to 1 for ");
-               fslprint(stderr,ss->sl);
-               fprintf(stderr,", why?\n");
-             }
-             ss->val = -1; /* width is in the vrange */
-           } else {
-             ss->val = 1;
-           }
-           $$=ss;
+	printf("signal2: NAME (vec_range)\n");
+         // slval *ss;
+         // slist *sl;
+           // ss=(slval*)xmalloc(sizeof(slval));
+           // sl=addtxt(NULL,$1);
+           // sl=addpar_snug(sl,$3);
+           // if(dowith){
+             // slwith=sl;
+             // dowith=0;
+           // }
+           // ss->sl=sl;
+           // ss->range=$3;
+           // if($3->vtype==tVRANGE) {
+             // if (0) {
+               // fprintf(stderr,"ss->val set to 1 for ");
+               // fslprint(stderr,ss->sl);
+               // fprintf(stderr,", why?\n");
+             // }
+             // ss->val = -1; /* width is in the vrange */
+           // } else {
+             // ss->val = 1;
+           // }
+           // $$=ss;
          }
        | NAME '(' vec_range ')' '(' vec_range ')' {
-         slval *ss;
-         slist *sl;
-           ss=(slval*)xmalloc(sizeof(slval));
-           sl=addtxt(NULL,$1);
-           sl=addpar_snug2(sl,$3, $6);
-           if(dowith){
-             slwith=sl;
-             dowith=0;
-           }
-           ss->sl=sl;
-           ss->range=$3;
-           if($3->vtype==tVRANGE) {
-             ss->val = -1; /* width is in the vrange */
-           } else {
-             ss->val = 1;
-           }
-           $$=ss;
+	printf("signal3: NAME (vec_range) (vec_range)\n");
+         // slval *ss;
+         // slist *sl;
+           // ss=(slval*)xmalloc(sizeof(slval));
+           // sl=addtxt(NULL,$1);
+           // sl=addpar_snug2(sl,$3, $6);
+           // if(dowith){
+             // slwith=sl;
+             // dowith=0;
+           // }
+           // ss->sl=sl;
+           // ss->range=$3;
+           // if($3->vtype==tVRANGE) {
+             // ss->val = -1; /* width is in the vrange */
+           // } else {
+             // ss->val = 1;
+           // }
+           // $$=ss;
          }
        ;
 
