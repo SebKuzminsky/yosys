@@ -1480,7 +1480,7 @@ s_list : NAME rem {
 a_body : rem {$$=addind($1);}
        /* 1   2     3    4  5   6     7         8     9 */
        | rem signal '<' '=' rem norem sigvalue yesrem a_body {
-	printf("a_body1: signal <= sigvalue\n");
+	printf("a_body1: signal(=%s) <= sigvalue\n", $signal->str.c_str());
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"assign ");
