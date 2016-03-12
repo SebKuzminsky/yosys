@@ -1894,7 +1894,7 @@ p_decl : rem {$$=$1;}
 p_body : rem {$$=$1;}
        /* 1   2     3    4  5     6     7    8     9 */
        | rem signal ':' '=' norem expr ';' yesrem  p_body {
-	printf("p_body1: signal := expr\n");
+	printf("p_body1: signal(%s) := expr\n", $signal->str.c_str());
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addsl(sl,$2->sl);
