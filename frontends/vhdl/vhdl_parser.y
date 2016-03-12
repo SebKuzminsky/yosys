@@ -1894,123 +1894,131 @@ p_decl : rem {$$=$1;}
 p_body : rem {$$=$1;}
        /* 1   2     3    4  5     6     7    8     9 */
        | rem signal ':' '=' norem expr ';' yesrem  p_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addsl(sl,$2->sl);
-           findothers($2,$6->sl);
-           sl=addtxt(sl," = ");
-           if($6->op == 'c')
-             sl=addsl(sl,addwrap("{",$6->sl,"}"));
-           else
-             sl=addsl(sl,$6->sl);
-           sl=addtxt(sl,";\n");
-           $$=addsl(sl,$9);
+	printf("p_body1: signal := expr\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addsl(sl,$2->sl);
+           // findothers($2,$6->sl);
+           // sl=addtxt(sl," = ");
+           // if($6->op == 'c')
+             // sl=addsl(sl,addwrap("{",$6->sl,"}"));
+           // else
+             // sl=addsl(sl,$6->sl);
+           // sl=addtxt(sl,";\n");
+           // $$=addsl(sl,$9);
          }
        /* 1   2     3      4   5     6         7     8   */
        | rem signal norem '<' '=' sigvalue yesrem  p_body {
-         slist *sl;
-         sglist *sg;
-         char *s;
-
-           s=sbottom($2->sl);
-           if((sg=lookup(io_list,s))==NULL)
-             sg=lookup(sig_list,s);
-           if(sg)
-             sg->type=reg;
-           sl=addsl($1,indents[indent]);
-           sl=addsl(sl,$2->sl);
-           findothers($2,$6);
-           sl=addtxt(sl," <= ");
-           sl=addsl(sl,$6);
-           sl=addtxt(sl,";\n");
-           $$=addsl(sl,$8);
+	printf("p_body2: signal <= sigvalue\n");
+         // slist *sl;
+         // sglist *sg;
+         // char *s;
+// 
+           // s=sbottom($2->sl);
+           // if((sg=lookup(io_list,s))==NULL)
+             // sg=lookup(sig_list,s);
+           // if(sg)
+             // sg->type=reg;
+           // sl=addsl($1,indents[indent]);
+           // sl=addsl(sl,$2->sl);
+           // findothers($2,$6);
+           // sl=addtxt(sl," <= ");
+           // sl=addsl(sl,$6);
+           // sl=addtxt(sl,";\n");
+           // $$=addsl(sl,$8);
          }
 /*        1   2    3     4 5        6:1      7        8      9   10  11    12:2  */
        | rem IF exprc THEN doindent p_body unindent elsepart END IF ';' p_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"if(");
-           sl=addsl(sl,$3);
-           sl=addtxt(sl,") begin\n");
-           sl=addsl(sl,$6);
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"end\n");
-           sl=addsl(sl,$8);
-           $$=addsl(sl,$12);
+	printf("p_body3: IF exprc THEN p_body elsepart END IF\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"if(");
+           // sl=addsl(sl,$3);
+           // sl=addtxt(sl,") begin\n");
+           // sl=addsl(sl,$6);
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"end\n");
+           // sl=addsl(sl,$8);
+           // $$=addsl(sl,$12);
          }
 /*        1   2    3      4 5:1  6  7:2   8    9       10:1   11       12  13   14  15:2 */
        | rem FOR  signal IN expr TO expr LOOP doindent p_body unindent END LOOP ';' p_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"for (");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl,"=");
-           sl=addsl(sl,$5->sl); /* expr:1 */
-           sl=addtxt(sl,"; ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," <= ");
-           sl=addsl(sl,$7->sl); /* expr:2 */
-           sl=addtxt(sl,"; ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," = ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," + 1) begin\n");
-           sl=addsl(sl,$10);    /* p_body:1 */
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"end\n");
-           $$=addsl(sl,$15);    /* p_body:2 */
+	printf("p_body4: FOR signal IN expr TO expr LOOP p_body END LOOP\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"for (");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl,"=");
+           // sl=addsl(sl,$5->sl); /* expr:1 */
+           // sl=addtxt(sl,"; ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," <= ");
+           // sl=addsl(sl,$7->sl); /* expr:2 */
+           // sl=addtxt(sl,"; ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," = ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," + 1) begin\n");
+           // sl=addsl(sl,$10);    /* p_body:1 */
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"end\n");
+           // $$=addsl(sl,$15);    /* p_body:2 */
          }
 /*        1   2    3      4 5:1  6      7:2   8    9       10:1   11       12  13   14  15:2 */
        | rem FOR  signal IN expr DOWNTO expr LOOP doindent p_body unindent END LOOP ';' p_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"for (");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl,"=");
-           sl=addsl(sl,$5->sl); /* expr:1 */
-           sl=addtxt(sl,"; ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," >= ");
-           sl=addsl(sl,$7->sl); /* expr:2 */
-           sl=addtxt(sl,"; ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," = ");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl," - 1) begin\n");
-           sl=addsl(sl,$10);    /* p_body:1 */
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"end\n");
-           $$=addsl(sl,$15);    /* p_body:2 */
+	printf("p_body5: FOR signal IN expr DOWNTO expr LOOP p_body END LOOP\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"for (");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl,"=");
+           // sl=addsl(sl,$5->sl); /* expr:1 */
+           // sl=addtxt(sl,"; ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," >= ");
+           // sl=addsl(sl,$7->sl); /* expr:2 */
+           // sl=addtxt(sl,"; ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," = ");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl," - 1) begin\n");
+           // sl=addsl(sl,$10);    /* p_body:1 */
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"end\n");
+           // $$=addsl(sl,$15);    /* p_body:2 */
          }
 /*        1   2    3      4 5       6  7   8    9      10 */
        | rem CASE signal IS rem cases END CASE ';' p_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"case(");
-           sl=addsl(sl,$3->sl); /* signal */
-           sl=addtxt(sl,")\n");
-           if($5){
-             sl=addsl(sl,indents[indent]);
-             sl=addsl(sl,$5);
-           }
-           sl=addsl(sl,$6);
-           sl=addsl(sl,indents[indent]);
-           sl=addtxt(sl,"endcase\n");
-           $$=addsl(sl,$10);
+	printf("p_body6: CASE signal IS cases END CASE\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"case(");
+           // sl=addsl(sl,$3->sl); /* signal */
+           // sl=addtxt(sl,")\n");
+           // if($5){
+             // sl=addsl(sl,indents[indent]);
+             // sl=addsl(sl,$5);
+           // }
+           // sl=addsl(sl,$6);
+           // sl=addsl(sl,indents[indent]);
+           // sl=addtxt(sl,"endcase\n");
+           // $$=addsl(sl,$10);
          }
        | rem EXIT ';' p_body {
-         slist *sl;
-           sl=addsl($1,indents[indent]);
-           sl=addtxt(sl,"disable;  //VHD2VL: add block name here\n");
-           $$=addsl(sl,$4);
+	printf("p_body7: EXIT\n");
+         // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // sl=addtxt(sl,"disable;  //VHD2VL: add block name here\n");
+           // $$=addsl(sl,$4);
          }
        | rem NULLV ';' p_body {
-         slist *sl;
-           if($1){
-             sl=addsl($1,indents[indent]);
-             $$=addsl(sl,$4);
-           }else
-             $$=$4;
+	printf("p_body7: NULLV\n");
+         // slist *sl;
+           // if($1){
+             // sl=addsl($1,indents[indent]);
+             // $$=addsl(sl,$4);
+           // }else
+             // $$=$4;
          }
        ;
 
