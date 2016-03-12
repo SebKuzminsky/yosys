@@ -1303,6 +1303,7 @@ unindent : /* Empty */ {indent= indent > 0 ? indent - 1 : indent;}
 /* Declarative part of the architecture */
 a_decl    : {$$=NULL;}
           | a_decl SIGNAL s_list ':' type ';' rem {
+	printf("a_decl1\n");
             // sglist *sg;
             // slist *sl;
 // 
@@ -1326,6 +1327,7 @@ a_decl    : {$$=NULL;}
               // $$=addrem(sl,$7);
             }
           | a_decl SIGNAL s_list ':' type ':' '=' expr ';' rem {
+	printf("a_decl2\n");
             // sglist *sg;
             // slist *sl;
 // 
@@ -1351,6 +1353,7 @@ a_decl    : {$$=NULL;}
               // $$=addrem(sl,$10);
             }
           | a_decl CONSTANT NAME ':' type ':' '=' expr ';' rem {
+	printf("a_decl3\n");
             // slist * sl;
               // sl=addtxt($1,"parameter ");
               // sl=addtxt(sl,$3);
@@ -1360,6 +1363,7 @@ a_decl    : {$$=NULL;}
               // $$=addrem(sl,$10);
             }
           | a_decl TYPE NAME IS '(' s_list ')' ';' rem {
+	printf("a_decl4\n");
             // slist *sl, *sl2;
             // sglist *p;
             // int n,k;
@@ -1400,6 +1404,7 @@ a_decl    : {$$=NULL;}
               // type_list=p;
             }
           | a_decl TYPE NAME IS ARRAY '(' vec_range ')' OF type ';' rem {
+	printf("a_decl5\n");
             slist *sl=NULL;
             sglist *p;
               $$=addrem(sl,$12);
@@ -1413,6 +1418,7 @@ a_decl    : {$$=NULL;}
             }
 /*           1     2          3   4      5r1   6   7       8  9r2      10   11  12 13r3 14        15  16   17      18 19r4 */
           | a_decl COMPONENT NAME opt_is rem  opt_generic PORT nolist '(' rem portlist ')' ';' rem END COMPONENT oname ';' yeslist rem {
+	printf("a_decl6\n");
               $$=addsl($1,$20); /* a_decl, rem4 */
               free($3); /* NAME */
               free($10); /* rem2 */
