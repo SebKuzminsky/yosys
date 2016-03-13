@@ -64,6 +64,7 @@ namespace VHDL_FRONTEND {
         int port_counter;
         // std::map<std::string, AstNode*> attr_list;
         std::map<std::string, AstNode*> default_attr_list;
+        std::map<std::string, AstNode*> modules;
         // std::map<std::string, AstNode*> *albuf;
         std::vector<AstNode*> ast_stack;
         struct AstNode *astbuf1, *astbuf2, *astbuf3;
@@ -953,6 +954,7 @@ entity_name: ENTITY NAME {
 	ast_stack.push_back(current_ast_mod);
 	port_counter = 0;
 	current_ast_mod->str = $2;
+	modules[$NAME] = current_ast_mod;
 	delete $2;
 };
 
@@ -1284,15 +1286,12 @@ updown : DOWNTO {$$=-1;}
        ;
 
 /* Architecture */
-architecture : ARCHITECTURE NAME OF NAME IS rem a_decl
-               BEGN doindent a_body END opt_architecture oname ';' unindent {
-	printf("got architecture\n");
-               // slist *sl;
-                 // sl=addsl($6,$7);
-                 // sl=addtxt(sl,"\n");
-                 // $$=addsl(sl,$10);
-               }
-             ;
+architecture : ARCHITECTURE NAME OF NAME IS {
+		printf("got architecture, module=%s\n", $4);
+		current_ast_mod = modules[$4];
+	} rem a_decl BEGN doindent a_body END opt_architecture oname ';' unindent {
+		current_ast_mod = NULL;
+	};
 
 /* Extends indentation by one level */
 doindent : /* Empty */ {indent= indent < MAXINDENT ? indent + 1 : indent;}
