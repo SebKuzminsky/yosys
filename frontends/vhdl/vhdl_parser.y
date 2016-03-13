@@ -53,6 +53,7 @@
 #include "kernel/log.h"
 
 #include "frontends/vhdl/vhdl_frontend.h"
+#include "frontends/verilog/verilog_frontend.h"
 #include "def.h"
 
 USING_YOSYS_NAMESPACE
@@ -822,8 +823,10 @@ void print_type(struct vrange *vrange) {
 %type <n> trad
 %type <sl> rem  remlist entity
 %type <sl> portlist genlist architecture
-%type <sl> a_decl a_body p_decl oname
-%type <sl> map_list map_item mvalue sigvalue
+%type <sl> a_decl p_decl oname
+%type <ast> a_body
+%type <sl> map_list map_item mvalue
+%type <ast> sigvalue
 %type <sl> generic_map_list generic_map_item
 %type <sl> conf exprc sign_list p_body optname gen_optname
 %type <sl> edge
@@ -833,7 +836,7 @@ void print_type(struct vrange *vrange) {
 %type <n> dir delay
 %type <v> type vec_range
 %type <n> updown
-%type <e> expr
+%type <ast> expr
 %type <e> simple_expr
 %type <ast> signal
 %type <txt> opt_is opt_generic opt_entity opt_architecture opt_begin
@@ -1225,42 +1228,43 @@ type        : BIT {
 
 /* using expr instead of simple_expr here makes the grammar ambiguous (why?) */
 vec_range : simple_expr updown simple_expr {
-              $$=new_vrange(tVRANGE);
-              $$->nhi=$1->sl;
-              $$->nlo=$3->sl;
-              $$->sizeval = -1; /* undefined size */
-              /* calculate the width of this vrange */
-              if ($1->op == 'n' && $3->op == 'n') {
-                if ($2==-1) { /* (nhi:natural downto nlo:natural) */
-                  $$->sizeval = $1->value - $3->value + 1;
-                } else {      /* (nhi:natural to     nlo:natural) */
-                  $$->sizeval = $3->value - $1->value + 1;
-                }
-              } else {
-                /* make an expression to calculate the width of this vrange:
-                 * create an expression that calculates:
-                 *   size expr = (simple_expr1) - (simple_expr2) + 1
-                 */
-                expdata *size_expr1  = (expdata*)xmalloc(sizeof(expdata));
-                expdata *size_expr2  = (expdata*)xmalloc(sizeof(expdata));
-                expdata *diff12  = (expdata*)xmalloc(sizeof(expdata));
-                expdata *plusone = (expdata*)xmalloc(sizeof(expdata));
-                expdata *finalexpr = (expdata*)xmalloc(sizeof(expdata));
-                size_expr1->sl = addwrap("(",$1->sl,")");
-                size_expr2->sl = addwrap("(",$3->sl,")");
-                plusone->op='t';
-                plusone->sl=addtxt(NULL,"1");
-                if ($2==-1) {
-                  /* (simple_expr1 downto simple_expr1) */
-                  diff12 = addexpr(size_expr1,'-',"-",size_expr2);
-                } else {
-                  /* (simple_expr1   to   simple_expr1) */
-                  diff12 = addexpr(size_expr2,'-',"-",size_expr1);
-                }
-                finalexpr = addexpr(diff12,'+',"+",plusone);
-                finalexpr->sl = addwrap("(",finalexpr->sl,")");
-                $$->size_expr = finalexpr->sl;
-              }
+	printf("vec_range\n");
+              // $$=new_vrange(tVRANGE);
+              // $$->nhi=$1->sl;
+              // $$->nlo=$3->sl;
+              // $$->sizeval = -1; /* undefined size */
+              // /* calculate the width of this vrange */
+              // if ($1->op == 'n' && $3->op == 'n') {
+                // if ($2==-1) { /* (nhi:natural downto nlo:natural) */
+                  // $$->sizeval = $1->value - $3->value + 1;
+                // } else {      /* (nhi:natural to     nlo:natural) */
+                  // $$->sizeval = $3->value - $1->value + 1;
+                // }
+              // } else {
+                // /* make an expression to calculate the width of this vrange:
+                 // * create an expression that calculates:
+                 // *   size expr = (simple_expr1) - (simple_expr2) + 1
+                 // */
+                // expdata *size_expr1  = (expdata*)xmalloc(sizeof(expdata));
+                // expdata *size_expr2  = (expdata*)xmalloc(sizeof(expdata));
+                // expdata *diff12  = (expdata*)xmalloc(sizeof(expdata));
+                // expdata *plusone = (expdata*)xmalloc(sizeof(expdata));
+                // expdata *finalexpr = (expdata*)xmalloc(sizeof(expdata));
+                // size_expr1->sl = addwrap("(",$1->sl,")");
+                // size_expr2->sl = addwrap("(",$3->sl,")");
+                // plusone->op='t';
+                // plusone->sl=addtxt(NULL,"1");
+                // if ($2==-1) {
+                  // /* (simple_expr1 downto simple_expr1) */
+                  // diff12 = addexpr(size_expr1,'-',"-",size_expr2);
+                // } else {
+                  // /* (simple_expr1   to   simple_expr1) */
+                  // diff12 = addexpr(size_expr2,'-',"-",size_expr1);
+                // }
+                // finalexpr = addexpr(diff12,'+',"+",plusone);
+                // finalexpr->sl = addwrap("(",finalexpr->sl,")");
+                // $$->size_expr = finalexpr->sl;
+              // }
             }
           | simple_expr {
               $$=new_vrange(tSUBSCRIPT);
@@ -1476,10 +1480,15 @@ s_list : NAME rem {
            // free($3);
 };
 
-a_body : rem {$$=addind($1);}
-       /* 1   2     3    4  5   6     7         8     9 */
-       | rem signal '<' '=' rem norem sigvalue yesrem a_body {
-	printf("a_body1: signal(=%s) <= sigvalue\n", $signal->str.c_str());
+a_body : rem {
+		printf("a_body0: rem\n");
+	// $$=addind($1);
+	}
+       /* 1   2      3   4   5   6     7        8      9 */
+	| rem signal '<' '=' rem norem sigvalue yesrem a_body {
+		printf("a_body1: signal(=%s) <= sigvalue\n", $signal->str.c_str());
+		struct AstNode *assign = new AstNode(AST_ASSIGN, $signal, $sigvalue);
+		current_ast_mod->children.push_back(assign);
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"assign ");
@@ -1806,43 +1815,45 @@ with_list : with_item ';' {$$=$1;}
                 $$=addsl($1,$4);
             }
           | expr delay WHEN OTHERS ';' {
-            slist *sl;
-              sl=addtxt(indents[indent],"    default : ");
-              sl=addsl(sl,slwith);
-              sl=addtxt(sl," <= ");
-              if(delay && $2){
-                sl=addtxt(sl,"# ");
-                sl=addval(sl,$2);
-                sl=addtxt(sl," ");
-              }
-              if($1->op == 'c')
-                sl=addsl(sl,addwrap("{",$1->sl,"}"));
-              else
-                sl=addsl(sl,$1->sl);
-              free($1);
-              delay=1;
-              $$=addtxt(sl,";\n");
+	printf("with_list\n");
+            // slist *sl;
+              // sl=addtxt(indents[indent],"    default : ");
+              // sl=addsl(sl,slwith);
+              // sl=addtxt(sl," <= ");
+              // if(delay && $2){
+                // sl=addtxt(sl,"# ");
+                // sl=addval(sl,$2);
+                // sl=addtxt(sl," ");
+              // }
+              // if($1->op == 'c')
+                // sl=addsl(sl,addwrap("{",$1->sl,"}"));
+              // else
+                // sl=addsl(sl,$1->sl);
+              // free($1);
+              // delay=1;
+              // $$=addtxt(sl,";\n");
             }
 
 with_item : expr delay WHEN wlist {
-            slist *sl;
-              sl=addtxt(indents[indent],"    ");
-              sl=addsl(sl,$4);
-              sl=addtxt(sl," : ");
-              sl=addsl(sl,slwith);
-              sl=addtxt(sl," <= ");
-              if(delay && $2){
-                sl=addtxt(sl,"# ");
-                sl=addval(sl,$2);
-                sl=addtxt(sl," ");
-              }
-              if($1->op == 'c')
-                sl=addsl(sl,addwrap("{",$1->sl,"}"));
-              else
-                sl=addsl(sl,$1->sl);
-              free($1);
-              delay=1;
-              $$=addtxt(sl,";\n");
+	printf("with_item\n");
+            // slist *sl;
+              // sl=addtxt(indents[indent],"    ");
+              // sl=addsl(sl,$4);
+              // sl=addtxt(sl," : ");
+              // sl=addsl(sl,slwith);
+              // sl=addtxt(sl," <= ");
+              // if(delay && $2){
+                // sl=addtxt(sl,"# ");
+                // sl=addval(sl,$2);
+                // sl=addtxt(sl," ");
+              // }
+              // if($1->op == 'c')
+                // sl=addsl(sl,addwrap("{",$1->sl,"}"));
+              // else
+                // sl=addsl(sl,$1->sl);
+              // free($1);
+              // delay=1;
+              // $$=addtxt(sl,";\n");
             }
 
 p_decl : rem {$$=$1;}
@@ -2087,43 +2098,46 @@ sign_list : signal {
           ;
 
 sigvalue : expr delay ';' {
-           slist *sl;
-             if(delay && $2){
-               sl=addtxt(NULL,"# ");
-               sl=addval(sl,$2);
-               sl=addtxt(sl," ");
-             } else
-               sl=NULL;
-             if($1->op == 'c')
-               sl=addsl(sl,addwrap("{",$1->sl,"}"));
-             else
-               sl=addsl(sl,$1->sl);
-             free($1);
-             delay=1;
-             $$=sl;
-           }
-         | expr delay WHEN exprc ';' {
-             fprintf(stderr,"Warning on line %d: Can't translate 'expr delay WHEN exprc;' expressions\n",lineno);
-             $$=NULL;
-           }
-         | expr delay WHEN exprc ELSE nodelay sigvalue {
-           slist *sl;
-             sl=addtxt($4," ? ");
-             if($1->op == 'c')
-               sl=addsl(sl,addwrap("{",$1->sl,"}"));
-             else
-               sl=addsl(sl,$1->sl);
-             free($1);
-             sl=addtxt(sl," : ");
-             $$=addsl(sl,$7);
-           }
-         ;
+		printf("sigvalue1: expr delay\n");
+           // slist *sl;
+             // if(delay && $2){
+               // sl=addtxt(NULL,"# ");
+               // sl=addval(sl,$2);
+               // sl=addtxt(sl," ");
+             // } else
+               // sl=NULL;
+             // if($1->op == 'c')
+               // sl=addsl(sl,addwrap("{",$1->sl,"}"));
+             // else
+               // sl=addsl(sl,$1->sl);
+             // free($1);
+             // delay=1;
+             // $$=sl;
+	}
+	| expr delay WHEN exprc ';' {
+		printf("sigvalue2: expr delay WHEN exprc\n");
+             // fprintf(stderr,"Warning on line %d: Can't translate 'expr delay WHEN exprc;' expressions\n",lineno);
+             // $$=NULL;
+	}
+	| expr delay WHEN exprc ELSE nodelay sigvalue {
+		printf("sigvalue3: expr delay WHEN exprc ELSE nodelay sigvalue\n");
+           // slist *sl;
+             // sl=addtxt($4," ? ");
+             // if($1->op == 'c')
+               // sl=addsl(sl,addwrap("{",$1->sl,"}"));
+             // else
+               // sl=addsl(sl,$1->sl);
+             // free($1);
+             // sl=addtxt(sl," : ");
+             // $$=addsl(sl,$7);
+	};
 
 nodelay  : /* empty */ {delay=0;}
          ;
 
 delay    : /* empty */ {$$=0;}
          | AFTER NATURAL NAME {
+	 printf("got delay\n");
              set_timescale($3);
              $$=$2;
            }
@@ -2194,17 +2208,19 @@ generic_map_list : rem generic_map_item {
              $$=addsl(sl,$4);
            }
          | rem expr {  /* only allow a single un-named map item */
-             $$=addsl(NULL,$2->sl);
+		printf("generic_map_list\n");
+             // $$=addsl(NULL,$2->sl);
            }
          ;
 
 generic_map_item : NAME '=' '>' expr {
-           slist *sl;
-             sl=addtxt(NULL,".");
-             sl=addtxt(sl,$1);
-             sl=addtxt(sl,"(");
-             sl=addsl(sl,$4->sl);
-             $$=addtxt(sl,")");
+	printf("generic_map_item\n");
+           // slist *sl;
+             // sl=addtxt(NULL,".");
+             // sl=addtxt(sl,$1);
+             // sl=addtxt(sl,"(");
+             // sl=addsl(sl,$4->sl);
+             // $$=addtxt(sl,")");
            }
          ;
 
@@ -2275,114 +2291,143 @@ signal : NAME {
 
 /* Expressions */
 expr : signal {
-	printf("expr1: signal\n");
+		printf("expr1: signal\n");
          // expdata *e;
            // e=(expdata*)xmalloc(sizeof(expdata));
            // e->op='t'; /* Terminal symbol */
            // e->sl=$1->sl;
            // free($1);
            // $$=e;
-         }
-     | STRING {
-         expdata *e;
-           e=(expdata*)xmalloc(sizeof(expdata));
-           e->op='t'; /* Terminal symbol */
-           e->sl=addvec(NULL,$1);
-           $$=e;
-         }
-     | FLOAT {
-         expdata *e=(expdata*)xmalloc(sizeof(expdata));
-           e->op='t'; /* Terminal symbol */
-           e->sl=addtxt(NULL,$1);
-           $$=e;
-         }
-     | NATURAL {
-         expdata *e=(expdata*)xmalloc(sizeof(expdata));
-           e->op='t'; /* Terminal symbol */
-           e->sl=addval(NULL,$1);
-           $$=e;
-         }
-     | NATURAL BASED {  /* e.g. 16#55aa# */
+	} | STRING {
+		printf("expr2: STRING(=%s)\n", $STRING);
+		AstNode *constant = VERILOG_FRONTEND::const2ast($STRING, 0, true);
+		if (constant == NULL) {
+			log_error("Value conversion failed: `%s'\n", $STRING);
+		}
+		$$ = constant;
+
+         // expdata *e;
+           // e=(expdata*)xmalloc(sizeof(expdata));
+           // e->op='t'; /* Terminal symbol */
+           // e->sl=addvec(NULL,$1);
+           // $$=e;
+	} | FLOAT {
+		printf("expr3: FLOAT\n");
+         // expdata *e=(expdata*)xmalloc(sizeof(expdata));
+           // e->op='t'; /* Terminal symbol */
+           // e->sl=addtxt(NULL,$1);
+           // $$=e;
+	} | NATURAL {
+		printf("expr4: NATURAL\n");
+         // expdata *e=(expdata*)xmalloc(sizeof(expdata));
+           // e->op='t'; /* Terminal symbol */
+           // e->sl=addval(NULL,$1);
+           // $$=e;
+	} | NATURAL BASED {  /* e.g. 16#55aa# */
+		printf("expr5: NATURAL BASED\n");
          /* XXX unify this code with addvec_base */
-         expdata *e=(expdata*)xmalloc(sizeof(expdata));
-         char *natval = (char*)xmalloc(strlen($2)+34);
-           e->op='t'; /* Terminal symbol */
-           switch($1) {
-           case  2:
-             sprintf(natval, "'B%s",$2);
-             break;
-           case  8:
-             sprintf(natval, "'O%s",$2);
-             break;
-           case 10:
-             sprintf(natval, "'D%s",$2);
-             break;
-           case 16:
-             sprintf(natval, "'H%s",$2);
-             break;
-           default:
-             sprintf(natval,"%d#%s#",$1,$2);
-             fprintf(stderr,"Warning on line %d: Can't translate based number %s (only bases of 2, 8, 10, and 16 are translatable)\n",lineno,natval);
-           }
-           e->sl=addtxt(NULL,natval);
-           $$=e;
-         }
-     | NAME STRING {
-         expdata *e=(expdata*)xmalloc(sizeof(expdata));
-           e->op='t'; /* Terminal symbol */
-           e->sl=addvec_base(NULL,$1,$2);
-           $$=e;
-         }
-     | '(' OTHERS '=' '>' STRING ')' {
-         expdata *e;
-           e=(expdata*)xmalloc(sizeof(expdata));
-           e->op='o'; /* others */
-           e->sl=addothers(NULL,$5);
-           $$=e;
-         }
-     | expr '&' expr { /* Vector chaining */
-         slist *sl;
-           sl=addtxt($1->sl,",");
-           sl=addsl(sl,$3->sl);
-           free($3);
-           $1->op='c';
-           $1->sl=sl;
-           $$=$1;
-         }
-     | '-' expr %prec UMINUS {$$=addexpr(NULL,'m'," -",$2);}
-     | '+' expr %prec UPLUS {$$=addexpr(NULL,'p'," +",$2);}
-     | expr '+' expr {$$=addexpr($1,'+'," + ",$3);}
-     | expr '-' expr {$$=addexpr($1,'-'," - ",$3);}
-     | expr '*' expr {$$=addexpr($1,'*'," * ",$3);}
-     | expr '/' expr {$$=addexpr($1,'/'," / ",$3);}
-     | expr MOD expr {$$=addexpr($1,'%'," % ",$3);}
-     | NOT expr {$$=addexpr(NULL,'~'," ~",$2);}
-     | expr AND expr {$$=addexpr($1,'&'," & ",$3);}
-     | expr OR expr {$$=addexpr($1,'|'," | ",$3);}
-     | expr XOR expr {$$=addexpr($1,'^'," ^ ",$3);}
-     | expr XNOR expr {$$=addexpr(NULL,'~'," ~",addexpr($1,'^'," ^ ",$3));}
-     | BITVECT '(' expr ')' {
+         // expdata *e=(expdata*)xmalloc(sizeof(expdata));
+         // char *natval = (char*)xmalloc(strlen($2)+34);
+           // e->op='t'; /* Terminal symbol */
+           // switch($1) {
+           // case  2:
+             // sprintf(natval, "'B%s",$2);
+             // break;
+           // case  8:
+             // sprintf(natval, "'O%s",$2);
+             // break;
+           // case 10:
+             // sprintf(natval, "'D%s",$2);
+             // break;
+           // case 16:
+             // sprintf(natval, "'H%s",$2);
+             // break;
+           // default:
+             // sprintf(natval,"%d#%s#",$1,$2);
+             // fprintf(stderr,"Warning on line %d: Can't translate based number %s (only bases of 2, 8, 10, and 16 are translatable)\n",lineno,natval);
+           // }
+           // e->sl=addtxt(NULL,natval);
+           // $$=e;
+	} | NAME STRING {
+		printf("expr6: NAME STRING\n");
+         // expdata *e=(expdata*)xmalloc(sizeof(expdata));
+           // e->op='t'; /* Terminal symbol */
+           // e->sl=addvec_base(NULL,$1,$2);
+           // $$=e;
+	} | '(' OTHERS '=' '>' STRING ')' {
+		printf("expr7: (OTHERS => STRING)\n");
+         // expdata *e;
+           // e=(expdata*)xmalloc(sizeof(expdata));
+           // e->op='o'; /* others */
+           // e->sl=addothers(NULL,$5);
+           // $$=e;
+	} | expr '&' expr { /* Vector chaining */
+		printf("expr8: expr & expr\n");
+         // slist *sl;
+           // sl=addtxt($1->sl,",");
+           // sl=addsl(sl,$3->sl);
+           // free($3);
+           // $1->op='c';
+           // $1->sl=sl;
+           // $$=$1;
+	} | '-' expr %prec UMINUS {
+		printf("expr9\n");
+		// $$=addexpr(NULL,'m'," -",$2);
+	} | '+' expr %prec UPLUS {
+		printf("expr10\n");
+		// $$=addexpr(NULL,'p'," +",$2);
+	} | expr '+' expr {
+		printf("expr11\n");
+		// $$=addexpr($1,'+'," + ",$3);
+	} | expr '-' expr {
+		printf("expr12\n");
+		// $$=addexpr($1,'-'," - ",$3);
+	} | expr '*' expr {
+		printf("expr13\n");
+		// $$=addexpr($1,'*'," * ",$3);
+	} | expr '/' expr {
+		printf("expr14\n");
+		// $$=addexpr($1,'/'," / ",$3);
+	} | expr MOD expr {
+		printf("expr15\n");
+		// $$=addexpr($1,'%'," % ",$3);
+	} | NOT expr {
+		printf("expr16\n");
+		// $$=addexpr(NULL,'~'," ~",$2);
+	} | expr AND expr {
+		printf("expr17\n");
+		// $$=addexpr($1,'&'," & ",$3);
+	} | expr OR expr {
+		printf("expr18\n");
+		// $$=addexpr($1,'|'," | ",$3);
+	} | expr XOR expr {
+		printf("expr19\n");
+		// $$=addexpr($1,'^'," ^ ",$3);
+	} | expr XNOR expr {
+		printf("expr20\n");
+		// $$=addexpr(NULL,'~'," ~",addexpr($1,'^'," ^ ",$3));
+	} | BITVECT '(' expr ')' {
+		printf("expr21\n");
        /* single argument type conversion function e.g. std_ulogic_vector(x) */
-       expdata *e;
-       e=(expdata*)xmalloc(sizeof(expdata));
-       if ($3->op == 'c') {
-         e->sl=addwrap("{",$3->sl,"}");
-       } else {
-         e->sl=addwrap("(",$3->sl,")");
-       }
-       $$=e;
-      }
-     | CONVFUNC_2 '(' expr ',' NATURAL ')' {
+       // expdata *e;
+       // e=(expdata*)xmalloc(sizeof(expdata));
+       // if ($3->op == 'c') {
+         // e->sl=addwrap("{",$3->sl,"}");
+       // } else {
+         // e->sl=addwrap("(",$3->sl,")");
+       // }
+       // $$=e;
+	} | CONVFUNC_2 '(' expr ',' NATURAL ')' {
+		printf("expr22\n");
        /* two argument type conversion e.g. to_unsigned(x, 3) */
-       $$ = addnest($3);
-      }
-     | CONVFUNC_2 '(' expr ',' NAME ')' {
-       $$ = addnest($3);
-      }
-     | '(' expr ')' {
-       $$ = addnest($2);
-      }
-     ;
+       // $$ = addnest($3);
+	} | CONVFUNC_2 '(' expr ',' NAME ')' {
+		printf("expr23\n");
+       // $$ = addnest($3);
+	} | '(' expr ')' {
+		printf("expr24\n");
+		// $$ = addnest($2);
+	};
 
 /* Conditional expressions */
 exprc : conf { $$=$1; }
@@ -2408,106 +2453,112 @@ exprc : conf { $$=$1; }
 
 /* Comparisons */
 conf : expr '=' expr %prec EQUAL {
-       slist *sl;
-         if($1->op == 'c')
-           sl=addwrap("{",$1->sl,"} == ");
-         else if($1->op != 't')
-           sl=addwrap("(",$1->sl,") == ");
-         else
-           sl=addtxt($1->sl," == ");
-         if($3->op == 'c')
-           $$=addsl(sl,addwrap("{",$3->sl,"}"));
-         else if($3->op != 't')
-           $$=addsl(sl,addwrap("(",$3->sl,")"));
-         else
-           $$=addsl(sl,$3->sl);
-         free($1);
-         free($3);
+	printf("conf1\n");
+       // slist *sl;
+         // if($1->op == 'c')
+           // sl=addwrap("{",$1->sl,"} == ");
+         // else if($1->op != 't')
+           // sl=addwrap("(",$1->sl,") == ");
+         // else
+           // sl=addtxt($1->sl," == ");
+         // if($3->op == 'c')
+           // $$=addsl(sl,addwrap("{",$3->sl,"}"));
+         // else if($3->op != 't')
+           // $$=addsl(sl,addwrap("(",$3->sl,")"));
+         // else
+           // $$=addsl(sl,$3->sl);
+         // free($1);
+         // free($3);
        }
      | expr '>' expr {
-       slist *sl;
-         if($1->op == 'c')
-           sl=addwrap("{",$1->sl,"} > ");
-         else if($1->op != 't')
-           sl=addwrap("(",$1->sl,") > ");
-         else
-           sl=addtxt($1->sl," > ");
-         if($3->op == 'c')
-           $$=addsl(sl,addwrap("{",$3->sl,"}"));
-         else if($3->op != 't')
-           $$=addsl(sl,addwrap("(",$3->sl,")"));
-         else
-           $$=addsl(sl,$3->sl);
-         free($1);
-         free($3);
+	printf("conf2\n");
+       // slist *sl;
+         // if($1->op == 'c')
+           // sl=addwrap("{",$1->sl,"} > ");
+         // else if($1->op != 't')
+           // sl=addwrap("(",$1->sl,") > ");
+         // else
+           // sl=addtxt($1->sl," > ");
+         // if($3->op == 'c')
+           // $$=addsl(sl,addwrap("{",$3->sl,"}"));
+         // else if($3->op != 't')
+           // $$=addsl(sl,addwrap("(",$3->sl,")"));
+         // else
+           // $$=addsl(sl,$3->sl);
+         // free($1);
+         // free($3);
        }
      | expr '>' '=' expr %prec BIGEQ {
-       slist *sl;
-         if($1->op == 'c')
-           sl=addwrap("{",$1->sl,"} >= ");
-         else if($1->op != 't')
-           sl=addwrap("(",$1->sl,") >= ");
-         else
-           sl=addtxt($1->sl," >= ");
-         if($4->op == 'c')
-           $$=addsl(sl,addwrap("{",$4->sl,"}"));
-         else if($4->op != 't')
-           $$=addsl(sl,addwrap("(",$4->sl,")"));
-         else
-           $$=addsl(sl,$4->sl);
-         free($1);
-         free($4);
+	printf("conf3\n");
+       // slist *sl;
+         // if($1->op == 'c')
+           // sl=addwrap("{",$1->sl,"} >= ");
+         // else if($1->op != 't')
+           // sl=addwrap("(",$1->sl,") >= ");
+         // else
+           // sl=addtxt($1->sl," >= ");
+         // if($4->op == 'c')
+           // $$=addsl(sl,addwrap("{",$4->sl,"}"));
+         // else if($4->op != 't')
+           // $$=addsl(sl,addwrap("(",$4->sl,")"));
+         // else
+           // $$=addsl(sl,$4->sl);
+         // free($1);
+         // free($4);
        }
      | expr '<' expr {
-       slist *sl;
-         if($1->op == 'c')
-           sl=addwrap("{",$1->sl,"} < ");
-         else if($1->op != 't')
-           sl=addwrap("(",$1->sl,") < ");
-         else
-           sl=addtxt($1->sl," < ");
-         if($3->op == 'c')
-           $$=addsl(sl,addwrap("{",$3->sl,"}"));
-         else if($3->op != 't')
-           $$=addsl(sl,addwrap("(",$3->sl,")"));
-         else
-           $$=addsl(sl,$3->sl);
-         free($1);
-         free($3);
+	printf("conf4\n");
+       // slist *sl;
+         // if($1->op == 'c')
+           // sl=addwrap("{",$1->sl,"} < ");
+         // else if($1->op != 't')
+           // sl=addwrap("(",$1->sl,") < ");
+         // else
+           // sl=addtxt($1->sl," < ");
+         // if($3->op == 'c')
+           // $$=addsl(sl,addwrap("{",$3->sl,"}"));
+         // else if($3->op != 't')
+           // $$=addsl(sl,addwrap("(",$3->sl,")"));
+         // else
+           // $$=addsl(sl,$3->sl);
+         // free($1);
+         // free($3);
        }
      | expr '<' '=' expr %prec LESSEQ {
-       slist *sl;
-         if($1->op == 'c')
-           sl=addwrap("{",$1->sl,"} <= ");
-         else if($1->op != 't')
-           sl=addwrap("(",$1->sl,") <= ");
-         else
-           sl=addtxt($1->sl," <= ");
-         if($4->op == 'c')
-           $$=addsl(sl,addwrap("{",$4->sl,"}"));
-         else if($4->op != 't')
-           $$=addsl(sl,addwrap("(",$4->sl,")"));
-         else
-           $$=addsl(sl,$4->sl);
-         free($1);
-         free($4);
+	printf("conf5\n");
+       // slist *sl;
+         // if($1->op == 'c')
+           // sl=addwrap("{",$1->sl,"} <= ");
+         // else if($1->op != 't')
+           // sl=addwrap("(",$1->sl,") <= ");
+         // else
+           // sl=addtxt($1->sl," <= ");
+         // if($4->op == 'c')
+           // $$=addsl(sl,addwrap("{",$4->sl,"}"));
+         // else if($4->op != 't')
+           // $$=addsl(sl,addwrap("(",$4->sl,")"));
+         // else
+           // $$=addsl(sl,$4->sl);
+         // free($1);
+         // free($4);
        }
      | expr '/' '=' expr %prec NOTEQ {
-       slist *sl;
-         if($1->op == 'c')
-           sl=addwrap("{",$1->sl,"} != ");
-         else if($1->op != 't')
-           sl=addwrap("(",$1->sl,") != ");
-         else
-           sl=addtxt($1->sl," != ");
-         if($4->op == 'c')
-           $$=addsl(sl,addwrap("{",$4->sl,"}"));
-         else if($4->op != 't')
-           $$=addsl(sl,addwrap("(",$4->sl,")"));
-         else
-           $$=addsl(sl,$4->sl);
-         free($1);
-         free($4);
+	printf("conf6\n");
+       // slist *sl;
+         // if($1->op == 'c')
+           // sl=addwrap("{",$1->sl,"} != ");
+         // else if($1->op != 't')
+           // sl=addwrap("(",$1->sl,") != ");
+         // else
+           // sl=addtxt($1->sl," != ");
+         // if($4->op == 'c')
+           // $$=addsl(sl,addwrap("{",$4->sl,"}"));
+         // else if($4->op != 't')
+           // $$=addsl(sl,addwrap("(",$4->sl,")"));
+         // else
+           // $$=addsl(sl,$4->sl);
+         // free($1);
+         // free($4);
        }
      ;
 
