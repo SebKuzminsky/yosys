@@ -26,6 +26,7 @@
 %option noyywrap
 %option prefix="frontend_vhdl_yy"
 %option debug
+%option yylineno
 
 %x SYNOPSYS_TRANSLATE_OFF
 
