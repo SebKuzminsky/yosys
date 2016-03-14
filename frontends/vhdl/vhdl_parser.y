@@ -757,6 +757,9 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 			break;
 		case DIR_NONE:
 			break;
+		default:
+			delete wire;
+			frontend_vhdl_yyerror("unhandled direction %d\n", (int)dir);
 	}
 	// FIXME: handle ranges here
 	current_ast_mod->children.push_back(wire);
