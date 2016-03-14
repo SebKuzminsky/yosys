@@ -792,6 +792,23 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 }
 
 
+AstNode *expr_to_ast(expdata *expr) {
+	struct AstNode *node = NULL;
+
+	if (expr->op == EXPDATA_TYPE_BITS) {
+		// bit vector
+		node = Yosys::AST::AstNode::mkconst_bits(expr->bits, false);
+		if (node == NULL) {
+			frontend_vhdl_yyerror("failed to make AST node from bit string\n");
+		}
+	} else {
+		frontend_vhdl_yyerror("unhandled expression\n");
+	}
+
+	return node;
+}
+
+
 void print_signal_list(std::map<std::string, int> *signal_list) {
 	printf("signal list %p:\n", signal_list);
 	for (auto &i: *signal_list) {
@@ -819,22 +836,24 @@ void print_type(struct vrange *vrange) {
 	printf("\n");
 }
 
-AstNode *vhdl_const2ast(std::string s) {
-	std::vector<RTLIL::State> bits;
-
+void expr_set_bits(expdata *e, std::string s) {
+	printf("setting bits of expdata %p to %s\n", e, s.c_str());
 	if (s.length() != 1) {
-		return NULL;
+		frontend_vhdl_yyerror("invalid string constant `%s'.", s.c_str());
+		return;
 	}
+
+	e->op = EXPDATA_TYPE_BITS;
+	// e->bits.clear();
 
 	if (s[0] == '0') {
-		bits.push_back(RTLIL::S0);
+		e->bits.push_back(RTLIL::S0);
 	} else if (s[0] == '1') {
-		bits.push_back(RTLIL::S1);
+		e->bits.push_back(RTLIL::S1);
 	} else {
-		return NULL;
+		frontend_vhdl_yyerror("invalid string constant `%s'.", s.c_str());
+		return;
 	}
-
-	return Yosys::AST::AstNode::mkconst_bits(bits, false);
 }
 
 %}
@@ -885,7 +904,7 @@ AstNode *vhdl_const2ast(std::string s) {
 %type <n> dir delay
 %type <v> type vec_range
 %type <n> updown
-%type <ast> expr
+%type <e> expr
 %type <e> simple_expr
 %type <ast> signal
 %type <txt> opt_is opt_generic opt_entity opt_architecture opt_begin
@@ -1380,9 +1399,14 @@ a_decl    : {$$=NULL;}
           | a_decl SIGNAL s_list ':' type ':' '=' expr ';' rem {
 	for (auto &i: *$s_list) {
 		add_wire(i.first, 0, DIR_NONE, $type);
+
 		struct AstNode *identifier = new AstNode(AST_IDENTIFIER);
 		identifier->str = i.first;
-		struct AstNode *assign = new AstNode(AST_ASSIGN, identifier, $expr);
+
+		struct AstNode *value = expr_to_ast($expr);
+
+		struct AstNode *assign = new AstNode(AST_ASSIGN, identifier, value);
+
 		current_ast_mod->children.push_back(assign);
 	}
 
@@ -2354,18 +2378,10 @@ expr : signal {
            // free($1);
            // $$=e;
 	} | STRING {
-		printf("expr2: STRING(=%s)\n", $STRING);
-		AstNode *constant = vhdl_const2ast($STRING);
-		if (constant == NULL) {
-			frontend_vhdl_yyerror("failed to parse constant '%s'\n", $STRING);
-		}
-		$$ = constant;
-
-         // expdata *e;
-           // e=(expdata*)xmalloc(sizeof(expdata));
-           // e->op='t'; /* Terminal symbol */
-           // e->sl=addvec(NULL,$1);
-           // $$=e;
+         expdata *e;
+           e=(expdata*)xmalloc(sizeof(expdata));
+	   expr_set_bits(e, $STRING);
+           $$=e;
 	} | FLOAT {
 		printf("expr3: FLOAT\n");
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
@@ -2629,8 +2645,7 @@ simple_expr : signal {
      | STRING {
          expdata *e;
          e=(expdata*)xmalloc(sizeof(expdata));
-         e->op='t'; /* Terminal symbol */
-         e->sl=addvec(NULL,$1);
+	 expr_set_bits(e, $STRING);
          $$=e;
       }
      | NATURAL {
