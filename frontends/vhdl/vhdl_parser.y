@@ -1272,42 +1272,42 @@ type        : BIT {
 /* using expr instead of simple_expr here makes the grammar ambiguous (why?) */
 vec_range : simple_expr updown simple_expr {
 	printf("vec_range\n");
-              // $$=new_vrange(tVRANGE);
-              // $$->nhi=$1->sl;
-              // $$->nlo=$3->sl;
-              // $$->sizeval = -1; /* undefined size */
-              // /* calculate the width of this vrange */
-              // if ($1->op == 'n' && $3->op == 'n') {
-                // if ($2==-1) { /* (nhi:natural downto nlo:natural) */
-                  // $$->sizeval = $1->value - $3->value + 1;
-                // } else {      /* (nhi:natural to     nlo:natural) */
-                  // $$->sizeval = $3->value - $1->value + 1;
-                // }
-              // } else {
-                // /* make an expression to calculate the width of this vrange:
-                 // * create an expression that calculates:
-                 // *   size expr = (simple_expr1) - (simple_expr2) + 1
-                 // */
-                // expdata *size_expr1  = (expdata*)xmalloc(sizeof(expdata));
-                // expdata *size_expr2  = (expdata*)xmalloc(sizeof(expdata));
-                // expdata *diff12  = (expdata*)xmalloc(sizeof(expdata));
-                // expdata *plusone = (expdata*)xmalloc(sizeof(expdata));
-                // expdata *finalexpr = (expdata*)xmalloc(sizeof(expdata));
-                // size_expr1->sl = addwrap("(",$1->sl,")");
-                // size_expr2->sl = addwrap("(",$3->sl,")");
-                // plusone->op='t';
-                // plusone->sl=addtxt(NULL,"1");
-                // if ($2==-1) {
-                  // /* (simple_expr1 downto simple_expr1) */
-                  // diff12 = addexpr(size_expr1,'-',"-",size_expr2);
-                // } else {
-                  // /* (simple_expr1   to   simple_expr1) */
-                  // diff12 = addexpr(size_expr2,'-',"-",size_expr1);
-                // }
-                // finalexpr = addexpr(diff12,'+',"+",plusone);
-                // finalexpr->sl = addwrap("(",finalexpr->sl,")");
-                // $$->size_expr = finalexpr->sl;
-              // }
+              $$=new_vrange(tVRANGE);
+              $$->nhi=$1->sl;
+              $$->nlo=$3->sl;
+              $$->sizeval = -1; /* undefined size */
+              /* calculate the width of this vrange */
+              if ($1->op == 'n' && $3->op == 'n') {
+                if ($2==-1) { /* (nhi:natural downto nlo:natural) */
+                  $$->sizeval = $1->value - $3->value + 1;
+                } else {      /* (nhi:natural to     nlo:natural) */
+                  $$->sizeval = $3->value - $1->value + 1;
+                }
+              } else {
+                /* make an expression to calculate the width of this vrange:
+                 * create an expression that calculates:
+                 *   size expr = (simple_expr1) - (simple_expr2) + 1
+                 */
+                expdata *size_expr1  = (expdata*)xmalloc(sizeof(expdata));
+                expdata *size_expr2  = (expdata*)xmalloc(sizeof(expdata));
+                expdata *diff12  = (expdata*)xmalloc(sizeof(expdata));
+                expdata *plusone = (expdata*)xmalloc(sizeof(expdata));
+                expdata *finalexpr = (expdata*)xmalloc(sizeof(expdata));
+                size_expr1->sl = addwrap("(",$1->sl,")");
+                size_expr2->sl = addwrap("(",$3->sl,")");
+                plusone->op='t';
+                plusone->sl=addtxt(NULL,"1");
+                if ($2==-1) {
+                  /* (simple_expr1 downto simple_expr1) */
+                  diff12 = addexpr(size_expr1,'-',"-",size_expr2);
+                } else {
+                  /* (simple_expr1   to   simple_expr1) */
+                  diff12 = addexpr(size_expr2,'-',"-",size_expr1);
+                }
+                finalexpr = addexpr(diff12,'+',"+",plusone);
+                finalexpr->sl = addwrap("(",finalexpr->sl,")");
+                $$->size_expr = finalexpr->sl;
+              }
             }
           | simple_expr {
               $$=new_vrange(tSUBSCRIPT);
