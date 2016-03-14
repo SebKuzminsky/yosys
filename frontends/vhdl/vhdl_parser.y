@@ -761,7 +761,28 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 			delete wire;
 			frontend_vhdl_yyerror("unhandled direction %d\n", (int)dir);
 	}
-	// FIXME: handle ranges here
+
+	switch (type->vtype) {
+		case tSCALAR:
+			break;
+
+		case tVRANGE: {
+			log_assert(type->nhi->type == 2);
+			log_assert(type->nlo->type == 2);
+			AstNode *high = AstNode::mkconst_int(type->nhi->data.val, false, 32);
+			AstNode *low = AstNode::mkconst_int(type->nlo->data.val, false, 32);
+			AstNode *range = new AstNode(AST_RANGE, high, low);
+			wire->children.push_back(range);
+			break;
+		}
+
+		// case tSUBSCRIPT:
+		default:
+			delete wire;
+			frontend_vhdl_yyerror("unhandled type\n");
+			// not reached
+	}
+
 	current_ast_mod->children.push_back(wire);
 }
 
