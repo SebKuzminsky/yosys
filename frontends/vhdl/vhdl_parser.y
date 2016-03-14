@@ -1100,6 +1100,7 @@ entity:
 
           /* 1     2  3     4   5  6    7 */
 genlist  : s_list ':' type ':' '=' expr rem {
+	printf("genlist1\n");
           // if(dolist){
             // slist *sl;
             // sglist *p;
@@ -1121,6 +1122,7 @@ genlist  : s_list ':' type ':' '=' expr rem {
          }
           /* 1     2  3     4   5  6     7  8    9 */
          | s_list ':' type ':' '=' expr ';' rem genlist {
+	printf("genlist2\n");
           // if(dolist){
             // slist *sl;
             // sglist *p;
@@ -1397,6 +1399,7 @@ a_decl    : {$$=NULL;}
               // $$=addrem(sl,$7);
             }
           | a_decl SIGNAL s_list ':' type ':' '=' expr ';' rem {
+	printf("a_decl2\n");
 	for (auto &i: *$s_list) {
 		add_wire(i.first, 0, DIR_NONE, $type);
 
@@ -1935,8 +1938,11 @@ with_item : expr delay WHEN wlist {
               // $$=addtxt(sl,";\n");
             }
 
-p_decl : rem {$$=$1;}
-       | rem VARIABLE s_list ':' type ';' p_decl {
+p_decl : rem {
+		printf("p_decl1\n");
+		$$=$1;
+	} | rem VARIABLE s_list ':' type ';' p_decl {
+		printf("p_decl2\n");
          // slist *sl;
          // sglist *sg, *p;
            // sl=addtxt($1,"    reg");
@@ -1957,6 +1963,7 @@ p_decl : rem {$$=$1;}
            // $$=addsl(sl,$7);
          }
        | rem VARIABLE s_list ':' type ':' '=' expr ';' p_decl {
+		printf("p_decl3\n");
          // slist *sl;
          // sglist *sg, *p;
            // sl=addtxt($1,"    reg");
@@ -2378,6 +2385,7 @@ expr : signal {
            // free($1);
            // $$=e;
 	} | STRING {
+		printf("expr2: STRING\n");
          expdata *e;
            e=(expdata*)xmalloc(sizeof(expdata));
 	   expr_set_bits(e, $STRING);
