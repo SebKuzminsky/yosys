@@ -64,6 +64,9 @@ typedef struct slval {
 
 typedef enum {
 	EXPDATA_TYPE_NONE = 0,
+	EXPDATA_TYPE_BITS,
+	EXPDATA_TYPE_INT,
+	EXPDATA_TYPE_FLOAT,
 
 	EXPDATA_TYPE_TILDE = '~',
 	EXPDATA_TYPE_ADD = '+',
@@ -87,6 +90,7 @@ typedef struct expdata {
 	expdata_type_t op;
   int value;  /* only set for simple_expr */
   slist *sl;
+	std::vector<Yosys::RTLIL::State> bits;
 } expdata;
 
 typedef struct sglist {
