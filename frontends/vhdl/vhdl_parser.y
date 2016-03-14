@@ -80,7 +80,8 @@ namespace VHDL_FRONTEND {
     typedef enum {
         DIR_IN = 0,
         DIR_OUT = 1,
-        DIR_INOUT = 2
+	DIR_INOUT = 2,
+	DIR_NONE
     } port_dir_t;
 
     const char *port_dir_str[] = { "IN", "OUT", "INOUT" };
@@ -753,6 +754,8 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 		case DIR_INOUT:
 			node->is_input = true;
 			node->is_output = true;
+			break;
+		case DIR_NONE:
 			break;
 	}
 	// FIXME: handle ranges here
