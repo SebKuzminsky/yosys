@@ -62,8 +62,29 @@ typedef struct slval {
   vrange *range; /* Signal size */
 } slval;
 
+typedef enum {
+	EXPDATA_TYPE_NONE = 0,
+
+	EXPDATA_TYPE_TILDE = '~',
+	EXPDATA_TYPE_ADD = '+',
+	EXPDATA_TYPE_SUBTRACT = '-',
+	EXPDATA_TYPE_MULT = '*',
+	EXPDATA_TYPE_DIV = '/',
+	EXPDATA_TYPE_MOD = '%',
+	EXPDATA_TYPE_AND = '&',
+	EXPDATA_TYPE_CARET = '^',
+	EXPDATA_TYPE_OR = '|',
+
+	EXPDATA_TYPE_C = 'c',
+	EXPDATA_TYPE_M = 'm',
+	EXPDATA_TYPE_N = 'n',
+	EXPDATA_TYPE_OTHERS = 'o',
+	EXPDATA_TYPE_P = 'p',
+	EXPDATA_TYPE_TERMINAL = 't',
+} expdata_type_t;
+
 typedef struct expdata {
-  char op;
+	expdata_type_t op;
   int value;  /* only set for simple_expr */
   slist *sl;
 } expdata;

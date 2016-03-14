@@ -363,7 +363,7 @@ expdata *addnest(struct expdata *inner)
 {
   expdata *e;
   e=(expdata*)xmalloc(sizeof(expdata));
-  if (inner->op == 'c') {
+  if (inner->op == EXPDATA_TYPE_C) {
     e->sl=addwrap("{",inner->sl,"}");
   } else {
     e->sl=addwrap("(",inner->sl,")");
@@ -410,31 +410,36 @@ const char *inout_string(int type)
 
 int prec(int op){
   switch(op){
-  case 'o': /* others */
+  case EXPDATA_TYPE_OTHERS: /* others */
     return 9;
     break;
-  case 't':case 'n':
+  case EXPDATA_TYPE_TERMINAL:
+  case EXPDATA_TYPE_N:
     return 8;
     break;
-  case '~':
+  case EXPDATA_TYPE_TILDE:
     return 7;
     break;
-  case 'p': case 'm':
+  case EXPDATA_TYPE_P:
+  case EXPDATA_TYPE_M:
     return 6;
     break;
-  case '*': case '/': case '%':
+  case EXPDATA_TYPE_MULT:
+  case EXPDATA_TYPE_DIV:
+  case EXPDATA_TYPE_MOD:
     return 5;
     break;
-  case '+': case '-':
+  case EXPDATA_TYPE_ADD:
+  case EXPDATA_TYPE_SUBTRACT:
     return 4;
     break;
-  case '&':
+  case EXPDATA_TYPE_AND:
     return 3;
     break;
-  case '^':
+  case EXPDATA_TYPE_CARET:
     return 2;
     break;
-  case '|':
+  case EXPDATA_TYPE_OR:
     return 1;
     break;
    default:
@@ -447,14 +452,14 @@ expdata *addexpr(expdata *expr1,int op,const char* opstr,expdata *expr2){
 slist *sl1,*sl2;
   if(expr1 == NULL)
     sl1=NULL;
-  else if(expr1->op == 'c')
+  else if(expr1->op == EXPDATA_TYPE_C)
     sl1=addwrap("{",expr1->sl,"}");
   else if(prec(expr1->op) < prec(op))
     sl1=addwrap("(",expr1->sl,")");
   else
     sl1=expr1->sl;
 
-  if(expr2->op == 'c')
+  if(expr2->op == EXPDATA_TYPE_C)
     sl2=addwrap("{",expr2->sl,"}");
   else if(prec(expr2->op) < prec(op))
     sl2=addwrap("(",expr2->sl,")");
@@ -466,7 +471,7 @@ slist *sl1,*sl2;
   else
     free(expr2);
 
-  expr1->op=op;
+  expr1->op = (expdata_type_t)op;
   sl1=addtxt(sl1,opstr);
   sl1=addsl(sl1,sl2);
   expr1->sl=sl1;
@@ -1277,7 +1282,7 @@ vec_range : simple_expr updown simple_expr {
               $$->nlo=$3->sl;
               $$->sizeval = -1; /* undefined size */
               /* calculate the width of this vrange */
-              if ($1->op == 'n' && $3->op == 'n') {
+              if ($1->op == EXPDATA_TYPE_N && $3->op == EXPDATA_TYPE_N) {
                 if ($2==-1) { /* (nhi:natural downto nlo:natural) */
                   $$->sizeval = $1->value - $3->value + 1;
                 } else {      /* (nhi:natural to     nlo:natural) */
@@ -1295,7 +1300,7 @@ vec_range : simple_expr updown simple_expr {
                 expdata *finalexpr = (expdata*)xmalloc(sizeof(expdata));
                 size_expr1->sl = addwrap("(",$1->sl,")");
                 size_expr2->sl = addwrap("(",$3->sl,")");
-                plusone->op='t';
+                plusone->op=EXPDATA_TYPE_TERMINAL;
                 plusone->sl=addtxt(NULL,"1");
                 if ($2==-1) {
                   /* (simple_expr1 downto simple_expr1) */
@@ -2631,7 +2636,7 @@ simple_expr : signal {
      | NATURAL {
          expdata *e;
          e=(expdata*)xmalloc(sizeof(expdata));
-         e->op='n'; /* natural */
+         e->op=EXPDATA_TYPE_N;
          e->value=$1;
          e->sl=addval(NULL,$1);
          $$=e;
