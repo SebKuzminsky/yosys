@@ -4,10 +4,12 @@ GENFILES += frontends/vhdl/vhdl_parser.tab.h
 GENFILES += frontends/vhdl/vhdl_parser.output
 GENFILES += frontends/vhdl/vhdl_lexer.cc
 
-frontends/vhdl/vhdl_parser.tab.cc frontends/vhdl/vhdl_parser.tab.h: frontends/vhdl/vhdl_parser.y frontends/vhdl/def.h
+frontends/vhdl/vhdl_parser.tab.cc: frontends/vhdl/vhdl_parser.y frontends/vhdl/def.h
 	$(Q) mkdir -p $(dir $@)
 	$(P) $(BISON) -d -r all -b frontends/vhdl/vhdl_parser $<
 	$(Q) mv frontends/vhdl/vhdl_parser.tab.c frontends/vhdl/vhdl_parser.tab.cc
+
+frontends/vhdl/vhdl_parser.tab.h: frontends/vhdl/vhdl_parser.tab.cc
 
 frontends/vhdl/vhdl_lexer.cc: frontends/vhdl/vhdl_lexer.l frontends/vhdl/def.h frontends/vhdl/vhdl_parser.tab.h
 	$(P) flex -d -i -o $@ $<
