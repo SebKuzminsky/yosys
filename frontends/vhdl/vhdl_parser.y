@@ -897,7 +897,7 @@ void expr_set_bits(expdata *e, std::string s) {
 %type <sl> a_decl p_decl oname
 %type <ast> a_body
 %type <sl> map_list map_item mvalue
-%type <ast> sigvalue
+%type <e> sigvalue
 %type <sl> generic_map_list generic_map_item
 %type <sl> conf exprc sign_list p_body optname gen_optname
 %type <sl> edge
@@ -1572,7 +1572,7 @@ a_body : rem {
        /* 1   2      3   4   5   6     7        8      9 */
 	| rem signal '<' '=' rem norem sigvalue yesrem a_body {
 		printf("a_body1: signal(=%s) <= sigvalue\n", $signal->str.c_str());
-		struct AstNode *assign = new AstNode(AST_ASSIGN, $signal, $sigvalue);
+		struct AstNode *assign = new AstNode(AST_ASSIGN, $signal, expr_to_ast($sigvalue));
 		current_ast_mod->children.push_back(assign);
          // slist *sl;
            // sl=addsl($1,indents[indent]);
@@ -2188,6 +2188,7 @@ sign_list : signal {
 
 sigvalue : expr delay ';' {
 		printf("sigvalue1: expr delay\n");
+		$$ = $expr;
            // slist *sl;
              // if(delay && $2){
                // sl=addtxt(NULL,"# ");
