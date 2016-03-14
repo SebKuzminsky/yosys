@@ -1133,11 +1133,10 @@ genlist  : s_list ':' type ':' '=' expr rem {
 
           /* 1      2   3   4    5 */
 portlist  : s_list ':' dir type rem {
-	std::map<std::string, int> *signal_list = $1;
 	printf("portlist 1: dir=%d (%s)\n", $3, port_dir_str[$3]);
-	print_signal_list(signal_list);
+	print_signal_list($s_list);
 	print_type($4);
-	for (auto &i: *signal_list) {
+	for (auto &i: *$s_list) {
 		add_wire(i.first, i.second, (port_dir_t)$dir, $type);
 	}
 
