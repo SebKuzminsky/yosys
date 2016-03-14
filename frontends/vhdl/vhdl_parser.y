@@ -95,9 +95,9 @@ int vlog_ver=0;  /* default is -g1995 */
  * malloc(), otherwise all the line numbers will point here.
  */
 void *xmalloc(size_t size) {
-	void *p = malloc(size);
+	void *p = calloc(1, size);
 	if (!p) {
-		perror("malloc");
+		perror("calloc");
 		exit(2);
 	}
 	return p;
