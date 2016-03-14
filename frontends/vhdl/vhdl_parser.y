@@ -53,7 +53,6 @@
 #include "kernel/log.h"
 
 #include "frontends/vhdl/vhdl_frontend.h"
-#include "frontends/verilog/verilog_frontend.h"
 #include "def.h"
 
 USING_YOSYS_NAMESPACE
@@ -786,6 +785,24 @@ void print_type(struct vrange *vrange) {
 			break;
 	}
 	printf("\n");
+}
+
+AstNode *vhdl_const2ast(std::string s) {
+	std::vector<RTLIL::State> bits;
+
+	if (s.length() != 1) {
+		return NULL;
+	}
+
+	if (s[0] == '0') {
+		bits.push_back(RTLIL::S0);
+	} else if (s[0] == '1') {
+		bits.push_back(RTLIL::S1);
+	} else {
+		return NULL;
+	}
+
+	return Yosys::AST::AstNode::mkconst_bits(bits, false);
 }
 
 %}
@@ -2300,9 +2317,9 @@ expr : signal {
            // $$=e;
 	} | STRING {
 		printf("expr2: STRING(=%s)\n", $STRING);
-		AstNode *constant = VERILOG_FRONTEND::const2ast($STRING, 0, true);
+		AstNode *constant = vhdl_const2ast($STRING);
 		if (constant == NULL) {
-			log_error("Value conversion failed: `%s'\n", $STRING);
+			frontend_vhdl_yyerror("failed to parse constant '%s'\n", $STRING);
 		}
 		$$ = constant;
 
