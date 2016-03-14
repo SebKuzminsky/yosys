@@ -838,13 +838,16 @@ void print_type(struct vrange *vrange) {
 
 void expr_set_bits(expdata *e, std::string s) {
 	printf("setting bits of expdata %p to %s\n", e, s.c_str());
+
 	if (s.length() != 1) {
 		frontend_vhdl_yyerror("invalid string constant `%s'.", s.c_str());
 		return;
 	}
 
+	log_assert(e != NULL);
+
 	e->op = EXPDATA_TYPE_BITS;
-	// e->bits.clear();
+	e->bits.clear();
 
 	if (s[0] == '0') {
 		e->bits.push_back(RTLIL::S0);
