@@ -1349,7 +1349,14 @@ a_decl    : {$$=NULL;}
               // $$=addrem(sl,$7);
             }
           | a_decl SIGNAL s_list ':' type ':' '=' expr ';' rem {
-	printf("a_decl2\n");
+	for (auto &i: *$s_list) {
+		add_wire(i.first, 0, DIR_NONE, $type);
+		struct AstNode *identifier = new AstNode(AST_IDENTIFIER);
+		identifier->str = i.first;
+		struct AstNode *assign = new AstNode(AST_ASSIGN, identifier, $expr);
+		current_ast_mod->children.push_back(assign);
+	}
+
             // sglist *sg;
             // slist *sl;
 // 
