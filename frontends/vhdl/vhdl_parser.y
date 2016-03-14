@@ -740,26 +740,26 @@ slist *emit_io_list(slist *sl)
 
 
 void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type) {
-	struct AstNode *node;
-	node = new AstNode(AST_WIRE);
-	node->str = name;
-	node->port_id = port_id;
+	struct AstNode *wire;
+	wire = new AstNode(AST_WIRE);
+	wire->str = name;
+	wire->port_id = port_id;
 	switch (dir) {
 		case DIR_IN:
-			node->is_input = true;
+			wire->is_input = true;
 			break;
 		case DIR_OUT:
-			node->is_output = true;
+			wire->is_output = true;
 			break;
 		case DIR_INOUT:
-			node->is_input = true;
-			node->is_output = true;
+			wire->is_input = true;
+			wire->is_output = true;
 			break;
 		case DIR_NONE:
 			break;
 	}
 	// FIXME: handle ranges here
-	current_ast_mod->children.push_back(node);
+	current_ast_mod->children.push_back(wire);
 }
 
 
