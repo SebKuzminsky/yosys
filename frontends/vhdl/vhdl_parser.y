@@ -2390,10 +2390,10 @@ expr : signal {
            // $$=e;
 	} | STRING {
 		printf("expr2: STRING\n");
-         expdata *e;
-           e=(expdata*)xmalloc(sizeof(expdata));
-	   expr_set_bits(e, $STRING);
-           $$=e;
+		expdata *e;
+		e = (expdata*)xmalloc(sizeof(expdata));
+		expr_set_bits(e, $STRING);
+		$$ = e;
 	} | FLOAT {
 		printf("expr3: FLOAT\n");
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
