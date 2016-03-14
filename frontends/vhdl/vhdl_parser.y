@@ -759,7 +759,7 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 			break;
 	}
 	// FIXME: handle ranges here
-	ast_stack.back()->children.push_back(node);
+	current_ast_mod->children.push_back(node);
 }
 
 
