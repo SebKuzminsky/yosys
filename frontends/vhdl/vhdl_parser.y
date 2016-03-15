@@ -932,7 +932,8 @@ void expr_set_bits(expdata *e, std::string s) {
 %type <sl> map_list map_item mvalue
 %type <e> sigvalue
 %type <sl> generic_map_list generic_map_item
-%type <sl> conf exprc p_body optname gen_optname
+%type <sl> conf exprc optname gen_optname
+%type <ast> p_body
 %type <vector_ast> sign_list
 %type <sl> edge
 %type <sl> elsepart wlist wvalue cases
@@ -2028,10 +2029,12 @@ p_decl : rem {
          }
        ;
 
-p_body : rem {$$=$1;}
-       /* 1   2     3    4  5     6     7    8     9 */
-       | rem signal ':' '=' norem expr ';' yesrem  p_body {
-	printf("p_body1: signal(%s) := expr\n", $signal->str.c_str());
+p_body : rem {
+		$$ = NULL;
+	}
+	/* 1   2     3    4  5     6     7    8     9 */
+	| rem signal ':' '=' norem expr ';' yesrem  p_body {
+		printf("p_body1: signal(%s) := expr\n", $signal->str.c_str());
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addsl(sl,$2->sl);
@@ -2047,22 +2050,12 @@ p_body : rem {$$=$1;}
        /* 1   2     3      4   5     6         7     8   */
 	| rem signal norem '<' '=' sigvalue yesrem  p_body {
 		printf("p_body2: signal(%s) <= sigvalue\n", $signal->str.c_str());
-         // slist *sl;
-         // sglist *sg;
-         // char *s;
-// 
-           // s=sbottom($2->sl);
-           // if((sg=lookup(io_list,s))==NULL)
-             // sg=lookup(sig_list,s);
-           // if(sg)
-             // sg->type=reg;
-           // sl=addsl($1,indents[indent]);
-           // sl=addsl(sl,$2->sl);
-           // findothers($2,$6);
-           // sl=addtxt(sl," <= ");
-           // sl=addsl(sl,$6);
-           // sl=addtxt(sl,";\n");
-           // $$=addsl(sl,$8);
+		print_sigvalue($sigvalue);
+		log_assert($sigvalue->op == EXPDATA_TYPE_AST);
+		AstNode *n = new AstNode(AST_ASSIGN_LE, $signal, $sigvalue->node);
+		current_ast_mod->children.push_back(n);
+		free($sigvalue);
+
          }
 /*        1   2    3     4 5        6:1      7        8      9   10  11    12:2  */
        | rem IF exprc THEN doindent p_body unindent elsepart END IF ';' p_body {
@@ -2161,39 +2154,39 @@ p_body : rem {$$=$1;}
 
 elsepart : {$$=NULL;}
          | ELSIF exprc THEN doindent p_body unindent elsepart {
-           slist *sl;
-             sl=addtxt(indents[indent],"else if(");
-             sl=addsl(sl,$2);
-             sl=addtxt(sl,") begin\n");
-             sl=addsl(sl,$5);
-             sl=addsl(sl,indents[indent]);
-             sl=addtxt(sl,"end\n");
-             $$=addsl(sl,$7);
+           // slist *sl;
+             // sl=addtxt(indents[indent],"else if(");
+             // sl=addsl(sl,$2);
+             // sl=addtxt(sl,") begin\n");
+             // sl=addsl(sl,$5);
+             // sl=addsl(sl,indents[indent]);
+             // sl=addtxt(sl,"end\n");
+             // $$=addsl(sl,$7);
            }
          | ELSE doindent p_body unindent {
-           slist *sl;
-             sl=addtxt(indents[indent],"else begin\n");
-             sl=addsl(sl,$3);
-             sl=addsl(sl,indents[indent]);
-             $$=addtxt(sl,"end\n");
+           // slist *sl;
+             // sl=addtxt(indents[indent],"else begin\n");
+             // sl=addsl(sl,$3);
+             // sl=addsl(sl,indents[indent]);
+             // $$=addtxt(sl,"end\n");
            }
          ;
 
 cases : WHEN wlist '=' '>' doindent p_body unindent cases{
-        slist *sl;
-          sl=addsl(indents[indent],$2);
-          sl=addtxt(sl," : begin\n");
-          sl=addsl(sl,$6);
-          sl=addsl(sl,indents[indent]);
-          sl=addtxt(sl,"end\n");
-          $$=addsl(sl,$8);
+        // slist *sl;
+          // sl=addsl(indents[indent],$2);
+          // sl=addtxt(sl," : begin\n");
+          // sl=addsl(sl,$6);
+          // sl=addsl(sl,indents[indent]);
+          // sl=addtxt(sl,"end\n");
+          // $$=addsl(sl,$8);
         }
       | WHEN OTHERS '=' '>' doindent p_body unindent {
-        slist *sl;
-          sl=addtxt(indents[indent],"default : begin\n");
-          sl=addsl(sl,$6);
-          sl=addsl(sl,indents[indent]);
-          $$=addtxt(sl,"end\n");
+        // slist *sl;
+          // sl=addtxt(indents[indent],"default : begin\n");
+          // sl=addsl(sl,$6);
+          // sl=addsl(sl,indents[indent]);
+          // $$=addtxt(sl,"end\n");
         }
       | /* Empty */ { $$=NULL; }  /* List without WHEN OTHERS */
       ;
