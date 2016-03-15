@@ -1722,10 +1722,9 @@ a_body : rem {
 			edge->children.push_back(i);
 			always->children.push_back(edge);
 		}
-		current_ast_mod->children.push_back(always);
-		// FIXME: deal with the p_body
-	 }
-
+		always->children.push_back($p_body); // the p_body is an AST_BLOCK node
+		ast_stack.back()->children.push_back(always);
+	}
        | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
            rem IF edge THEN p_body END IF ';' END PROCESS oname ';' unindent a_body {
 	printf("a_body7\n");
@@ -2043,7 +2042,7 @@ p_decl : rem {
          }
        ;
 
-p_body : rem {
+p_body[p_body_result] : rem {
 		$$ = NULL;
 	}
 	/* 1   2     3    4  5     6     7    8     9 */
@@ -2062,13 +2061,17 @@ p_body : rem {
            // $$=addsl(sl,$9);
          }
        /* 1   2     3      4   5     6         7     8   */
-	| rem signal norem '<' '=' sigvalue yesrem  p_body {
+	| rem signal norem '<' '=' sigvalue yesrem  p_body[p_body_orig] {
 		printf("p_body2: signal(%s) <= sigvalue\n", $signal->str.c_str());
 		print_sigvalue($sigvalue);
 		log_assert($sigvalue->op == EXPDATA_TYPE_AST);
 		AstNode *n = new AstNode(AST_ASSIGN_LE, $signal, $sigvalue->node);
-		current_ast_mod->children.push_back(n);
+		if ($p_body_orig == NULL) {
+			$p_body_orig = new AstNode(AST_BLOCK);
+		}
+		$p_body_orig->children.insert($p_body_orig->children.begin(), n);
 		free($sigvalue);
+		$p_body_result = $p_body_orig;
 
          }
 /*        1   2    3     4 5        6:1      7        8      9   10  11    12:2  */
