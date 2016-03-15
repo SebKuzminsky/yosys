@@ -840,6 +840,24 @@ void print_type(struct vrange *vrange) {
 	printf("\n");
 }
 
+void string_to_bits(std::vector<RTLIL::State> &bits, std::string s) {
+	if (s.length() != 1) {
+		frontend_vhdl_yyerror("invalid string constant `%s'.", s.c_str());
+		return;
+	}
+
+	bits.clear();
+
+	if (s[0] == '0') {
+		bits.push_back(RTLIL::S0);
+	} else if (s[0] == '1') {
+		bits.push_back(RTLIL::S1);
+	} else {
+		frontend_vhdl_yyerror("invalid string constant `%s'.", s.c_str());
+		return;
+	}
+}
+
 void expr_set_bits(expdata *e, std::string s) {
 	printf("setting bits of expdata %p to %s\n", e, s.c_str());
 
@@ -2394,10 +2412,17 @@ expr : signal {
            // $$=e;
 	} | STRING {
 		printf("expr2: STRING\n");
+
+		std::vector<RTLIL::State> bits;
+		string_to_bits(bits, $STRING);
+
 		expdata *e;
 		e = (expdata*)xmalloc(sizeof(expdata));
-		expr_set_bits(e, $STRING);
+		e->op = EXPDATA_TYPE_AST;
+		e->node = Yosys::AST::AstNode::mkconst_bits(bits, false);
+
 		$$ = e;
+
 	} | FLOAT {
 		printf("expr3: FLOAT\n");
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
