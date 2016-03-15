@@ -2439,11 +2439,12 @@ expr : signal {
            // $$=e;
 	} | '(' OTHERS '=' '>' STRING ')' {
 		printf("expr7: (OTHERS => STRING)\n");
-         // expdata *e;
-           // e=(expdata*)xmalloc(sizeof(expdata));
-           // e->op='o'; /* others */
-           // e->sl=addothers(NULL,$5);
-           // $$=e;
+		expdata *e;
+		e = (expdata*)xmalloc(sizeof(expdata));
+		expr_set_bits(e, $STRING);
+		e->is_others = true;
+		$$ = e;
+
 	} | expr '&' expr { /* Vector chaining */
 		printf("expr8: expr & expr\n");
          // slist *sl;
