@@ -799,7 +799,7 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 			// not reached
 	}
 
-	current_ast_mod->children.push_back(wire);
+	ast_stack.back()->children.push_back(wire);
 }
 
 
@@ -1411,7 +1411,10 @@ updown : DOWNTO {$$=-1;}
 architecture : ARCHITECTURE NAME OF NAME IS {
 		printf("got architecture, module=%s\n", $4);
 		current_ast_mod = modules[$4];
+		ast_stack.push_back(current_ast_mod);
 	} rem a_decl BEGN doindent a_body END opt_architecture oname ';' unindent {
+		ast_stack.pop_back();
+		log_assert(ast_stack.size() == 1);
 		current_ast_mod = NULL;
 	};
 
@@ -1459,7 +1462,7 @@ a_decl    : {$$=NULL;}
 
 		struct AstNode *assign = new AstNode(AST_ASSIGN, identifier, value);
 
-		current_ast_mod->children.push_back(assign);
+		ast_stack.back()->children.push_back(assign);
 	}
 
             // sglist *sg;
@@ -1620,7 +1623,7 @@ a_body : rem {
 		printf("a_body1: signal(=%s) <= sigvalue\n", $signal->str.c_str());
 		print_sigvalue($sigvalue);
 		struct AstNode *assign = new AstNode(AST_ASSIGN, $signal, expr_to_ast($sigvalue));
-		current_ast_mod->children.push_back(assign);
+		ast_stack.back()->children.push_back(assign);
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"assign ");
