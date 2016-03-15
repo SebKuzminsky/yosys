@@ -2431,10 +2431,11 @@ expr : signal {
            // $$=e;
 	} | NATURAL {
 		printf("expr4: NATURAL\n");
-         // expdata *e=(expdata*)xmalloc(sizeof(expdata));
-           // e->op='t'; /* Terminal symbol */
-           // e->sl=addval(NULL,$1);
-           // $$=e;
+		expdata *e = (expdata*)xmalloc(sizeof(expdata));
+		e->op = EXPDATA_TYPE_AST;
+		e->node = Yosys::AST::AstNode::mkconst_int($NATURAL, false);
+		$$ = e;
+
 	} | NATURAL BASED {  /* e.g. 16#55aa# */
 		printf("expr5: NATURAL BASED\n");
          /* XXX unify this code with addvec_base */
