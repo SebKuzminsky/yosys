@@ -813,6 +813,16 @@ AstNode *expr_to_ast(expdata *expr) {
 }
 
 
+void print_sigvalue(expdata *e) {
+	if (e->op == EXPDATA_TYPE_AST) {
+		Yosys::AST::AstNode *node = expr_to_ast(e);
+		node->dumpAst(NULL, "sigvalue> ");
+	} else {
+		printf("sigvalue expdata is %d not ast\n", e->op);
+	}
+}
+
+
 void print_signal_list(std::map<std::string, int> *signal_list) {
 	printf("signal list %p:\n", signal_list);
 	for (auto &i: *signal_list) {
@@ -1596,6 +1606,7 @@ a_body : rem {
        /* 1   2      3   4   5   6     7        8      9 */
 	| rem signal '<' '=' rem norem sigvalue yesrem a_body {
 		printf("a_body1: signal(=%s) <= sigvalue\n", $signal->str.c_str());
+		print_sigvalue($sigvalue);
 		struct AstNode *assign = new AstNode(AST_ASSIGN, $signal, expr_to_ast($sigvalue));
 		current_ast_mod->children.push_back(assign);
          // slist *sl;
@@ -2216,6 +2227,7 @@ sign_list : signal {
 sigvalue : expr delay ';' {
 		printf("sigvalue1: expr delay\n");
 		$$ = $expr;
+		print_sigvalue($sigvalue);
 		// FIXME: deal with the delay
            // slist *sl;
              // if(delay && $2){
