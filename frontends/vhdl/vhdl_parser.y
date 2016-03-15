@@ -1685,8 +1685,9 @@ a_body : rem {
            // sl=addtxt(sl,");\n\n");
            // $$=addsl(sl,$21); /* a_body */
          }
-       | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent p_body END PROCESS oname ';' unindent a_body {
-	printf("a_body6\n");
+
+	| optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent p_body END PROCESS oname ';' unindent a_body {
+		printf("a_body6\n");
          // slist *sl;
            // if (0) fprintf(stderr,"process style 1\n");
            // sl=add_always($1,$4,$6,0);
@@ -2029,8 +2030,8 @@ p_body : rem {$$=$1;}
            // $$=addsl(sl,$9);
          }
        /* 1   2     3      4   5     6         7     8   */
-       | rem signal norem '<' '=' sigvalue yesrem  p_body {
-	printf("p_body2: signal <= sigvalue\n");
+	| rem signal norem '<' '=' sigvalue yesrem  p_body {
+		printf("p_body2: signal(%s) <= sigvalue\n", $signal->str.c_str());
          // slist *sl;
          // sglist *sg;
          // char *s;
@@ -2196,11 +2197,11 @@ wvalue : STRING {$$=addvec(NULL,$1);}
        ;
 
 sign_list : signal {
-		printf("sign_list1: signal\n");
+		printf("sign_list1: signal(%s)\n", $signal->str.c_str());
 		// $$=$1->sl;
 		// free($1);
 	} | signal ',' sign_list {
-		printf("sign_list2: signal , sign_list\n");
+		printf("sign_list2: signal(%s), sign_list\n", $signal->str.c_str());
             // slist *sl;
               // sl=addtxt($1->sl," or ");
               // free($1);
