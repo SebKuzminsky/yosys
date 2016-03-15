@@ -1690,14 +1690,16 @@ a_body : rem {
 
 	| optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent p_body END PROCESS oname ';' unindent a_body {
 		printf("a_body6\n");
-         // slist *sl;
-           // if (0) fprintf(stderr,"process style 1\n");
-           // sl=add_always($1,$4,$6,0);
-           // sl=addsl(sl,$10);
-           // sl=addsl(sl,indents[indent]);
-           // sl=addtxt(sl,"end\n\n");
-           // $$=addsl(sl,$16);
-         }
+		AstNode *always = new AstNode(AST_ALWAYS);
+		for (auto &i: *$sign_list) {
+			AstNode *edge = new AstNode(AST_EDGE);
+			edge->children.push_back(i);
+			always->children.push_back(edge);
+		}
+		current_ast_mod->children.push_back(always);
+		// FIXME: deal with the p_body
+	 }
+
        | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
            rem IF edge THEN p_body END IF ';' END PROCESS oname ';' unindent a_body {
 	printf("a_body7\n");
