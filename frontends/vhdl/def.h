@@ -88,6 +88,7 @@ typedef enum {
 
 typedef struct expdata {
 	expdata_type_t op;
+	bool is_others;
   int value;  /* only set for simple_expr */
   slist *sl;
 	std::vector<Yosys::RTLIL::State> bits;
