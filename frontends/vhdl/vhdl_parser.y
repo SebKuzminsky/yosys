@@ -2404,12 +2404,12 @@ signal : NAME {
 /* Expressions */
 expr : signal {
 		printf("expr1: signal\n");
-         // expdata *e;
-           // e=(expdata*)xmalloc(sizeof(expdata));
-           // e->op='t'; /* Terminal symbol */
-           // e->sl=$1->sl;
-           // free($1);
-           // $$=e;
+		expdata *e;
+		e = (expdata*)xmalloc(sizeof(expdata));
+		e->op = EXPDATA_TYPE_AST;
+		e->node = $signal;
+		$$ = e;
+
 	} | STRING {
 		printf("expr2: STRING\n");
 
