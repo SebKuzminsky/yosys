@@ -890,6 +890,7 @@ void expr_set_bits(expdata *e, std::string s) {
 	struct Yosys::AST::AstNode *ast;
 	std::map<std::string, Yosys::AST::AstNode*> *al;
 	std::map<std::string, int> *map_string_int;
+	std::vector<Yosys::AST::AstNode*> *vector_ast;
 	bool boolean;
   char * txt; /* String */
   int n;      /* Value */
@@ -921,7 +922,8 @@ void expr_set_bits(expdata *e, std::string s) {
 %type <sl> map_list map_item mvalue
 %type <e> sigvalue
 %type <sl> generic_map_list generic_map_item
-%type <sl> conf exprc sign_list p_body optname gen_optname
+%type <sl> conf exprc p_body optname gen_optname
+%type <vector_ast> sign_list
 %type <sl> edge
 %type <sl> elsepart wlist wvalue cases
 %type <sl> with_item with_list
@@ -2196,22 +2198,23 @@ wvalue : STRING {$$=addvec(NULL,$1);}
        | NAME {$$=addtxt(NULL,$1);}
        ;
 
+
 sign_list : signal {
 		printf("sign_list1: signal(%s)\n", $signal->str.c_str());
-		// $$=$1->sl;
-		// free($1);
+		$$ = new std::vector<Yosys::AST::AstNode*>;
+		$$->push_back($signal);
+
 	} | signal ',' sign_list {
 		printf("sign_list2: signal(%s), sign_list\n", $signal->str.c_str());
-            // slist *sl;
-              // sl=addtxt($1->sl," or ");
-              // free($1);
-              // $$=addsl(sl,$3);
-            }
-          ;
+		$3->insert($3->begin(), $signal);
+		$$ = $3;
+	};
+
 
 sigvalue : expr delay ';' {
 		printf("sigvalue1: expr delay\n");
 		$$ = $expr;
+		// FIXME: deal with the delay
            // slist *sl;
              // if(delay && $2){
                // sl=addtxt(NULL,"# ");
