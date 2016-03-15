@@ -2492,19 +2492,39 @@ expr : signal {
 		// $$=addexpr(NULL,'p'," +",$2);
 	} | expr '+' expr {
 		printf("expr11\n");
-		// $$=addexpr($1,'+'," + ",$3);
+		expdata *e;
+		e = (expdata*)xmalloc(sizeof(expdata));
+		e->op = EXPDATA_TYPE_AST;
+		e->node = new AstNode(AST_ADD, $1->node, $3->node);
+		$$ = e;
 	} | expr '-' expr {
 		printf("expr12\n");
-		// $$=addexpr($1,'-'," - ",$3);
+		expdata *e;
+		e = (expdata*)xmalloc(sizeof(expdata));
+		e->op = EXPDATA_TYPE_AST;
+		e->node = new AstNode(AST_SUB, $1->node, $3->node);
+		$$ = e;
 	} | expr '*' expr {
 		printf("expr13\n");
-		// $$=addexpr($1,'*'," * ",$3);
+		expdata *e;
+		e = (expdata*)xmalloc(sizeof(expdata));
+		e->op = EXPDATA_TYPE_AST;
+		e->node = new AstNode(AST_MUL, $1->node, $3->node);
+		$$ = e;
 	} | expr '/' expr {
 		printf("expr14\n");
-		// $$=addexpr($1,'/'," / ",$3);
+		expdata *e;
+		e = (expdata*)xmalloc(sizeof(expdata));
+		e->op = EXPDATA_TYPE_AST;
+		e->node = new AstNode(AST_DIV, $1->node, $3->node);
+		$$ = e;
 	} | expr MOD expr {
 		printf("expr15\n");
-		// $$=addexpr($1,'%'," % ",$3);
+		expdata *e;
+		e = (expdata*)xmalloc(sizeof(expdata));
+		e->op = EXPDATA_TYPE_AST;
+		e->node = new AstNode(AST_MOD, $1->node, $3->node);
+		$$ = e;
 	} | NOT expr {
 		printf("expr16\n");
 		// $$=addexpr(NULL,'~'," ~",$2);
