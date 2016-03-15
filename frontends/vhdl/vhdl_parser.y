@@ -69,7 +69,11 @@ namespace VHDL_FRONTEND {
         std::vector<AstNode*> ast_stack;
         struct AstNode *astbuf1, *astbuf2, *astbuf3;
         // struct AstNode *current_function_or_task;
+
+	// This gets initialized by the caller (the vhdl frontend) to the
+	// AST_DESIGN node that we're to parse the VHDL into.
         struct AstNode *current_ast;
+
         struct AstNode *current_ast_mod;
         // int current_function_or_task_port_id;
         // std::vector<char> case_type_stack;
