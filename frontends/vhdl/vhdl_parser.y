@@ -795,12 +795,16 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 AstNode *expr_to_ast(expdata *expr) {
 	struct AstNode *node = NULL;
 
-	if (expr->op == EXPDATA_TYPE_BITS) {
+	if (expr->op == EXPDATA_TYPE_AST) {
+		node = expr->node;
+
+	} else if (expr->op == EXPDATA_TYPE_BITS) {
 		// bit vector
 		node = Yosys::AST::AstNode::mkconst_bits(expr->bits, false);
 		if (node == NULL) {
 			frontend_vhdl_yyerror("failed to make AST node from bit string\n");
 		}
+
 	} else {
 		frontend_vhdl_yyerror("unhandled expression\n");
 	}
