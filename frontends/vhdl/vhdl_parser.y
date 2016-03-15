@@ -1070,10 +1070,10 @@ yesrem : /*Empty*/ {skipRem = 0;}
 entity_name: ENTITY NAME {
 	printf("entity, name='%s'\n", $2);
 	current_ast_mod = new AstNode(AST_MODULE);
+	current_ast_mod->str = $2;
 	ast_stack.back()->children.push_back(current_ast_mod);
 	ast_stack.push_back(current_ast_mod);
 	port_counter = 0;
-	current_ast_mod->str = $2;
 	modules[$NAME] = current_ast_mod;
 	delete $2;
 };
