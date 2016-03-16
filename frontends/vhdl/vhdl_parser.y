@@ -816,6 +816,13 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 }
 
 
+void add_portlist_wires(std::vector<AstNode*> *v) {
+	for (auto &i: *v) {
+		add_wire(i);
+	}
+}
+
+
 AstNode *expr_to_ast(expdata *expr) {
 	struct AstNode *node = NULL;
 
@@ -950,7 +957,8 @@ void expr_set_bits(expdata *e, std::string s) {
 
 %type <n> trad
 %type <sl> rem  remlist entity
-%type <sl> portlist genlist architecture
+%type <sl> genlist architecture
+%type <vector_ast> portlist
 %type <sl> a_decl p_decl oname
 %type <ast> a_body
 %type <sl> map_list map_item mvalue
@@ -1096,6 +1104,7 @@ entity:
 /*      1           2  3   4    5   6   7        8   9   10  11  12 */
 	entity_name IS rem PORT '(' rem portlist ')' ';' rem END opt_entity oname ';' {
 		printf("done with entity %s\n", current_ast_mod->str.c_str());
+		add_portlist_wires($portlist);
 		ast_stack.pop_back();
 		log_assert(ast_stack.size() == 1);
 
@@ -1128,6 +1137,7 @@ entity:
  /*         1           2  3       4       5   6   7        8   9   10  11   12      13  14  15       16  17  18  19  20         21    22 */
           | entity_name IS GENERIC yeslist '(' rem genlist  ')' ';' rem PORT yeslist '(' rem portlist ')' ';' rem END opt_entity oname ';' {
 		printf("done with entity %s\n", current_ast_mod->str.c_str());
+		add_portlist_wires($portlist);
 		ast_stack.pop_back();
 		log_assert(ast_stack.size() == 1);
 
@@ -1247,12 +1257,13 @@ genlist  : s_list ':' type ':' '=' expr rem {
         ;
 
           /* 1      2   3   4    5 */
-portlist  : s_list ':' dir type rem {
+portlist[portlist_new]  : s_list ':' dir type rem {
+	$portlist_new = new std::vector<AstNode*>;
 	printf("portlist 1: dir=%d (%s)\n", $3, port_dir_str[$3]);
 	print_signal_list($s_list);
 	print_type($4);
 	for (auto &i: *$s_list) {
-		add_wire(i.first, i.second, (port_dir_t)$dir, $type);
+		$portlist_new->insert($portlist_new->begin(), make_wire(i.first, i.second, (port_dir_t)$dir, $type));
 	}
 
             // slist *sl;
@@ -1267,13 +1278,14 @@ portlist  : s_list ':' dir type rem {
               // }
             }
           /* 1      2   3   4    5   6   7     */
-          | s_list ':' dir type ';' rem portlist {
+          | s_list ':' dir type ';' rem portlist[portlist_orig] {
 	std::map<std::string, int> *signal_list = $1;
+	$portlist_new = $portlist_orig;
 	printf("portlist 2: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
 	print_signal_list(signal_list);
 	print_type($4);
 	for (auto &i: *signal_list) {
-		add_wire(i.first, i.second, (port_dir_t)$dir, $type);
+		$portlist_new->insert($portlist_new->begin(), make_wire(i.first, i.second, (port_dir_t)$dir, $type));
 	}
             // slist *sl;
 
@@ -1288,8 +1300,9 @@ portlist  : s_list ':' dir type rem {
             }
           /* 1      2   3   4    5   6   7    8 */
           | s_list ':' dir type ':' '=' expr rem {
+	$portlist_new = new std::vector<AstNode*>;
 	std::map<std::string, int> *signal_list = $1;
-	printf("portlist 3: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
+	printf("portlist 3 FIXME: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
 	print_signal_list(signal_list);
 	print_type($4);
             // slist *sl;
@@ -1305,9 +1318,10 @@ portlist  : s_list ':' dir type rem {
               // }
             }
           /* 1      2   3   4    5   6   7    8   9   10     */
-          | s_list ':' dir type ':' '=' expr ';' rem portlist {
+          | s_list ':' dir type ':' '=' expr ';' rem portlist[portlist_orig] {
+	$portlist_new = $portlist_orig;
 	std::map<std::string, int> *signal_list = $1;
-	printf("portlist 4: dir=%d (%s) s_list=%p\n", $3, port_dir_str[$3], $s_list);
+	printf("portlist 4 FIXME: dir=%d (%s) s_list=%p\n", $3, port_dir_str[$3], $s_list);
 	print_signal_list(signal_list);
 	print_type($4);
             // slist *sl;
