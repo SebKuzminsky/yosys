@@ -755,7 +755,7 @@ slist *emit_io_list(slist *sl)
 }
 
 
-void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type) {
+AstNode *make_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type) {
 	struct AstNode *wire;
 	wire = new AstNode(AST_WIRE);
 	wire->str = name;
@@ -799,7 +799,20 @@ void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type
 			// not reached
 	}
 
-	ast_stack.back()->children.push_back(wire);
+	return wire;
+}
+
+
+void add_wire(AstNode *node) {
+	if (node == NULL) {
+		return;
+	}
+	ast_stack.back()->children.push_back(node);
+}
+
+
+void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type) {
+	add_wire(make_wire(name, port_id, dir, type));
 }
 
 
