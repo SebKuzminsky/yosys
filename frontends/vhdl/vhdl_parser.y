@@ -61,7 +61,6 @@ using namespace VHDL_FRONTEND;
 
 YOSYS_NAMESPACE_BEGIN
 namespace VHDL_FRONTEND {
-        int port_counter;
         // std::map<std::string, AstNode*> attr_list;
         std::map<std::string, AstNode*> default_attr_list;
         std::map<std::string, AstNode*> modules;
@@ -755,11 +754,10 @@ slist *emit_io_list(slist *sl)
 }
 
 
-AstNode *make_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type) {
+AstNode *make_wire(std::string name, port_dir_t dir, struct vrange *type) {
 	struct AstNode *wire;
 	wire = new AstNode(AST_WIRE);
 	wire->str = name;
-	wire->port_id = port_id;
 	switch (dir) {
 		case DIR_IN:
 			wire->is_input = true;
@@ -811,13 +809,16 @@ void add_wire(AstNode *node) {
 }
 
 
-void add_wire(std::string name, int port_id, port_dir_t dir, struct vrange *type) {
-	add_wire(make_wire(name, port_id, dir, type));
+void add_wire(std::string name, port_dir_t dir, struct vrange *type) {
+	add_wire(make_wire(name, dir, type));
 }
 
 
 void add_portlist_wires(std::vector<AstNode*> *v) {
+	int port_id = 1;
 	for (auto &i: *v) {
+		i->port_id = port_id;
+		port_id++;
 		add_wire(i);
 	}
 }
@@ -854,10 +855,10 @@ void print_sigvalue(expdata *e) {
 }
 
 
-void print_signal_list(std::vector<std::pair<std::string, int>*> *signal_list) {
+void print_signal_list(std::vector<std::string> *signal_list) {
 	printf("signal list %p:\n", signal_list);
-	for (auto &i: *signal_list) {
-		printf("    port %s (%d)\n", i->first.c_str(), i->second);
+	for (auto &name: *signal_list) {
+		printf("    port %s\n", name.c_str());
 	}
 }
 
@@ -930,7 +931,7 @@ void expr_set_bits(expdata *e, std::string s) {
 	std::string *string;
 	struct Yosys::AST::AstNode *ast;
 	std::map<std::string, Yosys::AST::AstNode*> *al;
-	std::vector<std::pair<std::string, int>*> *vector_string_int;
+	std::vector<std::string> *vector_string;
 	std::vector<Yosys::AST::AstNode*> *vector_ast;
 	bool boolean;
   char * txt; /* String */
@@ -970,7 +971,7 @@ void expr_set_bits(expdata *e, std::string s) {
 %type <sl> edge
 %type <sl> elsepart wlist wvalue cases
 %type <sl> with_item with_list
-%type <vector_string_int> s_list
+%type <vector_string> s_list
 %type <n> dir delay
 %type <v> type vec_range
 %type <n> updown
@@ -1094,7 +1095,6 @@ entity_name: ENTITY NAME {
 	current_ast_mod->str = $2;
 	ast_stack.back()->children.push_back(current_ast_mod);
 	ast_stack.push_back(current_ast_mod);
-	port_counter = 0;
 	modules[$NAME] = current_ast_mod;
 	delete $2;
 };
@@ -1262,8 +1262,8 @@ portlist[portlist_new]  : s_list ':' dir type rem {
 	printf("portlist 1: dir=%d (%s)\n", $3, port_dir_str[$3]);
 	print_signal_list($s_list);
 	print_type($4);
-	for (auto &i: *$s_list) {
-		$portlist_new->insert($portlist_new->begin(), make_wire(i->first, i->second, (port_dir_t)$dir, $type));
+	for (auto &name: *$s_list) {
+		$portlist_new->insert($portlist_new->begin(), make_wire(name, (port_dir_t)$dir, $type));
 	}
 
             // slist *sl;
@@ -1283,8 +1283,8 @@ portlist[portlist_new]  : s_list ':' dir type rem {
 	printf("portlist 2: dir=%d (%s), s_list=%p\n", $3, port_dir_str[$3], $s_list);
 	print_signal_list($s_list);
 	print_type($4);
-	for (auto &i: *$s_list) {
-		$portlist_new->insert($portlist_new->begin(), make_wire(i->first, i->second, (port_dir_t)$dir, $type));
+	for (auto &name: *$s_list) {
+		$portlist_new->insert($portlist_new->begin(), make_wire(name, (port_dir_t)$dir, $type));
 	}
             // slist *sl;
 
@@ -1476,11 +1476,11 @@ a_decl    : {$$=NULL;}
             }
           | a_decl SIGNAL s_list ':' type ':' '=' expr ';' rem {
 	printf("a_decl2\n");
-	for (auto &i: *$s_list) {
-		add_wire(i->first, 0, DIR_NONE, $type);
+	for (auto &name: *$s_list) {
+		add_wire(name, DIR_NONE, $type);
 
 		struct AstNode *identifier = new AstNode(AST_IDENTIFIER);
-		identifier->str = i->first;
+		identifier->str = name;
 
 		struct AstNode *value = expr_to_ast($expr);
 
@@ -1601,11 +1601,8 @@ yeslist : /*Empty*/ {dolist = 1;}
 
 /* XXX wishlist: record comments into slist, play them back later */
 s_list[s_list_new] : NAME rem {
-	$s_list_new = new std::vector<std::pair<std::string, int>*>;
-	std::pair<std::string, int> *sig = new std::pair<std::string, int>;
-	sig->first = $NAME;
-	sig->second = ++port_counter;
-	$s_list_new->push_back(sig);
+	$s_list_new = new std::vector<std::string>;
+	$s_list_new->push_back($NAME);
 
          // sglist * sg;
            // if(dolist){
@@ -1620,10 +1617,7 @@ s_list[s_list_new] : NAME rem {
            // free($2);
  } | NAME ',' rem s_list[s_list_orig] {
 	$s_list_new = $s_list_orig;
-	std::pair<std::string, int> *sig = new std::pair<std::string, int>;
-	sig->first = $NAME;
-	sig->second = ++port_counter;
-	$s_list_new->push_back(sig);
+	$s_list_new->push_back($NAME);
 
          // sglist * sg;
            // if(dolist){
