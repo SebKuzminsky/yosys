@@ -801,25 +801,30 @@ AstNode *make_wire(std::string name, port_dir_t dir, struct vrange *type) {
 }
 
 
-void add_wire(AstNode *node) {
-	if (node == NULL) {
+void add_wire(std::vector<AstNode*> *v, AstNode *wire) {
+	if (v == NULL) {
+		frontend_vhdl_yyerror("adding wire to a NULL vector\n");
 		return;
 	}
-	ast_stack.back()->children.push_back(node);
+	if (wire == NULL) {
+		frontend_vhdl_yyerror("adding a NULL wire\n");
+		return;
+	}
+	v->push_back(wire);
 }
 
 
-void add_wire(std::string name, port_dir_t dir, struct vrange *type) {
-	add_wire(make_wire(name, dir, type));
+void add_wire(std::vector<AstNode*> *v, std::string name, port_dir_t dir, struct vrange *type) {
+	add_wire(v, make_wire(name, dir, type));
 }
 
 
-void add_portlist_wires(std::vector<AstNode*> *v) {
+void add_portlist_wires(AstNode *module, std::vector<AstNode*> *portlist) {
 	int port_id = 1;
-	for (auto &i: *v) {
-		i->port_id = port_id;
+	for (auto &wire: *portlist) {
+		wire->port_id = port_id;
 		port_id++;
-		add_wire(i);
+		module->children.push_back(wire);
 	}
 }
 
@@ -859,6 +864,14 @@ void print_signal_list(std::vector<std::string> *signal_list) {
 	printf("signal list %p:\n", signal_list);
 	for (auto &name: *signal_list) {
 		printf("    port %s\n", name.c_str());
+	}
+}
+
+
+void print_ast_vector(std::vector<AstNode*> *v) {
+	printf("ast vector:\n");
+	for (auto &n: *v) {
+		n->dumpAst(NULL, "v> ");
 	}
 }
 
@@ -956,19 +969,23 @@ void expr_set_bits(expdata *e, std::string s) {
 %token <txt> CONVFUNC_1 CONVFUNC_2 BASED FLOAT LEFT
 %token <n> NATURAL
 
-%type <n> trad
-%type <sl> rem  remlist entity
-%type <sl> genlist architecture
+%type <ast> trad
+%type <sl> rem  remlist
+%type <ast> entity_name
+%type <ast> entity
+%type <sl> genlist
+%type <ast> architecture
 %type <vector_ast> portlist
-%type <sl> a_decl p_decl oname
-%type <ast> a_body
+%type <vector_ast> a_decl
+%type <sl> p_decl oname
+%type <vector_ast> a_body
 %type <sl> map_list map_item mvalue
 %type <e> sigvalue
 %type <sl> generic_map_list generic_map_item
 %type <sl> conf exprc optname gen_optname
 %type <ast> p_body
 %type <vector_ast> sign_list
-%type <sl> edge
+%type <ast> edge
 %type <sl> elsepart wlist wvalue cases
 %type <sl> with_item with_list
 %type <vector_string> s_list
@@ -1011,55 +1028,33 @@ void expr_set_bits(expdata *e, std::string s) {
  */
 %%
 
-input: {
-	printf("input start\n");
-	ast_stack.clear();
-	ast_stack.push_back(current_ast);
-} trad {
-	ast_stack.pop_back();
-	log_assert(GetSize(ast_stack) == 0);
-	for (auto &it : default_attr_list)
-		delete it.second;
-	default_attr_list.clear();
-	printf("input end\n");
+input: trad {
+	// current_ast is the callers AST_DESIGN node
+	// $trad is the AST_MODULE we just parsed
+	current_ast->children.push_back($trad);
 };
 
 /* Input file must contain entity declaration followed by architecture */
 trad  : rem entity rem architecture rem {
-    printf("trad: entity architecture\n");
-        slist *sl;
-          sl=output_timescale($1);
-          sl=addsl(sl,$2);
-          sl=addsl(sl,$3);
-          sl=addsl(sl,$4);
-          sl=addsl(sl,$5);
-          sl=addtxt(sl,"\nendmodule\n");
-          slprint(sl);
-          $$=0;
-        }
+		printf("trad: entity(%s) architecture(%s)\n", $entity->str.c_str(), $architecture->str.c_str());
+		log_assert($entity->str.compare($architecture->str) == 0);
+		$trad = $entity;
+		for (auto &i: $architecture->children) {
+			$trad->children.push_back(i);
+		}
+
 /* some people put entity declarations and architectures in separate files -
  * translate each piece - note that this will not make a legal Verilog file
  * - let them take care of that manually
  */
-      | rem entity rem  {
-    printf("trad: entity\n");
-        slist *sl;
-          sl=addsl($1,$2);
-          sl=addsl(sl,$3);
-          sl=addtxt(sl,"\nendmodule\n");
-          slprint(sl);
-          $$=0;
-        }
-      | rem architecture rem {
-    printf("trad: architecture\n");
-        slist *sl;
-          sl=addsl($1,$2);
-          sl=addsl(sl,$3);
-          sl=addtxt(sl,"\nendmodule\n");
-          slprint(sl);
-          $$=0;
-        }
-      ;
+	} | rem entity rem  {
+		printf("trad: entity\n");
+		$trad = $entity;
+
+	} | rem architecture rem {
+		printf("trad: architecture\n");
+		$trad = $architecture;
+	};
 
 /* Comments */
 rem      : /* Empty */ {$$=NULL; }
@@ -1091,22 +1086,19 @@ yesrem : /*Empty*/ {skipRem = 0;}
 
 entity_name: ENTITY NAME {
 	printf("entity, name='%s'\n", $2);
-	current_ast_mod = new AstNode(AST_MODULE);
-	current_ast_mod->str = $2;
-	ast_stack.back()->children.push_back(current_ast_mod);
-	ast_stack.push_back(current_ast_mod);
-	modules[$NAME] = current_ast_mod;
-	delete $2;
+	AstNode *module = new AstNode(AST_MODULE);
+	module->str = $2;
+	modules[$NAME] = module;
+	$entity_name = module;
 };
 
 /* Entity */
 entity:
 /*      1           2  3   4    5   6   7        8   9   10  11  12 */
 	entity_name IS rem PORT '(' rem portlist ')' ';' rem END opt_entity oname ';' {
-		printf("done with entity %s\n", current_ast_mod->str.c_str());
-		add_portlist_wires($portlist);
-		ast_stack.pop_back();
-		log_assert(ast_stack.size() == 1);
+		printf("entity1 %s\n", $entity_name->str.c_str());
+		$entity = $entity_name;
+		add_portlist_wires($entity, $portlist);
 
             // slist *sl;
             // sglist *p;
@@ -1136,10 +1128,9 @@ entity:
             }
  /*         1           2  3       4       5   6   7        8   9   10  11   12      13  14  15       16  17  18  19  20         21    22 */
           | entity_name IS GENERIC yeslist '(' rem genlist  ')' ';' rem PORT yeslist '(' rem portlist ')' ';' rem END opt_entity oname ';' {
-		printf("done with entity %s\n", current_ast_mod->str.c_str());
-		add_portlist_wires($portlist);
-		ast_stack.pop_back();
-		log_assert(ast_stack.size() == 1);
+		printf("done with entity2 %s\n", $entity_name->str.c_str());
+		$entity = $entity_name;
+		add_portlist_wires($entity, $portlist);
 
             // slist *sl;
             // sglist *p;
@@ -1432,14 +1423,17 @@ updown : DOWNTO {$$=-1;}
        ;
 
 /* Architecture */
-architecture : ARCHITECTURE NAME OF NAME IS {
-		printf("got architecture, module=%s\n", $4);
-		current_ast_mod = modules[$4];
-		ast_stack.push_back(current_ast_mod);
-	} rem a_decl BEGN doindent a_body END opt_architecture oname ';' unindent {
-		ast_stack.pop_back();
-		log_assert(ast_stack.size() == 1);
-		current_ast_mod = NULL;
+architecture:
+	ARCHITECTURE NAME OF NAME IS rem a_decl BEGN doindent a_body END opt_architecture oname ';' unindent {
+		printf("architecture, name='%s'\n", $4);
+		$architecture = new AstNode(AST_MODULE);
+		$architecture->str = $4;
+		modules[$4] = $architecture;
+
+		for (auto &i: *$a_body) {
+			$architecture->children.push_back(i);
+		}
+		delete $a_body;
 	};
 
 /* Extends indentation by one level */
@@ -1449,8 +1443,8 @@ doindent : /* Empty */ {indent= indent < MAXINDENT ? indent + 1 : indent;}
 unindent : /* Empty */ {indent= indent > 0 ? indent - 1 : indent;}
 
 /* Declarative part of the architecture */
-a_decl    : {$$=NULL;}
-          | a_decl SIGNAL s_list ':' type ';' rem {
+a_decl[a_decl_new]    : {$$=NULL;}
+          | a_decl[a_decl_orig] SIGNAL s_list ':' type ';' rem {
 	printf("a_decl1\n");
             // sglist *sg;
             // slist *sl;
@@ -1473,21 +1467,27 @@ a_decl    : {$$=NULL;}
               // sg->next=sig_list;
               // sig_list=$3;
               // $$=addrem(sl,$7);
-            }
-          | a_decl SIGNAL s_list ':' type ':' '=' expr ';' rem {
-	printf("a_decl2\n");
-	for (auto &name: *$s_list) {
-		add_wire(name, DIR_NONE, $type);
 
-		struct AstNode *identifier = new AstNode(AST_IDENTIFIER);
-		identifier->str = name;
+	} | a_decl[a_decl_orig] SIGNAL s_list ':' type ':' '=' expr ';' rem {
+		printf("a_decl2\n");
+		$a_decl_new = $a_decl_orig;
+		if ($a_decl_new == NULL) {
+			$a_decl_new = new std::vector<AstNode*>;
+		}
+		for (auto &name: *$s_list) {
+			add_wire($a_decl_new, name, DIR_NONE, $type);
 
-		struct AstNode *value = expr_to_ast($expr);
+			struct AstNode *identifier = new AstNode(AST_IDENTIFIER);
+			identifier->str = name;
 
-		struct AstNode *assign = new AstNode(AST_ASSIGN, identifier, value);
+			struct AstNode *value = expr_to_ast($expr);
 
-		ast_stack.back()->children.push_back(assign);
-	}
+			struct AstNode *assign = new AstNode(AST_ASSIGN, identifier, value);
+
+			$a_decl_new->push_back(assign);
+			assign->dumpAst(NULL, "a_decl2> ");
+			print_ast_vector($a_decl_new);
+		}
 
             // sglist *sg;
             // slist *sl;
@@ -1566,24 +1566,24 @@ a_decl    : {$$=NULL;}
             }
           | a_decl TYPE NAME IS ARRAY '(' vec_range ')' OF type ';' rem {
 	printf("a_decl5\n");
-            slist *sl=NULL;
-            sglist *p;
-              $$=addrem(sl,$12);
-              p=(sglist*)xmalloc(sizeof(sglist));
-              p->name=$3;
-              p->range=$10;
-              p->range->xhi=$7->nhi;
-              p->range->xlo=$7->nlo;
-              p->next=type_list;
-              type_list=p;
+            // slist *sl=NULL;
+            // sglist *p;
+              // $$=addrem(sl,$12);
+              // p=(sglist*)xmalloc(sizeof(sglist));
+              // p->name=$3;
+              // p->range=$10;
+              // p->range->xhi=$7->nhi;
+              // p->range->xlo=$7->nlo;
+              // p->next=type_list;
+              // type_list=p;
             }
 /*           1     2          3   4      5r1   6   7       8  9r2      10   11  12 13r3 14        15  16   17      18 19r4 */
           | a_decl COMPONENT NAME opt_is rem  opt_generic PORT nolist '(' rem portlist ')' ';' rem END COMPONENT oname ';' yeslist rem {
 	printf("a_decl6\n");
-              $$=addsl($1,$20); /* a_decl, rem4 */
-              free($3); /* NAME */
-              free($10); /* rem2 */
-              free($14);/* rem3 */
+              // $$=addsl($1,$20); /* a_decl, rem4 */
+              // free($3); /* NAME */
+              // free($10); /* rem2 */
+              // free($14);/* rem3 */
             }
           ;
 
@@ -1632,16 +1632,22 @@ s_list[s_list_new] : NAME rem {
            // free($3);
 };
 
-a_body : rem {
+a_body[a_body_new] : rem {
 		printf("a_body0: rem\n");
 	// $$=addind($1);
 	}
        /* 1   2      3   4   5   6     7        8      9 */
-	| rem signal '<' '=' rem norem sigvalue yesrem a_body {
+	| rem signal '<' '=' rem norem sigvalue yesrem a_body[a_body_orig] {
 		printf("a_body1: signal(=%s) <= sigvalue\n", $signal->str.c_str());
 		print_sigvalue($sigvalue);
+		$a_body_new = $a_body_orig;
+		if ($a_body_new == NULL) {
+			$a_body_new = new std::vector<AstNode*>;
+		}
 		struct AstNode *assign = new AstNode(AST_ASSIGN, $signal, expr_to_ast($sigvalue));
-		ast_stack.back()->children.push_back(assign);
+		$a_body_new->insert($a_body_new->begin(), assign);
+		assign->dumpAst(NULL, "a_body1> ");
+		print_ast_vector($a_body_new);
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"assign ");
@@ -1653,7 +1659,7 @@ a_body : rem {
            // sl=addtxt(sl,";\n");
            // $$=addsl(sl,$9);
          }
-       | rem BEGN signal '<' '=' rem norem sigvalue yesrem a_body END NAME ';' {
+       | rem BEGN signal '<' '=' rem norem sigvalue yesrem a_body[a_body_orig] END NAME ';' {
 	printf("a_body2\n");
          // slist *sl;
            // sl=addsl($1,indents[indent]);
@@ -1667,7 +1673,7 @@ a_body : rem {
            // $$=addsl(sl,$10);
          }
        /* 1   2     3    4    5   6       7       8   9     10     11 */
-       | rem WITH expr SELECT rem yeswith signal '<' '=' with_list a_body {
+       | rem WITH expr SELECT rem yeswith signal '<' '=' with_list a_body[a_body_orig] {
 	printf("a_body3\n");
          // slist *sl;
          // sglist *sg;
@@ -1696,7 +1702,7 @@ a_body : rem {
            // $$=addsl(sl,$11);
          }
        /* 1   2   3     4  5   6    7    8   9         10     11  12  13  14       15 */
-       | rem NAME ':' NAME rem PORT MAP '(' doindent map_list rem ')' ';' unindent a_body {
+       | rem NAME ':' NAME rem PORT MAP '(' doindent map_list rem ')' ';' unindent a_body[a_body_orig] {
 	printf("a_body4\n");
          // slist *sl;
            // sl=addsl($1,indents[indent]);
@@ -1710,7 +1716,7 @@ a_body : rem {
            // $$=addsl(sl,$15); /* a_body */
          }
        /* 1   2   3     4  5   6        7  8    9       10               11  12       13   14   15     16   17       18  19  20       21 */
-       | rem NAME ':' NAME rem GENERIC MAP '(' doindent generic_map_list ')' unindent PORT MAP '(' doindent map_list ')' ';' unindent a_body {
+       | rem NAME ':' NAME rem GENERIC MAP '(' doindent generic_map_list ')' unindent PORT MAP '(' doindent map_list ')' ';' unindent a_body[a_body_orig] {
 	printf("a_body5\n");
          // slist *sl;
            // sl=addsl($1,indents[indent]);
@@ -1732,8 +1738,12 @@ a_body : rem {
            // $$=addsl(sl,$21); /* a_body */
          }
 
-	| optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent p_body END PROCESS oname ';' unindent a_body {
+	| optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent p_body END PROCESS oname ';' unindent a_body[a_body_orig] {
 		printf("a_body6\n");
+		$a_body_new = $a_body_orig;
+		if ($a_body_new == NULL) {
+			$a_body_new = new std::vector<AstNode*>;
+		}
 		AstNode *always = new AstNode(AST_ALWAYS);
 		for (auto &i: *$sign_list) {
 			AstNode *edge = new AstNode(AST_EDGE);
@@ -1741,11 +1751,26 @@ a_body : rem {
 			always->children.push_back(edge);
 		}
 		always->children.push_back($p_body); // the p_body is an AST_BLOCK node
-		ast_stack.back()->children.push_back(always);
-	}
-       | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
-           rem IF edge THEN p_body END IF ';' END PROCESS oname ';' unindent a_body {
-	printf("a_body7\n");
+		$a_body_new->insert($a_body_new->begin(), always);
+
+	} | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent rem IF edge THEN p_body END IF ';' END PROCESS oname ';' unindent a_body[a_body_orig] {
+		printf("a_body7\n");
+		// FIXME: the sign_list is ignored, that's probably not right
+		for (auto &i: *$sign_list) {
+			i->dumpAst(NULL, "sign_listX> ");
+		}
+		$edge->dumpAst(NULL, "edge> ");      // edge is an AST_POSEDGE or AST_NEGEDGE or AST_EDGE node
+		$p_body->dumpAst(NULL, "p_body> ");  // p_body is an AST_BLOCK node
+
+		$a_body_new = $a_body_orig;
+		if ($a_body_new == NULL) {
+			$a_body_new = new std::vector<AstNode*>;
+		}
+		AstNode *always = new AstNode(AST_ALWAYS, $edge, $p_body);
+		$a_body_new->insert($a_body_new->begin(), always);
+		always->dumpAst(NULL, "always> ");
+		print_ast_vector($a_body_new);
+
            // slist *sl;
              // if (0) fprintf(stderr,"process style 2: if then end if\n");
              // sl=add_always($1,$4,$6,1);
@@ -1763,7 +1788,7 @@ a_body : rem {
          /* 10 11 12    13    14         15  16       17    18   19   20       21     22       23  24 25 */
            rem IF exprc THEN doindent p_body unindent ELSIF edge THEN doindent p_body unindent END IF ';'
          /* 26      27    28 29       30   31    */
-           END PROCESS oname ';' unindent a_body {
+           END PROCESS oname ';' unindent a_body[a_body_orig] {
 	printf("a_body8\n");
            // slist *sl;
              // if (0) fprintf(stderr,"process style 3: if then elsif then end if\n");
@@ -1791,7 +1816,7 @@ a_body : rem {
          /* 10 11 12    13    14         15  16       17   18   19   20       21     22     23   24  25 26  27  28 29 */
            rem IF exprc THEN doindent p_body unindent ELSE IF edge THEN doindent p_body unindent END IF ';' END IF ';'
          /* 30      31    32 33       34   35    */
-           END PROCESS oname ';' unindent a_body {
+           END PROCESS oname ';' unindent a_body[a_body_orig] {
 	printf("a_body9\n");
            // slist *sl;
              // if (0) fprintf(stderr,"process style 4: if then else if then end if\n");
@@ -1817,7 +1842,7 @@ a_body : rem {
 
        /* note vhdl does not allow an else in an if generate statement */
        /* 1       2   3          4       5       6        7     8        9   10   11  12 */
-       | gen_optname IF exprc generate  doindent a_body  unindent endgenerate oname ';' a_body {
+       | gen_optname IF exprc generate  doindent a_body[a_body_orig1]  unindent endgenerate oname ';' a_body[a_body_orig2] {
 	printf("a_body10\n");
          // slist *sl;
          // blknamelist *tname_list;
@@ -1843,7 +1868,7 @@ a_body : rem {
            // $$=addsl(sl,$11);    /* a_body:2 */
          }
        /* 1       2       3    4 5    6   7  8        9      10      11       12    13     14    15  16 */
-       | gen_optname FOR  signal IN expr TO expr generate doindent a_body  unindent endgenerate oname ';' a_body {
+       | gen_optname FOR  signal IN expr TO expr generate doindent a_body[a_body_orig1]  unindent endgenerate oname ';' a_body[a_body_orig2] {
 	printf("a_body11\n");
          // slist *sl;
          // blknamelist *tname_list;
@@ -1883,7 +1908,7 @@ a_body : rem {
            // $$=addsl(sl,$15);    /* a_body:2 */
          }
        /* 1           2       3   4   5    6     7      8        9      10      11       12    13     14    15  16 */
-       | gen_optname FOR  signal IN expr DOWNTO expr generate doindent a_body  unindent endgenerate oname ';' a_body {
+       | gen_optname FOR  signal IN expr DOWNTO expr generate doindent a_body[a_body_orig1]  unindent endgenerate oname ';' a_body[a_body_orig2] {
 	printf("a_body12\n");
          // slist *sl;
            // blknamelist* tname_list;
@@ -1943,20 +1968,35 @@ gen_optname : rem {$$=$1;}
          }
         ;
 
-edge : '(' edge ')' {$$=addwrap("(",$2,")");}
-     | NAME '\'' EVENT AND exprc {
-         push_clkedge($5->data.sl->data.txt[0]-'0', "name'event and exprc");
-       }
-     | exprc AND NAME '\'' EVENT {
-         push_clkedge($1->data.sl->data.txt[0]-'0', "exprc and name'event");
-       }
-     | POSEDGE '(' NAME ')' {
-         push_clkedge(1, "explicit");
-       }
-     | NEGEDGE '(' NAME ')' {
-         push_clkedge(0, "explicit");
-       }
-     ;
+edge : '(' edge ')' {
+		$$ = $2;
+		// $$=addwrap("(",$2,")");
+
+	} | NAME '\'' EVENT AND exprc {
+		printf("edge2 name=%s EVENT\n", $NAME);
+		// push_clkedge($5->data.sl->data.txt[0]-'0', "name'event and exprc");
+
+	} | exprc AND NAME '\'' EVENT {
+		printf("edge3 name=%s EVENT\n", $NAME);
+		// push_clkedge($1->data.sl->data.txt[0]-'0', "exprc and name'event");
+
+	} | POSEDGE '(' NAME ')' {
+		printf("edge: posedge %s\n", $NAME);
+
+		AstNode *id = new AstNode(AST_IDENTIFIER);
+		id->str = $NAME;
+
+		AstNode *edge = new AstNode(AST_POSEDGE);
+		edge->children.push_back(id);
+
+		$$ = edge;
+
+		// push_clkedge(1, "explicit");
+	} | NEGEDGE '(' NAME ')' {
+		printf("edge: negedge %s\n", $NAME);
+		// AstNode *always = new AstNode(AST_ALWAYS);
+		// push_clkedge(0, "explicit");
+	} ;
 
 yeswith : {dowith=1;}
 
@@ -2520,6 +2560,7 @@ expr : signal {
 		expr_set_bits(e, $STRING);
 		e->is_others = true;
 		$$ = e;
+		// FIXME: make this an ast
 
 	} | expr '&' expr { /* Vector chaining */
 		printf("expr8: expr & expr\n");
