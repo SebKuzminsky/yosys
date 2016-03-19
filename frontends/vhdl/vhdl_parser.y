@@ -2691,7 +2691,7 @@ exprc : conf {
 
 /* Comparisons */
 conf : expr '=' expr %prec EQUAL {
-	printf("conf1\n");
+		printf("conf1 EQUAL\n");
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} == ");
@@ -2707,9 +2707,8 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$3->sl);
          // free($1);
          // free($3);
-       }
-     | expr '>' expr {
-	printf("conf2\n");
+	} | expr '>' expr {
+		printf("conf2 GT\n");
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} > ");
@@ -2725,9 +2724,8 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$3->sl);
          // free($1);
          // free($3);
-       }
-     | expr '>' '=' expr %prec BIGEQ {
-	printf("conf3\n");
+	} | expr '>' '=' expr %prec BIGEQ {
+		printf("conf3 GE\n");
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} >= ");
@@ -2743,9 +2741,8 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$4->sl);
          // free($1);
          // free($4);
-       }
-     | expr '<' expr {
-	printf("conf4\n");
+	} | expr '<' expr {
+		printf("conf4 LT\n");
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} < ");
@@ -2761,9 +2758,8 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$3->sl);
          // free($1);
          // free($3);
-       }
-     | expr '<' '=' expr %prec LESSEQ {
-	printf("conf5\n");
+	} | expr '<' '=' expr %prec LESSEQ {
+		printf("conf5 LE\n");
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} <= ");
@@ -2779,9 +2775,8 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$4->sl);
          // free($1);
          // free($4);
-       }
-     | expr '/' '=' expr %prec NOTEQ {
-	printf("conf6\n");
+	} | expr '/' '=' expr %prec NOTEQ {
+		printf("conf6 NE\n");
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} != ");
@@ -2797,8 +2792,7 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$4->sl);
          // free($1);
          // free($4);
-       }
-     ;
+	};
 
 simple_expr : signal {
 	printf("simple_expr1: signal\n");
