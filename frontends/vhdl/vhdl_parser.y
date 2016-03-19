@@ -1423,6 +1423,11 @@ architecture:
 		$architecture->str = $4;
 		modules[$4] = $architecture;
 
+		for (auto &i: *$a_decl) {
+			$architecture->children.push_back(i);
+		}
+		delete $a_decl;
+
 		for (auto &i: *$a_body) {
 			$architecture->children.push_back(i);
 		}
