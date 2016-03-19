@@ -1739,6 +1739,7 @@ a_body[a_body_new] : rem {
 
 	| optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent p_body END PROCESS oname ';' unindent a_body[a_body_orig] {
 		printf("a_body6\n");
+		log_assert(($p_body != NULL) && ($p_body->type == AST_BLOCK));
 		$a_body_new = $a_body_orig;
 		if ($a_body_new == NULL) {
 			$a_body_new = new std::vector<AstNode*>;
@@ -1749,17 +1750,18 @@ a_body[a_body_new] : rem {
 			edge->children.push_back(i);
 			always->children.push_back(edge);
 		}
-		always->children.push_back($p_body); // the p_body is an AST_BLOCK node
+		always->children.push_back($p_body);
 		$a_body_new->insert($a_body_new->begin(), always);
 
 	} | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent rem IF edge THEN p_body END IF ';' END PROCESS oname ';' unindent a_body[a_body_orig] {
 		printf("a_body7\n");
+		log_assert(($p_body != NULL) && ($p_body->type == AST_BLOCK));
 		// FIXME: the sign_list is ignored, that's probably not right
 		for (auto &i: *$sign_list) {
 			i->dumpAst(NULL, "sign_listX> ");
 		}
 		$edge->dumpAst(NULL, "edge> ");      // edge is an AST_POSEDGE or AST_NEGEDGE or AST_EDGE node
-		$p_body->dumpAst(NULL, "p_body> ");  // p_body is an AST_BLOCK node
+		$p_body->dumpAst(NULL, "p_body> ");
 
 		$a_body_new = $a_body_orig;
 		if ($a_body_new == NULL) {
@@ -1781,13 +1783,14 @@ a_body[a_body_new] : rem {
              // sl=addsl(sl,indents[indent]);
              // sl=addtxt(sl,"end\n\n");
              // $$=addsl(sl,$23);
-         }
        /* 1      2        3  4          5  6       7      8     9 */
-       | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
+	} | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
          /* 10 11 12    13    14         15  16       17    18   19   20       21     22       23  24 25 */
-           rem IF exprc THEN doindent p_body unindent ELSIF edge THEN doindent p_body unindent END IF ';'
+           rem IF exprc THEN doindent p_body[p_body_if] unindent ELSIF edge THEN doindent p_body[p_body_elseif] unindent END IF ';'
          /* 26      27    28 29       30   31    */
            END PROCESS oname ';' unindent a_body[a_body_orig] {
+		log_assert(($p_body_if != NULL) && ($p_body_if->type == AST_BLOCK));
+		log_assert(($p_body_elseif != NULL) && ($p_body_elseif->type == AST_BLOCK));
 	printf("a_body8\n");
            // slist *sl;
              // if (0) fprintf(stderr,"process style 3: if then elsif then end if\n");
@@ -1813,9 +1816,11 @@ a_body[a_body_new] : rem {
        /* 1      2        3  4          5  6       7      8     9 */
        | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent
          /* 10 11 12    13    14         15  16       17   18   19   20       21     22     23   24  25 26  27  28 29 */
-           rem IF exprc THEN doindent p_body unindent ELSE IF edge THEN doindent p_body unindent END IF ';' END IF ';'
+           rem IF exprc THEN doindent p_body[p_body_if] unindent ELSE IF edge THEN doindent p_body[p_body_elseif] unindent END IF ';' END IF ';'
          /* 30      31    32 33       34   35    */
            END PROCESS oname ';' unindent a_body[a_body_orig] {
+		log_assert(($p_body_if == NULL) || ($p_body_if->type == AST_BLOCK));
+		log_assert(($p_body_elseif == NULL) || ($p_body_elseif->type == AST_BLOCK));
 	printf("a_body9\n");
            // slist *sl;
              // if (0) fprintf(stderr,"process style 4: if then else if then end if\n");
@@ -2101,9 +2106,9 @@ p_decl : rem {
 
 p_body[p_body_result] : rem {
 		$$ = NULL;
-	}
 	/* 1   2     3    4  5     6     7    8     9 */
-	| rem signal ':' '=' norem expr ';' yesrem  p_body {
+	} | rem signal ':' '=' norem expr ';' yesrem  p_body[p_body_orig] {
+		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
 		printf("p_body1: signal(%s) := expr\n", $signal->str.c_str());
          // slist *sl;
            // sl=addsl($1,indents[indent]);
@@ -2119,6 +2124,7 @@ p_body[p_body_result] : rem {
          }
        /* 1   2     3      4   5     6         7     8   */
 	| rem signal norem '<' '=' sigvalue yesrem  p_body[p_body_orig] {
+		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
 		printf("p_body2: signal(%s) <= sigvalue\n", $signal->str.c_str());
 		print_sigvalue($sigvalue);
 		log_assert($sigvalue->op == EXPDATA_TYPE_AST);
@@ -2130,10 +2136,13 @@ p_body[p_body_result] : rem {
 		free($sigvalue);
 		$p_body_result = $p_body_orig;
 
-         }
-/*        1   2    3     4 5        6:1      7        8      9   10  11    12:2  */
-       | rem IF exprc THEN doindent p_body unindent elsepart END IF ';' p_body {
-	printf("p_body3: IF exprc THEN p_body elsepart END IF\n");
+
+/*           1   2    3     4 5        6:1      7        8      9   10  11    12:2  */
+	} | rem IF exprc THEN doindent p_body[p_body_if] unindent elsepart END IF ';' p_body[p_body_orig] {
+		log_assert(($p_body_if == NULL) || ($p_body_if->type == AST_BLOCK));
+		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
+		printf("p_body3: IF exprc THEN p_body elsepart END IF\n");
+
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"if(");
@@ -2144,10 +2153,11 @@ p_body[p_body_result] : rem {
            // sl=addtxt(sl,"end\n");
            // sl=addsl(sl,$8);
            // $$=addsl(sl,$12);
-         }
 /*        1   2    3      4 5:1  6  7:2   8    9       10:1   11       12  13   14  15:2 */
-       | rem FOR  signal IN expr TO expr LOOP doindent p_body unindent END LOOP ';' p_body {
-	printf("p_body4: FOR signal IN expr TO expr LOOP p_body END LOOP\n");
+	} | rem FOR  signal IN expr TO expr LOOP doindent p_body[p_body_internal] unindent END LOOP ';' p_body[p_body_orig] {
+		log_assert(($p_body_internal == NULL) || ($p_body_internal->type == AST_BLOCK));
+		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
+		printf("p_body4: FOR signal IN expr TO expr LOOP p_body END LOOP\n");
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"for (");
@@ -2167,10 +2177,11 @@ p_body[p_body_result] : rem {
            // sl=addsl(sl,indents[indent]);
            // sl=addtxt(sl,"end\n");
            // $$=addsl(sl,$15);    /* p_body:2 */
-         }
 /*        1   2    3      4 5:1  6      7:2   8    9       10:1   11       12  13   14  15:2 */
-       | rem FOR  signal IN expr DOWNTO expr LOOP doindent p_body unindent END LOOP ';' p_body {
-	printf("p_body5: FOR signal IN expr DOWNTO expr LOOP p_body END LOOP\n");
+	} | rem FOR  signal IN expr DOWNTO expr LOOP doindent p_body[p_body_internal] unindent END LOOP ';' p_body[p_body_orig] {
+		log_assert(($p_body_internal == NULL) || ($p_body_internal->type == AST_BLOCK));
+		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
+		printf("p_body5: FOR signal IN expr DOWNTO expr LOOP p_body END LOOP\n");
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"for (");
@@ -2190,10 +2201,10 @@ p_body[p_body_result] : rem {
            // sl=addsl(sl,indents[indent]);
            // sl=addtxt(sl,"end\n");
            // $$=addsl(sl,$15);    /* p_body:2 */
-         }
 /*        1   2    3      4 5       6  7   8    9      10 */
-       | rem CASE signal IS rem cases END CASE ';' p_body {
-	printf("p_body6: CASE signal IS cases END CASE\n");
+	} | rem CASE signal IS rem cases END CASE ';' p_body[p_body_orig] {
+		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
+		printf("p_body6: CASE signal IS cases END CASE\n");
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"case(");
@@ -2207,28 +2218,28 @@ p_body[p_body_result] : rem {
            // sl=addsl(sl,indents[indent]);
            // sl=addtxt(sl,"endcase\n");
            // $$=addsl(sl,$10);
-         }
-       | rem EXIT ';' p_body {
-	printf("p_body7: EXIT\n");
+	} | rem EXIT ';' p_body[p_body_orig] {
+		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
+		printf("p_body7: EXIT\n");
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"disable;  //VHD2VL: add block name here\n");
            // $$=addsl(sl,$4);
-         }
-       | rem NULLV ';' p_body {
-	printf("p_body7: NULLV\n");
+	} | rem NULLV ';' p_body[p_body_orig] {
+		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
+		printf("p_body8: NULLV\n");
          // slist *sl;
            // if($1){
              // sl=addsl($1,indents[indent]);
              // $$=addsl(sl,$4);
            // }else
              // $$=$4;
-         }
-       ;
+	};
 
 elsepart[elsepart_new] : {
 		$$=NULL;
 	} | ELSIF exprc THEN doindent p_body unindent elsepart[elsepart_orig] {
+		log_assert(($p_body == NULL) || ($p_body->type == AST_BLOCK));
 		$elsepart_new = $elsepart_orig;
 		   // slist *sl;
 		     // sl=addtxt(indents[indent],"else if(");
@@ -2255,7 +2266,8 @@ elsepart[elsepart_new] : {
 		     // $$=addtxt(sl,"end\n");
 	};
 
-cases : WHEN wlist '=' '>' doindent p_body unindent cases{
+cases : WHEN wlist '=' '>' doindent p_body unindent cases {
+		log_assert(($p_body == NULL) || ($p_body->type == AST_BLOCK));
         // slist *sl;
           // sl=addsl(indents[indent],$2);
           // sl=addtxt(sl," : begin\n");
@@ -2263,16 +2275,16 @@ cases : WHEN wlist '=' '>' doindent p_body unindent cases{
           // sl=addsl(sl,indents[indent]);
           // sl=addtxt(sl,"end\n");
           // $$=addsl(sl,$8);
-        }
-      | WHEN OTHERS '=' '>' doindent p_body unindent {
+	} | WHEN OTHERS '=' '>' doindent p_body unindent {
+		log_assert(($p_body == NULL) || ($p_body->type == AST_BLOCK));
         // slist *sl;
           // sl=addtxt(indents[indent],"default : begin\n");
           // sl=addsl(sl,$6);
           // sl=addsl(sl,indents[indent]);
           // $$=addtxt(sl,"end\n");
-        }
-      | /* Empty */ { $$=NULL; }  /* List without WHEN OTHERS */
-      ;
+	} | /* Empty */ {
+		$$=NULL;
+	};  /* List without WHEN OTHERS */
 
 wlist : wvalue {$$=$1;}
       | wlist '|' wvalue {
