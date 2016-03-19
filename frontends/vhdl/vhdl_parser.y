@@ -66,13 +66,6 @@ namespace VHDL_FRONTEND {
         std::map<std::string, AstNode*> modules;
         // std::map<std::string, AstNode*> *albuf;
 
-	// This stack tracks the nested structure of the parse tree.  When
-	// we enter a new block, the AST node for the new block is pushed
-	// onto this stack.  When we leave a block the AST node is popped
-	// off.  At all times, newly parsed AST nodes should be added as
-	// children of the AST node at the top of this stack.
-        std::vector<AstNode*> ast_stack;
-
         struct AstNode *astbuf1, *astbuf2, *astbuf3;
         // struct AstNode *current_function_or_task;
 
