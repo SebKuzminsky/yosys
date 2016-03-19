@@ -2671,26 +2671,23 @@ expr : signal {
 	};
 
 /* Conditional expressions */
-exprc : conf { $$=$1; }
-      | '(' exprc ')' {
-         $$=addwrap("(",$2,")");
-      }
-      | exprc AND exprc %prec ANDL {
-        slist *sl;
-          sl=addtxt($1," && ");
-          $$=addsl(sl,$3);
-        }
-      | exprc OR exprc %prec ORL {
-        slist *sl;
-          sl=addtxt($1," || ");
-          $$=addsl(sl,$3);
-        }
-      | NOT exprc %prec NOTL {
-        slist *sl;
-          sl=addtxt(NULL,"!");
-          $$=addsl(sl,$2);
-        }
-      ;
+exprc : conf {
+		// $$=$1;
+	} | '(' exprc ')' {
+		// $$=addwrap("(",$2,")");
+	} | exprc AND exprc %prec ANDL {
+		// slist *sl;
+		// sl=addtxt($1," && ");
+		// $$=addsl(sl,$3);
+	} | exprc OR exprc %prec ORL {
+		// slist *sl;
+		// sl=addtxt($1," || ");
+		// $$=addsl(sl,$3);
+	} | NOT exprc %prec NOTL {
+		// slist *sl;
+		// sl=addtxt(NULL,"!");
+		// $$=addsl(sl,$2);
+	};
 
 /* Comparisons */
 conf : expr '=' expr %prec EQUAL {
