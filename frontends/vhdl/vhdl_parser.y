@@ -979,7 +979,8 @@ void expr_set_bits(expdata *e, std::string s) {
 %type <ast> p_body
 %type <vector_ast> sign_list
 %type <ast> edge
-%type <sl> elsepart wlist wvalue cases
+%type <sl> wlist wvalue cases
+%type <vector_ast> elsepart  // one or more AST_COND, ending with an AST_DEFAULT one
 %type <sl> with_item with_list
 %type <vector_string> s_list
 %type <n> dir delay
@@ -2225,25 +2226,34 @@ p_body[p_body_result] : rem {
          }
        ;
 
-elsepart : {$$=NULL;}
-         | ELSIF exprc THEN doindent p_body unindent elsepart {
-           // slist *sl;
-             // sl=addtxt(indents[indent],"else if(");
-             // sl=addsl(sl,$2);
-             // sl=addtxt(sl,") begin\n");
-             // sl=addsl(sl,$5);
-             // sl=addsl(sl,indents[indent]);
-             // sl=addtxt(sl,"end\n");
-             // $$=addsl(sl,$7);
-           }
-         | ELSE doindent p_body unindent {
-           // slist *sl;
-             // sl=addtxt(indents[indent],"else begin\n");
-             // sl=addsl(sl,$3);
-             // sl=addsl(sl,indents[indent]);
-             // $$=addtxt(sl,"end\n");
-           }
-         ;
+elsepart[elsepart_new] : {
+		$$=NULL;
+	} | ELSIF exprc THEN doindent p_body unindent elsepart[elsepart_orig] {
+		$elsepart_new = $elsepart_orig;
+		   // slist *sl;
+		     // sl=addtxt(indents[indent],"else if(");
+		     // sl=addsl(sl,$2);
+		     // sl=addtxt(sl,") begin\n");
+		     // sl=addsl(sl,$5);
+		     // sl=addsl(sl,indents[indent]);
+		     // sl=addtxt(sl,"end\n");
+		     // $$=addsl(sl,$7);
+	} | ELSE doindent p_body unindent {
+		log_assert(($p_body != NULL) && ($p_body->type == AST_BLOCK));
+
+		AstNode *default_const = new AstNode(AST_DEFAULT);
+
+		AstNode *else_cond = new AstNode(AST_COND, default_const, $p_body);
+
+		$elsepart_new = new std::vector<AstNode*>;
+		$elsepart_new->push_back(else_cond);
+
+		   // slist *sl;
+		     // sl=addtxt(indents[indent],"else begin\n");
+		     // sl=addsl(sl,$3);
+		     // sl=addsl(sl,indents[indent]);
+		     // $$=addtxt(sl,"end\n");
+	};
 
 cases : WHEN wlist '=' '>' doindent p_body unindent cases{
         // slist *sl;
