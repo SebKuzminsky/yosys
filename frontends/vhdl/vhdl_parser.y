@@ -2627,13 +2627,21 @@ expr : signal {
 		e->op = EXPDATA_TYPE_AST;
 		e->node = new AstNode(AST_DIV, $1->node, $3->node);
 		$$ = e;
-	} | expr MOD expr {
+	} | expr[expr1] MOD expr[expr2] {
 		printf("expr15\n");
+		log_assert($expr1 != NULL);
+		log_assert($expr1->op == EXPDATA_TYPE_AST);
+		log_assert($expr2 != NULL);
+		log_assert($expr2->op == EXPDATA_TYPE_AST);
+
 		expdata *e;
 		e = (expdata*)xmalloc(sizeof(expdata));
 		e->op = EXPDATA_TYPE_AST;
-		e->node = new AstNode(AST_MOD, $1->node, $3->node);
+		e->node = new AstNode(AST_MOD, $expr1->node, $expr2->node);
 		$$ = e;
+		free($expr1);
+		free($expr2);
+
 	} | NOT expr {
 		printf("expr16\n");
 		// $$=addexpr(NULL,'~'," ~",$2);
