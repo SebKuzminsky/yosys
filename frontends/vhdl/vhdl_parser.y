@@ -2143,7 +2143,30 @@ p_body[p_body_result] : rem {
 	} | rem IF exprc THEN doindent p_body[p_body_if] unindent elsepart END IF ';' p_body[p_body_orig] {
 		log_assert(($p_body_if == NULL) || ($p_body_if->type == AST_BLOCK));
 		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
+		log_assert(($exprc != NULL) && ($exprc->type == AST_REDUCE_BOOL));
 		printf("p_body3: IF exprc THEN p_body elsepart END IF\n");
+
+		$p_body_result = $p_body_orig;
+		if ($p_body_result == NULL) {
+			$p_body_result = new AstNode(AST_BLOCK);
+		}
+
+		AstNode *case_node = new AstNode(AST_CASE);
+
+		case_node->children.push_back($exprc);
+
+		AstNode *true_const = new AstNode(AST_CONSTANT);
+		true_const = AstNode::mkconst_int(1, false);
+		AstNode *if_cond = new AstNode(AST_COND, true_const, $p_body_if);
+
+		case_node->children.push_back(if_cond);
+
+		for (auto &i: *$elsepart) {
+			log_assert(i->type == AST_COND);
+			case_node->children.push_back(i);
+		}
+
+		$p_body_result->children.insert($p_body_result->children.begin(), case_node);
 
          // slist *sl;
            // sl=addsl($1,indents[indent]);
