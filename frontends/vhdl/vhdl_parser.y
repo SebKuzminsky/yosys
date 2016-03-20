@@ -2675,9 +2675,11 @@ expr : signal {
 	} | CONVFUNC_2 '(' expr ',' NAME ')' {
 		printf("expr23\n");
        // $$ = addnest($3);
-	} | '(' expr ')' {
+	} | '(' expr[expr1] ')' {
 		printf("expr24\n");
-		// $$ = addnest($2);
+		log_assert($expr1 != NULL);
+		log_assert($expr1->op = EXPDATA_TYPE_AST);
+		$$ = $expr1;
 	};
 
 /* Conditional expressions */
