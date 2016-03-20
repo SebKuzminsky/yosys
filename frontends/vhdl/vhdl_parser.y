@@ -2695,8 +2695,11 @@ exprc : conf {
 	};
 
 /* Comparisons */
-conf : expr '=' expr %prec EQUAL {
+conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
 		printf("conf1 EQUAL\n");
+		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
+		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
+
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} == ");
@@ -2712,8 +2715,10 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$3->sl);
          // free($1);
          // free($3);
-	} | expr '>' expr {
+	} | expr[expr1] '>' expr[expr2] {
 		printf("conf2 GT\n");
+		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
+		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} > ");
@@ -2729,8 +2734,10 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$3->sl);
          // free($1);
          // free($3);
-	} | expr '>' '=' expr %prec BIGEQ {
+	} | expr[expr1] '>' '=' expr[expr2] %prec BIGEQ {
 		printf("conf3 GE\n");
+		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
+		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} >= ");
@@ -2746,8 +2753,10 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$4->sl);
          // free($1);
          // free($4);
-	} | expr '<' expr {
+	} | expr[expr1] '<' expr[expr2] {
 		printf("conf4 LT\n");
+		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
+		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} < ");
@@ -2763,8 +2772,10 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$3->sl);
          // free($1);
          // free($3);
-	} | expr '<' '=' expr %prec LESSEQ {
+	} | expr[expr1] '<' '=' expr[expr2] %prec LESSEQ {
 		printf("conf5 LE\n");
+		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
+		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} <= ");
@@ -2780,8 +2791,10 @@ conf : expr '=' expr %prec EQUAL {
            // $$=addsl(sl,$4->sl);
          // free($1);
          // free($4);
-	} | expr '/' '=' expr %prec NOTEQ {
+	} | expr[expr1] '/' '=' expr[expr2] %prec NOTEQ {
 		printf("conf6 NE\n");
+		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
+		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} != ");
