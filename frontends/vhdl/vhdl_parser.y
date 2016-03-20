@@ -2672,18 +2672,23 @@ expr : signal {
 
 /* Conditional expressions */
 exprc : conf {
+		printf("exprc1: conf\n");
 		// $$=$1;
 	} | '(' exprc ')' {
+		printf("exprc2: (exprc)\n");
 		// $$=addwrap("(",$2,")");
 	} | exprc AND exprc %prec ANDL {
+		printf("exprc3: exprc AND exprc\n");
 		// slist *sl;
 		// sl=addtxt($1," && ");
 		// $$=addsl(sl,$3);
 	} | exprc OR exprc %prec ORL {
+		printf("exprc4: exprc OR exprc\n");
 		// slist *sl;
 		// sl=addtxt($1," || ");
 		// $$=addsl(sl,$3);
 	} | NOT exprc %prec NOTL {
+		printf("exprc5: NOT exprc\n");
 		// slist *sl;
 		// sl=addtxt(NULL,"!");
 		// $$=addsl(sl,$2);
