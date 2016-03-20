@@ -1483,11 +1483,11 @@ a_decl[a_decl_new]    : {$$=NULL;}
 
 			struct AstNode *value = expr_to_ast($expr);
 
-			struct AstNode *assign = new AstNode(AST_ASSIGN, identifier, value);
+			struct AstNode *assign = new AstNode(AST_ASSIGN_LE, identifier, value);
+			struct AstNode *initial = new AstNode(AST_INITIAL);
+			initial->children.push_back(assign);
 
-			$a_decl_new->push_back(assign);
-			assign->dumpAst(NULL, "a_decl2> ");
-			print_ast_vector($a_decl_new);
+			$a_decl_new->push_back(initial);
 		}
 
             // sglist *sg;
