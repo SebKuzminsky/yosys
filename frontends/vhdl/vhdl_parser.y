@@ -88,6 +88,9 @@ namespace VHDL_FRONTEND {
     } port_dir_t;
 
     const char *port_dir_str[] = { "IN", "OUT", "INOUT" };
+
+#define NOT_IMPLEMENTED log_error("NOT IMPLEMENTED (%s:%d)\n", __FILE__, __LINE__)
+
 }
 YOSYS_NAMESPACE_END
 
