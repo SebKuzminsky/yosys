@@ -2622,13 +2622,18 @@ expr : signal {
            // e->sl=addvec_base(NULL,$1,$2);
            // $$=e;
 	} | '(' OTHERS '=' '>' STRING ')' {
+		// FIXME: OTHERS in a vector still needs to be dealt with
 		printf("expr7: (OTHERS => STRING)\n");
+
+		std::vector<RTLIL::State> bits;
+		string_to_bits(bits, $STRING);
+
 		expdata *e;
 		e = (expdata*)xmalloc(sizeof(expdata));
-		expr_set_bits(e, $STRING);
-		e->is_others = true;
+		e->op = EXPDATA_TYPE_AST;
+		e->node = Yosys::AST::AstNode::mkconst_bits(bits, false);
+
 		$$ = e;
-		// FIXME: make this an ast
 
 	} | expr '&' expr { /* Vector chaining */
 		printf("expr8: expr & expr\n");
