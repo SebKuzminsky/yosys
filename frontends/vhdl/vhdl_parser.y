@@ -1647,7 +1647,6 @@ a_body[a_body_new] : rem {
 		}
 		struct AstNode *assign = new AstNode(AST_ASSIGN, $signal, expr_to_ast($sigvalue));
 		$a_body_new->insert($a_body_new->begin(), assign);
-		assign->dumpAst(NULL, "a_body1> ");
 		print_ast_vector($a_body_new);
          // slist *sl;
            // sl=addsl($1,indents[indent]);
@@ -1762,11 +1761,6 @@ a_body[a_body_new] : rem {
 		log_assert($p_body->type == AST_BLOCK);
 
 		// FIXME: the sign_list is ignored, that's probably not right
-		for (auto &i: *$sign_list) {
-			i->dumpAst(NULL, "sign_listX> ");
-		}
-		$edge->dumpAst(NULL, "edge> ");      // edge is an AST_POSEDGE or AST_NEGEDGE or AST_EDGE node
-		$p_body->dumpAst(NULL, "p_body> ");
 
 		$a_body_new = $a_body_orig;
 		if ($a_body_new == NULL) {
