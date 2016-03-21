@@ -2765,7 +2765,6 @@ exprc : conf {
 
 /* Comparisons */
 conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
-		printf("conf1 EQUAL\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
 		$conf = new AstNode(AST_EQ, $expr1->node, $expr2->node);
@@ -2788,7 +2787,6 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
          // free($1);
          // free($3);
 	} | expr[expr1] '>' expr[expr2] {
-		printf("conf2 GT\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
 		$conf = new AstNode(AST_GT, $expr1->node, $expr2->node);
@@ -2810,7 +2808,6 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
          // free($1);
          // free($3);
 	} | expr[expr1] '>' '=' expr[expr2] %prec BIGEQ {
-		printf("conf3 GE\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
 		$conf = new AstNode(AST_GE, $expr1->node, $expr2->node);
@@ -2832,7 +2829,6 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
          // free($1);
          // free($4);
 	} | expr[expr1] '<' expr[expr2] {
-		printf("conf4 LT\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
 		$conf = new AstNode(AST_LT, $expr1->node, $expr2->node);
@@ -2854,7 +2850,6 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
          // free($1);
          // free($3);
 	} | expr[expr1] '<' '=' expr[expr2] %prec LESSEQ {
-		printf("conf5 LE\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
 		$conf = new AstNode(AST_LE, $expr1->node, $expr2->node);
@@ -2876,7 +2871,6 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
          // free($1);
          // free($4);
 	} | expr[expr1] '/' '=' expr[expr2] %prec NOTEQ {
-		printf("conf6 NE\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
 		$conf = new AstNode(AST_NE, $expr1->node, $expr2->node);
