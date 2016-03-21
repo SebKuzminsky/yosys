@@ -2323,9 +2323,9 @@ sign_list : signal {
 
 
 sigvalue[sigvalue_new]: expr delay ';' {
-		printf("sigvalue1: expr delay\n");
 		$sigvalue_new = $expr;
 		// FIXME: deal with the delay
+
            // slist *sl;
              // if(delay && $2){
                // sl=addtxt(NULL,"# ");
@@ -2342,12 +2342,11 @@ sigvalue[sigvalue_new]: expr delay ';' {
              // $$=sl;
 
 	} | expr delay WHEN exprc ';' {
-		printf("sigvalue2: expr delay WHEN exprc\n");
-		log_abort();
+		NOT_IMPLEMENTED;
              // fprintf(stderr,"Warning on line %d: Can't translate 'expr delay WHEN exprc;' expressions\n",lineno);
              // $$=NULL;
+
 	} | expr delay WHEN exprc ELSE nodelay sigvalue[sigvalue_orig] {
-		printf("sigvalue3: expr delay WHEN exprc ELSE nodelay sigvalue\n");
 		log_assert($exprc != NULL);
 
 		log_assert($expr != NULL);
