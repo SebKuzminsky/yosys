@@ -2155,8 +2155,15 @@ p_body[p_body_result] : rem {
 		}
 
 		AstNode *case_node = new AstNode(AST_CASE);
+		AstNode *reduce;
+		if ($exprc->type == AST_REDUCE_BOOL) {
+			reduce = $exprc;
+		} else {
+			reduce = new AstNode(AST_REDUCE_BOOL);
+			reduce->children.push_back($exprc);
+		}
 
-		case_node->children.push_back($exprc);
+		case_node->children.push_back(reduce);
 
 		AstNode *true_const = new AstNode(AST_CONSTANT);
 		true_const = AstNode::mkconst_int(1, false);
@@ -2785,9 +2792,9 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
 		printf("conf1 EQUAL\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
-		AstNode *compare_node = new AstNode(AST_EQ, $expr1->node, $expr2->node);
-		$conf = new AstNode(AST_REDUCE_BOOL);
-		$conf->children.push_back(compare_node);
+		$conf = new AstNode(AST_EQ, $expr1->node, $expr2->node);
+		free($expr1);
+		free($expr2);
 
        // slist *sl;
          // if($1->op == 'c')
@@ -2808,9 +2815,9 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
 		printf("conf2 GT\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
-		AstNode *compare_node = new AstNode(AST_GT, $expr1->node, $expr2->node);
-		$conf = new AstNode(AST_REDUCE_BOOL);
-		$conf->children.push_back(compare_node);
+		$conf = new AstNode(AST_GT, $expr1->node, $expr2->node);
+		free($expr1);
+		free($expr2);
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} > ");
@@ -2830,9 +2837,9 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
 		printf("conf3 GE\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
-		AstNode *compare_node = new AstNode(AST_GE, $expr1->node, $expr2->node);
-		$conf = new AstNode(AST_REDUCE_BOOL);
-		$conf->children.push_back(compare_node);
+		$conf = new AstNode(AST_GE, $expr1->node, $expr2->node);
+		free($expr1);
+		free($expr2);
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} >= ");
@@ -2852,9 +2859,9 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
 		printf("conf4 LT\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
-		AstNode *compare_node = new AstNode(AST_LT, $expr1->node, $expr2->node);
-		$conf = new AstNode(AST_REDUCE_BOOL);
-		$conf->children.push_back(compare_node);
+		$conf = new AstNode(AST_LT, $expr1->node, $expr2->node);
+		free($expr1);
+		free($expr2);
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} < ");
@@ -2874,9 +2881,9 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
 		printf("conf5 LE\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
-		AstNode *compare_node = new AstNode(AST_LE, $expr1->node, $expr2->node);
-		$conf = new AstNode(AST_REDUCE_BOOL);
-		$conf->children.push_back(compare_node);
+		$conf = new AstNode(AST_LE, $expr1->node, $expr2->node);
+		free($expr1);
+		free($expr2);
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} <= ");
@@ -2896,9 +2903,9 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
 		printf("conf6 NE\n");
 		log_assert(($expr1 != NULL) && ($expr1->op = EXPDATA_TYPE_AST));
 		log_assert(($expr2 != NULL) && ($expr2->op = EXPDATA_TYPE_AST));
-		AstNode *compare_node = new AstNode(AST_NE, $expr1->node, $expr2->node);
-		$conf = new AstNode(AST_REDUCE_BOOL);
-		$conf->children.push_back(compare_node);
+		$conf = new AstNode(AST_NE, $expr1->node, $expr2->node);
+		free($expr1);
+		free($expr2);
        // slist *sl;
          // if($1->op == 'c')
            // sl=addwrap("{",$1->sl,"} != ");
