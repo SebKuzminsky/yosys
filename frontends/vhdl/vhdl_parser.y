@@ -2474,7 +2474,6 @@ signal : NAME {
 	AstNode *wire = new AstNode(AST_IDENTIFIER);
 	wire->str = $NAME;
 	$$ = wire;
-	printf("signal1: NAME(=%s)\n", $signal->str.c_str());
          // slist *sl;
          // slval *ss;
            // ss=(slval*)xmalloc(sizeof(slval));
@@ -2487,9 +2486,9 @@ signal : NAME {
            // ss->val=-1;
            // ss->range=NULL;
            // $$=ss;
-         }
-       | NAME '(' vec_range ')' {
-	printf("signal2: NAME (vec_range)\n");
+
+	 } | NAME '(' vec_range ')' {
+		NOT_IMPLEMENTED;
          // slval *ss;
          // slist *sl;
            // ss=(slval*)xmalloc(sizeof(slval));
@@ -2512,9 +2511,9 @@ signal : NAME {
              // ss->val = 1;
            // }
            // $$=ss;
-         }
-       | NAME '(' vec_range ')' '(' vec_range ')' {
-	printf("signal3: NAME (vec_range) (vec_range)\n");
+
+	} | NAME '(' vec_range ')' '(' vec_range ')' {
+		NOT_IMPLEMENTED;
          // slval *ss;
          // slist *sl;
            // ss=(slval*)xmalloc(sizeof(slval));
@@ -2532,8 +2531,7 @@ signal : NAME {
              // ss->val = 1;
            // }
            // $$=ss;
-         }
-       ;
+	};
 
 /* Expressions */
 expr : signal {
