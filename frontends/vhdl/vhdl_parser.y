@@ -1741,7 +1741,8 @@ a_body[a_body_new] : rem {
 
 	| optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent p_body END PROCESS oname ';' unindent a_body[a_body_orig] {
 		printf("a_body6\n");
-		log_assert(($p_body != NULL) && ($p_body->type == AST_BLOCK));
+		log_assert($p_body != NULL);
+		log_assert($p_body->type == AST_BLOCK);
 		$a_body_new = $a_body_orig;
 		if ($a_body_new == NULL) {
 			$a_body_new = new std::vector<AstNode*>;
@@ -1757,7 +1758,9 @@ a_body[a_body_new] : rem {
 
 	} | optname PROCESS '(' sign_list ')' p_decl opt_is BEGN doindent rem IF edge THEN p_body END IF ';' END PROCESS oname ';' unindent a_body[a_body_orig] {
 		printf("a_body7\n");
-		log_assert(($p_body != NULL) && ($p_body->type == AST_BLOCK));
+		log_assert($p_body != NULL);
+		log_assert($p_body->type == AST_BLOCK);
+
 		// FIXME: the sign_list is ignored, that's probably not right
 		for (auto &i: *$sign_list) {
 			i->dumpAst(NULL, "sign_listX> ");
