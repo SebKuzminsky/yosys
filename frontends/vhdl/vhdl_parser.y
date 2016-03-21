@@ -2390,28 +2390,33 @@ delay    : /* empty */ {$$=0;}
          ;
 
 map_list : rem map_item {
-           slist *sl;
-           sl=addsl($1,indents[indent]);
-           $$=addsl(sl,$2);}
-         | rem map_item ',' map_list {
-           slist *sl;
-             sl=addsl($1,indents[indent]);
-             sl=addsl(sl,$2);
-             sl=addtxt(sl,",\n");
-             $$=addsl(sl,$4);
-           }
-         ;
+		NOT_IMPLEMENTED;
+           // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // $$=addsl(sl,$2);
 
-map_item : mvalue {$$=$1;}
-         | NAME '=' '>' mvalue {
-           slist *sl;
-             sl=addtxt(NULL,".");
-             sl=addtxt(sl,$1);
-             sl=addtxt(sl,"(");
-             sl=addsl(sl,$4);
-             $$=addtxt(sl,")");
-           }
-         ;
+	} | rem map_item ',' map_list {
+		NOT_IMPLEMENTED;
+           // slist *sl;
+             // sl=addsl($1,indents[indent]);
+             // sl=addsl(sl,$2);
+             // sl=addtxt(sl,",\n");
+             // $$=addsl(sl,$4);
+	};
+
+map_item : mvalue {
+		NOT_IMPLEMENTED;
+		// $$=$1;
+
+	} | NAME '=' '>' mvalue {
+		NOT_IMPLEMENTED;
+           // slist *sl;
+             // sl=addtxt(NULL,".");
+             // sl=addtxt(sl,$1);
+             // sl=addtxt(sl,"(");
+             // sl=addsl(sl,$4);
+             // $$=addtxt(sl,")");
+	};
 
 mvalue : STRING {
 		NOT_IMPLEMENTED;
