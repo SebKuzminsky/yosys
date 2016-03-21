@@ -60,6 +60,7 @@ YOSYS_NAMESPACE_END
 
 // the usual bison/flex stuff
 extern int frontend_vhdl_yydebug;
+extern int frontend_vhdl_yy_flex_debug;
 int frontend_vhdl_yylex(void);
 void frontend_vhdl_yyerror(char const *fmt, ...);
 void frontend_vhdl_yyrestart(FILE *f);

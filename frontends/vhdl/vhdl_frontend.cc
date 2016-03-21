@@ -174,6 +174,7 @@ struct VHDLFrontend : public Frontend {
 		std::list<std::string> attributes;
 
 		frontend_vhdl_yydebug = false;
+		frontend_vhdl_yy_flex_debug = false;
 		default_nettype_wire = true;
 
 		log_header("Executing VHDL frontend.\n");
@@ -197,6 +198,7 @@ struct VHDLFrontend : public Frontend {
 			}
 			if (arg == "-yydebug") {
 				frontend_vhdl_yydebug = true;
+				frontend_vhdl_yy_flex_debug = true;
 				continue;
 			}
 			if (arg == "-nolatches") {
