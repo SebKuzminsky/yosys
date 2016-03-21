@@ -843,16 +843,6 @@ AstNode *expr_to_ast(expdata *expr) {
 }
 
 
-void print_sigvalue(expdata *e) {
-	if (e->op == EXPDATA_TYPE_AST) {
-		Yosys::AST::AstNode *node = expr_to_ast(e);
-		node->dumpAst(NULL, "sigvalue> ");
-	} else {
-		printf("sigvalue expdata is %d not ast\n", e->op);
-	}
-}
-
-
 void print_signal_list(std::vector<std::string> *signal_list) {
 	printf("signal list %p:\n", signal_list);
 	for (auto &name: *signal_list) {
@@ -1640,7 +1630,6 @@ a_body[a_body_new] : rem {
        /* 1   2      3   4   5   6     7        8      9 */
 	| rem signal '<' '=' rem norem sigvalue yesrem a_body[a_body_orig] {
 		printf("a_body1: signal(=%s) <= sigvalue\n", $signal->str.c_str());
-		print_sigvalue($sigvalue);
 		$a_body_new = $a_body_orig;
 		if ($a_body_new == NULL) {
 			$a_body_new = new std::vector<AstNode*>;
@@ -2125,7 +2114,6 @@ p_body[p_body_result] : rem {
 	| rem signal norem '<' '=' sigvalue yesrem  p_body[p_body_orig] {
 		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
 		printf("p_body2: signal(%s) <= sigvalue\n", $signal->str.c_str());
-		print_sigvalue($sigvalue);
 		log_assert($sigvalue->op == EXPDATA_TYPE_AST);
 		AstNode *n = new AstNode(AST_ASSIGN_LE, $signal, $sigvalue->node);
 		if ($p_body_orig == NULL) {
@@ -2347,7 +2335,6 @@ sign_list : signal {
 sigvalue[sigvalue_new]: expr delay ';' {
 		printf("sigvalue1: expr delay\n");
 		$sigvalue_new = $expr;
-		print_sigvalue($sigvalue_new);
 		// FIXME: deal with the delay
            // slist *sl;
              // if(delay && $2){
