@@ -2313,12 +2313,10 @@ wvalue : STRING {$$=addvec(NULL,$1);}
 
 
 sign_list : signal {
-		printf("sign_list1: signal(%s)\n", $signal->str.c_str());
 		$$ = new std::vector<Yosys::AST::AstNode*>;
 		$$->push_back($signal);
 
 	} | signal ',' sign_list {
-		printf("sign_list2: signal(%s), sign_list\n", $signal->str.c_str());
 		$3->insert($3->begin(), $signal);
 		$$ = $3;
 	};
