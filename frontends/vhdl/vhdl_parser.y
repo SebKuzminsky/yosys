@@ -1748,7 +1748,6 @@ a_body[a_body_new] : rem {
 		}
 		AstNode *always = new AstNode(AST_ALWAYS, $edge, $p_body);
 		$a_body_new->insert($a_body_new->begin(), always);
-		always->dumpAst(NULL, "always> ");
 
            // slist *sl;
              // if (0) fprintf(stderr,"process style 2: if then end if\n");
