@@ -2414,27 +2414,27 @@ map_item : mvalue {$$=$1;}
          ;
 
 mvalue : STRING {
-		printf("mvalue1: STRING\n");
-		$$=addvec(NULL,$1);
-	}
-	| signal {
-		printf("mvalue2: signal\n");
+		NOT_IMPLEMENTED;
+		// $$=addvec(NULL,$1);
+
+	} | signal {
+		NOT_IMPLEMENTED;
 		// $$=addsl(NULL,$1->sl);
-	}
-	| NATURAL {
-		printf("mvalue3: NATURAL\n");
-		$$=addval(NULL,$1);
-	}
-	| NAME STRING {
-		printf("mvalue4: NAME STRING\n");
-		$$=addvec_base(NULL,$1,$2);
-	}
-	| OPEN {
-		printf("mvalue5: OPEN\n");
-		$$=addtxt(NULL,"/* open */");
-	}
-	| '(' OTHERS '=' '>' STRING ')' {
-		printf("mvalue6: OTHERS => STRING\n");
+
+	} | NATURAL {
+		NOT_IMPLEMENTED;
+		// $$=addval(NULL,$1);
+
+	} | NAME STRING {
+		NOT_IMPLEMENTED;
+		// $$=addvec_base(NULL,$1,$2);
+
+	} | OPEN {
+		NOT_IMPLEMENTED;
+		// $$=addtxt(NULL,"/* open */");
+
+	} | '(' OTHERS '=' '>' STRING ')' {
+		NOT_IMPLEMENTED;
              // $$=addtxt(NULL,"{broken{");
              // $$=addtxt($$,$5);
              // $$=addtxt($$,"}}");
