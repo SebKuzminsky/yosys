@@ -2279,7 +2279,7 @@ elsepart[elsepart_new] : {
 	};
 
 cases : WHEN wlist '=' '>' doindent p_body unindent cases {
-		log_assert(($p_body == NULL) || ($p_body->type == AST_BLOCK));
+		NOT_IMPLEMENTED;
         // slist *sl;
           // sl=addsl(indents[indent],$2);
           // sl=addtxt(sl," : begin\n");
@@ -2287,13 +2287,15 @@ cases : WHEN wlist '=' '>' doindent p_body unindent cases {
           // sl=addsl(sl,indents[indent]);
           // sl=addtxt(sl,"end\n");
           // $$=addsl(sl,$8);
+
 	} | WHEN OTHERS '=' '>' doindent p_body unindent {
-		log_assert(($p_body == NULL) || ($p_body->type == AST_BLOCK));
+		NOT_IMPLEMENTED;
         // slist *sl;
           // sl=addtxt(indents[indent],"default : begin\n");
           // sl=addsl(sl,$6);
           // sl=addsl(sl,indents[indent]);
           // $$=addtxt(sl,"end\n");
+
 	} | /* Empty */ {
 		$$=NULL;
 	};  /* List without WHEN OTHERS */
