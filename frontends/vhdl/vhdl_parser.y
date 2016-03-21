@@ -2306,10 +2306,18 @@ wlist : wvalue {$$=$1;}
         }
       ;
 
-wvalue : STRING {$$=addvec(NULL,$1);}
-       | NAME STRING {$$=addvec_base(NULL,$1,$2);}
-       | NAME {$$=addtxt(NULL,$1);}
-       ;
+wvalue : STRING {
+		NOT_IMPLEMENTED;
+		// $$=addvec(NULL,$1);
+
+	} | NAME STRING {
+		NOT_IMPLEMENTED;
+		// $$=addvec_base(NULL,$1,$2);
+
+	} | NAME {
+		NOT_IMPLEMENTED;
+		// $$=addtxt(NULL,$1);
+	};
 
 
 sign_list : signal {
