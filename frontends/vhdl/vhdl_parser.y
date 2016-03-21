@@ -2537,7 +2537,6 @@ signal : NAME {
 
 /* Expressions */
 expr : signal {
-		printf("expr1: signal\n");
 		expdata *e;
 		e = (expdata*)xmalloc(sizeof(expdata));
 		e->op = EXPDATA_TYPE_AST;
@@ -2545,8 +2544,6 @@ expr : signal {
 		$$ = e;
 
 	} | STRING {
-		printf("expr2: STRING\n");
-
 		std::vector<RTLIL::State> bits;
 		string_to_bits(bits, $STRING);
 
@@ -2558,22 +2555,20 @@ expr : signal {
 		$$ = e;
 
 	} | FLOAT {
-		printf("expr3: FLOAT\n");
-		log_abort();
+		NOT_IMPLEMENTED;
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
            // e->op='t'; /* Terminal symbol */
            // e->sl=addtxt(NULL,$1);
            // $$=e;
+
 	} | NATURAL {
-		printf("expr4: NATURAL\n");
 		expdata *e = (expdata*)xmalloc(sizeof(expdata));
 		e->op = EXPDATA_TYPE_AST;
 		e->node = Yosys::AST::AstNode::mkconst_int($NATURAL, false);
 		$$ = e;
 
 	} | NATURAL BASED {  /* e.g. 16#55aa# */
-		printf("expr5: NATURAL BASED\n");
-		log_abort();
+		NOT_IMPLEMENTED;
          /* XXX unify this code with addvec_base */
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
          // char *natval = (char*)xmalloc(strlen($2)+34);
@@ -2597,16 +2592,16 @@ expr : signal {
            // }
            // e->sl=addtxt(NULL,natval);
            // $$=e;
+
 	} | NAME STRING {
-		printf("expr6: NAME STRING\n");
-		log_abort();
+		NOT_IMPLEMENTED;
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
            // e->op='t'; /* Terminal symbol */
            // e->sl=addvec_base(NULL,$1,$2);
            // $$=e;
+
 	} | '(' OTHERS '=' '>' STRING ')' {
 		// FIXME: OTHERS in a vector still needs to be dealt with
-		printf("expr7: (OTHERS => STRING)\n");
 
 		std::vector<RTLIL::State> bits;
 		string_to_bits(bits, $STRING);
@@ -2619,8 +2614,7 @@ expr : signal {
 		$$ = e;
 
 	} | expr '&' expr { /* Vector chaining */
-		printf("expr8: expr & expr\n");
-		log_abort();
+		NOT_IMPLEMENTED;
          // slist *sl;
            // sl=addtxt($1->sl,",");
            // sl=addsl(sl,$3->sl);
@@ -2628,44 +2622,44 @@ expr : signal {
            // $1->op='c';
            // $1->sl=sl;
            // $$=$1;
+
 	} | '-' expr %prec UMINUS {
-		printf("expr9\n");
-		log_abort();
+		NOT_IMPLEMENTED;
 		// $$=addexpr(NULL,'m'," -",$2);
+
 	} | '+' expr %prec UPLUS {
-		printf("expr10\n");
-		log_abort();
+		NOT_IMPLEMENTED;
 		// $$=addexpr(NULL,'p'," +",$2);
+
 	} | expr '+' expr {
-		printf("expr11\n");
 		expdata *e;
 		e = (expdata*)xmalloc(sizeof(expdata));
 		e->op = EXPDATA_TYPE_AST;
 		e->node = new AstNode(AST_ADD, $1->node, $3->node);
 		$$ = e;
+
 	} | expr '-' expr {
-		printf("expr12\n");
 		expdata *e;
 		e = (expdata*)xmalloc(sizeof(expdata));
 		e->op = EXPDATA_TYPE_AST;
 		e->node = new AstNode(AST_SUB, $1->node, $3->node);
 		$$ = e;
+
 	} | expr '*' expr {
-		printf("expr13\n");
 		expdata *e;
 		e = (expdata*)xmalloc(sizeof(expdata));
 		e->op = EXPDATA_TYPE_AST;
 		e->node = new AstNode(AST_MUL, $1->node, $3->node);
 		$$ = e;
+
 	} | expr '/' expr {
-		printf("expr14\n");
 		expdata *e;
 		e = (expdata*)xmalloc(sizeof(expdata));
 		e->op = EXPDATA_TYPE_AST;
 		e->node = new AstNode(AST_DIV, $1->node, $3->node);
 		$$ = e;
+
 	} | expr[expr1] MOD expr[expr2] {
-		printf("expr15\n");
 		log_assert($expr1 != NULL);
 		log_assert($expr1->op == EXPDATA_TYPE_AST);
 		log_assert($expr2 != NULL);
@@ -2680,7 +2674,6 @@ expr : signal {
 		free($expr2);
 
 	} | NOT expr[expr1] {
-		printf("expr16\n");
 		log_assert($expr1 != NULL);
 		log_assert($expr1->op = EXPDATA_TYPE_AST);
 		AstNode *not_node = new AstNode(AST_BIT_NOT);
@@ -2689,24 +2682,23 @@ expr : signal {
 		$$ = $expr1;
 
 	} | expr AND expr {
-		printf("expr17\n");
-		log_abort();
+		NOT_IMPLEMENTED;
 		// $$=addexpr($1,'&'," & ",$3);
+
 	} | expr OR expr {
-		printf("expr18\n");
-		log_abort();
+		NOT_IMPLEMENTED;
 		// $$=addexpr($1,'|'," | ",$3);
+
 	} | expr XOR expr {
-		printf("expr19\n");
-		log_abort();
+		NOT_IMPLEMENTED;
 		// $$=addexpr($1,'^'," ^ ",$3);
+
 	} | expr XNOR expr {
-		printf("expr20\n");
-		log_abort();
+		NOT_IMPLEMENTED;
 		// $$=addexpr(NULL,'~'," ~",addexpr($1,'^'," ^ ",$3));
+
 	} | BITVECT '(' expr ')' {
-		printf("expr21\n");
-		log_abort();
+		NOT_IMPLEMENTED;
        /* single argument type conversion function e.g. std_ulogic_vector(x) */
        // expdata *e;
        // e=(expdata*)xmalloc(sizeof(expdata));
@@ -2716,17 +2708,17 @@ expr : signal {
          // e->sl=addwrap("(",$3->sl,")");
        // }
        // $$=e;
+
 	} | CONVFUNC_2 '(' expr ',' NATURAL ')' {
-		printf("expr22\n");
-		log_abort();
+		NOT_IMPLEMENTED;
        /* two argument type conversion e.g. to_unsigned(x, 3) */
        // $$ = addnest($3);
+
 	} | CONVFUNC_2 '(' expr ',' NAME ')' {
-		printf("expr23\n");
-		log_abort();
+		NOT_IMPLEMENTED;
        // $$ = addnest($3);
+
 	} | '(' expr[expr1] ')' {
-		printf("expr24\n");
 		log_assert($expr1 != NULL);
 		log_assert($expr1->op = EXPDATA_TYPE_AST);
 		$$ = $expr1;
