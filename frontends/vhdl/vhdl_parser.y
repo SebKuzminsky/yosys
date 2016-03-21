@@ -2576,6 +2576,7 @@ expr : signal {
 
 	} | FLOAT {
 		printf("expr3: FLOAT\n");
+		log_abort();
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
            // e->op='t'; /* Terminal symbol */
            // e->sl=addtxt(NULL,$1);
@@ -2589,6 +2590,7 @@ expr : signal {
 
 	} | NATURAL BASED {  /* e.g. 16#55aa# */
 		printf("expr5: NATURAL BASED\n");
+		log_abort();
          /* XXX unify this code with addvec_base */
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
          // char *natval = (char*)xmalloc(strlen($2)+34);
@@ -2614,6 +2616,7 @@ expr : signal {
            // $$=e;
 	} | NAME STRING {
 		printf("expr6: NAME STRING\n");
+		log_abort();
          // expdata *e=(expdata*)xmalloc(sizeof(expdata));
            // e->op='t'; /* Terminal symbol */
            // e->sl=addvec_base(NULL,$1,$2);
@@ -2629,6 +2632,7 @@ expr : signal {
 
 	} | expr '&' expr { /* Vector chaining */
 		printf("expr8: expr & expr\n");
+		log_abort();
          // slist *sl;
            // sl=addtxt($1->sl,",");
            // sl=addsl(sl,$3->sl);
@@ -2638,9 +2642,11 @@ expr : signal {
            // $$=$1;
 	} | '-' expr %prec UMINUS {
 		printf("expr9\n");
+		log_abort();
 		// $$=addexpr(NULL,'m'," -",$2);
 	} | '+' expr %prec UPLUS {
 		printf("expr10\n");
+		log_abort();
 		// $$=addexpr(NULL,'p'," +",$2);
 	} | expr '+' expr {
 		printf("expr11\n");
@@ -2690,18 +2696,23 @@ expr : signal {
 		// $$=addexpr(NULL,'~'," ~",$2);
 	} | expr AND expr {
 		printf("expr17\n");
+		log_abort();
 		// $$=addexpr($1,'&'," & ",$3);
 	} | expr OR expr {
 		printf("expr18\n");
+		log_abort();
 		// $$=addexpr($1,'|'," | ",$3);
 	} | expr XOR expr {
 		printf("expr19\n");
+		log_abort();
 		// $$=addexpr($1,'^'," ^ ",$3);
 	} | expr XNOR expr {
 		printf("expr20\n");
+		log_abort();
 		// $$=addexpr(NULL,'~'," ~",addexpr($1,'^'," ^ ",$3));
 	} | BITVECT '(' expr ')' {
 		printf("expr21\n");
+		log_abort();
        /* single argument type conversion function e.g. std_ulogic_vector(x) */
        // expdata *e;
        // e=(expdata*)xmalloc(sizeof(expdata));
@@ -2713,10 +2724,12 @@ expr : signal {
        // $$=e;
 	} | CONVFUNC_2 '(' expr ',' NATURAL ')' {
 		printf("expr22\n");
+		log_abort();
        /* two argument type conversion e.g. to_unsigned(x, 3) */
        // $$ = addnest($3);
 	} | CONVFUNC_2 '(' expr ',' NAME ')' {
 		printf("expr23\n");
+		log_abort();
        // $$ = addnest($3);
 	} | '(' expr[expr1] ')' {
 		printf("expr24\n");
