@@ -851,14 +851,6 @@ void print_signal_list(std::vector<std::string> *signal_list) {
 }
 
 
-void print_ast_vector(std::vector<AstNode*> *v) {
-	printf("ast vector:\n");
-	for (auto &n: *v) {
-		n->dumpAst(NULL, "v> ");
-	}
-}
-
-
 void print_type(struct vrange *vrange) {
 	printf("vrange %p:", vrange);
 	switch (vrange->vtype) {
@@ -1636,7 +1628,6 @@ a_body[a_body_new] : rem {
 		}
 		struct AstNode *assign = new AstNode(AST_ASSIGN, $signal, expr_to_ast($sigvalue));
 		$a_body_new->insert($a_body_new->begin(), assign);
-		print_ast_vector($a_body_new);
          // slist *sl;
            // sl=addsl($1,indents[indent]);
            // sl=addtxt(sl,"assign ");
@@ -1758,7 +1749,6 @@ a_body[a_body_new] : rem {
 		AstNode *always = new AstNode(AST_ALWAYS, $edge, $p_body);
 		$a_body_new->insert($a_body_new->begin(), always);
 		always->dumpAst(NULL, "always> ");
-		print_ast_vector($a_body_new);
 
            // slist *sl;
              // if (0) fprintf(stderr,"process style 2: if then end if\n");
