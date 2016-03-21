@@ -2144,9 +2144,10 @@ p_body[p_body_result] : rem {
 
 /*           1   2    3     4 5        6:1      7        8      9   10  11    12:2  */
 	} | rem IF exprc THEN doindent p_body[p_body_if] unindent elsepart END IF ';' p_body[p_body_orig] {
-		log_assert(($p_body_if == NULL) || ($p_body_if->type == AST_BLOCK));
+		log_assert($p_body_if != NULL);
+		log_assert($p_body_if->type == AST_BLOCK);
 		log_assert(($p_body_orig == NULL) || ($p_body_orig->type == AST_BLOCK));
-		log_assert(($exprc != NULL) && ($exprc->type == AST_REDUCE_BOOL));
+		log_assert($exprc != NULL);
 		printf("p_body3: IF exprc THEN p_body elsepart END IF\n");
 
 		$p_body_result = $p_body_orig;
@@ -2154,7 +2155,6 @@ p_body[p_body_result] : rem {
 			$p_body_result = new AstNode(AST_BLOCK);
 		}
 
-		AstNode *case_node = new AstNode(AST_CASE);
 		AstNode *reduce;
 		if ($exprc->type == AST_REDUCE_BOOL) {
 			reduce = $exprc;
@@ -2163,17 +2163,20 @@ p_body[p_body_result] : rem {
 			reduce->children.push_back($exprc);
 		}
 
+		AstNode *case_node = new AstNode(AST_CASE);
 		case_node->children.push_back(reduce);
 
-		AstNode *true_const = new AstNode(AST_CONSTANT);
+		AstNode *true_const;
 		true_const = AstNode::mkconst_int(1, false);
 		AstNode *if_cond = new AstNode(AST_COND, true_const, $p_body_if);
 
 		case_node->children.push_back(if_cond);
 
-		for (auto &i: *$elsepart) {
-			log_assert(i->type == AST_COND);
-			case_node->children.push_back(i);
+		if ($elsepart != NULL) {
+			for (auto &i: *$elsepart) {
+				log_assert(i->type == AST_COND);
+				case_node->children.push_back(i);
+			}
 		}
 
 		$p_body_result->children.insert($p_body_result->children.begin(), case_node);
