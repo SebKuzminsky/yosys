@@ -2691,9 +2691,15 @@ expr : signal {
 		free($expr1);
 		free($expr2);
 
-	} | NOT expr {
+	} | NOT expr[expr1] {
 		printf("expr16\n");
-		// $$=addexpr(NULL,'~'," ~",$2);
+		log_assert($expr1 != NULL);
+		log_assert($expr1->op = EXPDATA_TYPE_AST);
+		AstNode *not_node = new AstNode(AST_BIT_NOT);
+		not_node->children.push_back($expr1->node);
+		$expr1->node = not_node;
+		$$ = $expr1;
+
 	} | expr AND expr {
 		printf("expr17\n");
 		log_abort();
