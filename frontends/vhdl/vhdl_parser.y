@@ -2298,13 +2298,18 @@ cases : WHEN wlist '=' '>' doindent p_body unindent cases {
 		$$=NULL;
 	};  /* List without WHEN OTHERS */
 
-wlist : wvalue {$$=$1;}
-      | wlist '|' wvalue {
-        slist *sl;
-          sl=addtxt($1,",");
-          $$=addsl(sl,$3);
-        }
-      ;
+
+wlist: wvalue {
+		NOT_IMPLEMENTED;
+		// $$=$1;
+
+	} | wlist '|' wvalue {
+		NOT_IMPLEMENTED;
+		// slist *sl;
+		// sl=addtxt($1,",");
+		// $$=addsl(sl,$3);
+	};
+
 
 wvalue : STRING {
 		NOT_IMPLEMENTED;
