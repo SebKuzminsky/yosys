@@ -2751,23 +2751,30 @@ expr : signal {
 
 /* Conditional expressions */
 exprc : conf {
+		log_assert($conf != NULL);
 		printf("exprc1: conf\n");
-		// $$=$1;
+		$exprc = $conf;
+
 	} | '(' exprc ')' {
+		log_assert($2 != NULL);
 		printf("exprc2: (exprc)\n");
-		// $$=addwrap("(",$2,")");
+		$$ = $2;
+
 	} | exprc AND exprc %prec ANDL {
 		printf("exprc3: exprc AND exprc\n");
+		log_abort();
 		// slist *sl;
 		// sl=addtxt($1," && ");
 		// $$=addsl(sl,$3);
 	} | exprc OR exprc %prec ORL {
 		printf("exprc4: exprc OR exprc\n");
+		log_abort();
 		// slist *sl;
 		// sl=addtxt($1," || ");
 		// $$=addsl(sl,$3);
 	} | NOT exprc %prec NOTL {
 		printf("exprc5: NOT exprc\n");
+		log_abort();
 		// slist *sl;
 		// sl=addtxt(NULL,"!");
 		// $$=addsl(sl,$2);
