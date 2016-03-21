@@ -2900,70 +2900,76 @@ conf : expr[expr1] '=' expr[expr2] %prec EQUAL {
 	};
 
 simple_expr : signal {
-	printf("simple_expr1: signal\n");
+		NOT_IMPLEMENTED;
          // expdata *e;
          // e=(expdata*)xmalloc(sizeof(expdata));
          // e->op='t'; /* Terminal symbol */
          // e->sl=$1->sl;
          // free($1);
          // $$=e;
-      }
-     | STRING {
-         expdata *e;
-         e=(expdata*)xmalloc(sizeof(expdata));
-	 expr_set_bits(e, $STRING);
-         $$=e;
-      }
-     | NATURAL {
-         expdata *e;
-         e=(expdata*)xmalloc(sizeof(expdata));
-         e->op=EXPDATA_TYPE_N;
-         e->value=$1;
-         e->sl=addval(NULL,$1);
-         $$=e;
-      }
-     | NAME '\'' LEFT {
+
+	} | STRING {
+		expdata *e;
+		e=(expdata*)xmalloc(sizeof(expdata));
+		expr_set_bits(e, $STRING);
+		$$=e;
+
+	} | NATURAL {
+		expdata *e;
+		e=(expdata*)xmalloc(sizeof(expdata));
+		e->op=EXPDATA_TYPE_N;
+		e->value=$1;
+		e->sl=addval(NULL,$1);
+		$$=e;
+
+	} | NAME '\'' LEFT {
+		NOT_IMPLEMENTED;
 	      /* lookup NAME and get its left */
-              sglist *sg = NULL;
-              if((sg=lookup(io_list,$1))==NULL) {
-                sg=lookup(sig_list,$1);
-              }
-              if(sg) {
-                expdata *e;
-                e=(expdata*)xmalloc(sizeof(expdata));
-                e->sl=addwrap("(",sg->range->nhi,")");  /* XXX left vs. high? */
-                $$=e;
-              } else {
-                fprintf(stderr,"Undefined left \"%s'left\" on line %d\n",$1,lineno);
-                YYABORT;
-              }
-      }
-     | simple_expr '+' simple_expr {
-       $$=addexpr($1,'+'," + ",$3);
-      }
-     | simple_expr '-' simple_expr {
-       $$=addexpr($1,'-'," - ",$3);
-      }
-     | simple_expr '*' simple_expr {
-       $$=addexpr($1,'*'," * ",$3);
-      }
-     | simple_expr '/' simple_expr {
-       $$=addexpr($1,'/'," / ",$3);
-      }
-     | CONVFUNC_1 '(' simple_expr ')' {
+              // sglist *sg = NULL;
+              // if((sg=lookup(io_list,$1))==NULL) {
+                // sg=lookup(sig_list,$1);
+              // }
+              // if(sg) {
+                // expdata *e;
+                // e=(expdata*)xmalloc(sizeof(expdata));
+                // e->sl=addwrap("(",sg->range->nhi,")");  /* XXX left vs. high? */
+                // $$=e;
+              // } else {
+                // fprintf(stderr,"Undefined left \"%s'left\" on line %d\n",$1,lineno);
+                // YYABORT;
+              // }
+
+	} | simple_expr '+' simple_expr {
+		NOT_IMPLEMENTED;
+       // $$=addexpr($1,'+'," + ",$3);
+
+	} | simple_expr '-' simple_expr {
+		NOT_IMPLEMENTED;
+       // $$=addexpr($1,'-'," - ",$3);
+
+	} | simple_expr '*' simple_expr {
+		NOT_IMPLEMENTED;
+       // $$=addexpr($1,'*'," * ",$3);
+
+	} | simple_expr '/' simple_expr {
+		NOT_IMPLEMENTED;
+       // $$=addexpr($1,'/'," / ",$3);
+
+	} | CONVFUNC_1 '(' simple_expr ')' {
+		NOT_IMPLEMENTED;
        /* one argument type conversion e.g. conv_integer(x) */
-       expdata *e;
-       e=(expdata*)xmalloc(sizeof(expdata));
-       e->sl=addwrap("(",$3->sl,")");
-       $$=e;
-      }
-     | '(' simple_expr ')' {
-       expdata *e;
-       e=(expdata*)xmalloc(sizeof(expdata));
-       e->sl=addwrap("(",$2->sl,")");
-       $$=e;
-      }
-     ;
+       // expdata *e;
+       // e=(expdata*)xmalloc(sizeof(expdata));
+       // e->sl=addwrap("(",$3->sl,")");
+       // $$=e;
+
+	} | '(' simple_expr ')' {
+		NOT_IMPLEMENTED;
+       // expdata *e;
+       // e=(expdata*)xmalloc(sizeof(expdata));
+       // e->sl=addwrap("(",$2->sl,")");
+       // $$=e;
+	};
 
 %%
 
