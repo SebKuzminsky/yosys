@@ -2340,10 +2340,10 @@ sign_list : signal {
 	};
 
 
-sigvalue : expr delay ';' {
+sigvalue[sigvalue_new]: expr delay ';' {
 		printf("sigvalue1: expr delay\n");
-		$$ = $expr;
-		print_sigvalue($sigvalue);
+		$sigvalue_new = $expr;
+		print_sigvalue($sigvalue_new);
 		// FIXME: deal with the delay
            // slist *sl;
              // if(delay && $2){
@@ -2359,14 +2359,31 @@ sigvalue : expr delay ';' {
              // free($1);
              // delay=1;
              // $$=sl;
-	}
-	| expr delay WHEN exprc ';' {
+
+	} | expr delay WHEN exprc ';' {
 		printf("sigvalue2: expr delay WHEN exprc\n");
+		log_abort();
              // fprintf(stderr,"Warning on line %d: Can't translate 'expr delay WHEN exprc;' expressions\n",lineno);
              // $$=NULL;
-	}
-	| expr delay WHEN exprc ELSE nodelay sigvalue {
+	} | expr delay WHEN exprc ELSE nodelay sigvalue[sigvalue_orig] {
 		printf("sigvalue3: expr delay WHEN exprc ELSE nodelay sigvalue\n");
+		log_assert($exprc != NULL);
+
+		log_assert($expr != NULL);
+		log_assert($expr->op == EXPDATA_TYPE_AST);
+
+		log_assert($sigvalue_orig != NULL);
+		log_assert($sigvalue_orig->op == EXPDATA_TYPE_AST);
+
+		AstNode *ternary = new AstNode(AST_TERNARY);
+		ternary->children.push_back($exprc);
+		ternary->children.push_back($expr->node);
+		ternary->children.push_back($sigvalue_orig->node);
+		free($expr);
+
+		$sigvalue_new = $sigvalue_orig;
+		$sigvalue_new->node = ternary;
+
            // slist *sl;
              // sl=addtxt($4," ? ");
              // if($1->op == 'c')
