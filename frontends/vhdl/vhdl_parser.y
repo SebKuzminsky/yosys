@@ -2443,23 +2443,25 @@ mvalue : STRING {
 
 
 generic_map_list : rem generic_map_item {
-           slist *sl;
-           sl=addsl($1,indents[indent]);
-           $$=addsl(sl,$2);}
-         | rem generic_map_item ',' generic_map_list {
-           slist *sl;
-             sl=addsl($1,indents[indent]);
-             sl=addsl(sl,$2);
-             sl=addtxt(sl,",\n");
-             $$=addsl(sl,$4);
-           }
-         | rem expr {  /* only allow a single un-named map item */
-		printf("generic_map_list\n");
+		NOT_IMPLEMENTED;
+           // slist *sl;
+           // sl=addsl($1,indents[indent]);
+           // $$=addsl(sl,$2);
+
+	} | rem generic_map_item ',' generic_map_list {
+		NOT_IMPLEMENTED;
+           // slist *sl;
+             // sl=addsl($1,indents[indent]);
+             // sl=addsl(sl,$2);
+             // sl=addtxt(sl,",\n");
+             // $$=addsl(sl,$4);
+	} | rem expr {  /* only allow a single un-named map item */
+		NOT_IMPLEMENTED;
              // $$=addsl(NULL,$2->sl);
-           }
-         ;
+	};
 
 generic_map_item : NAME '=' '>' expr {
+		NOT_IMPLEMENTED;
 	printf("generic_map_item\n");
            // slist *sl;
              // sl=addtxt(NULL,".");
@@ -2467,8 +2469,7 @@ generic_map_item : NAME '=' '>' expr {
              // sl=addtxt(sl,"(");
              // sl=addsl(sl,$4->sl);
              // $$=addtxt(sl,")");
-           }
-         ;
+	};
 
 signal : NAME {
 	AstNode *wire = new AstNode(AST_IDENTIFIER);
