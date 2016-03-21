@@ -2248,11 +2248,14 @@ p_body[p_body_result] : rem {
              // $$=$4;
 	};
 
+
 elsepart[elsepart_new] : {
 		$$=NULL;
+
 	} | ELSIF exprc THEN doindent p_body unindent elsepart[elsepart_orig] {
 		log_assert(($p_body == NULL) || ($p_body->type == AST_BLOCK));
 		$elsepart_new = $elsepart_orig;
+		NOT_IMPLEMENTED;
 		   // slist *sl;
 		     // sl=addtxt(indents[indent],"else if(");
 		     // sl=addsl(sl,$2);
@@ -2261,22 +2264,16 @@ elsepart[elsepart_new] : {
 		     // sl=addsl(sl,indents[indent]);
 		     // sl=addtxt(sl,"end\n");
 		     // $$=addsl(sl,$7);
+
 	} | ELSE doindent p_body unindent {
-		log_assert(($p_body != NULL) && ($p_body->type == AST_BLOCK));
-
+		log_assert($p_body != NULL);
+		log_assert($p_body->type == AST_BLOCK);
 		AstNode *default_const = new AstNode(AST_DEFAULT);
-
 		AstNode *else_cond = new AstNode(AST_COND, default_const, $p_body);
-
 		$elsepart_new = new std::vector<AstNode*>;
 		$elsepart_new->push_back(else_cond);
-
-		   // slist *sl;
-		     // sl=addtxt(indents[indent],"else begin\n");
-		     // sl=addsl(sl,$3);
-		     // sl=addsl(sl,indents[indent]);
-		     // $$=addtxt(sl,"end\n");
 	};
+
 
 cases : WHEN wlist '=' '>' doindent p_body unindent cases {
 		NOT_IMPLEMENTED;
