@@ -2378,16 +2378,17 @@ sigvalue[sigvalue_new]: expr delay ';' {
              // $$=addsl(sl,$7);
 	};
 
-nodelay  : /* empty */ {delay=0;}
-         ;
+nodelay  : /* empty */ {
+		delay=0;
+	};
 
-delay    : /* empty */ {$$=0;}
-         | AFTER NATURAL NAME {
-	 printf("got delay\n");
-             set_timescale($3);
-             $$=$2;
-           }
-         ;
+delay    : /* empty */ {
+		$$=0;
+	} | AFTER NATURAL NAME {
+		NOT_IMPLEMENTED;
+             // set_timescale($3);
+             // $$=$2;
+	};
 
 map_list : rem map_item {
 		NOT_IMPLEMENTED;
