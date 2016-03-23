@@ -1,0 +1,3 @@
+debian/tmp/usr/bin/yosys-config usr/bin/
+
+debian/tmp/usr/share/yosys/include/* usr/share/yosys/include/
