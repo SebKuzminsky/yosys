@@ -19,6 +19,9 @@ override_dh_auto_clean:
 override_dh_auto_configure:
 	make config-gcc
 
+override_dh_install:
+	dh_install --fail-missing
+
 override_dh_installman:
 	cd debian/man ; CHANGELOG_DATE="$(CHANGELOG_DATE)" ./genmanpages.sh
 	dh_installman
