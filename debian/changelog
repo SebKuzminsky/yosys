@@ -1,9 +1,14 @@
-yosys (0.6-2) UNRELEASED; urgency=medium
+yosys (0.6-2) unstable; urgency=medium
 
-  * Start work on splitting yosys.deb into yosys, yosys-doc, and
-    yosys-dev.
+  * split the package into yosys, yosys-dev, and yosys-doc
+    - yosys is the tool itself
+    - yosys-dev is development files for building plugins
+    - yosys-doc is the manual (in pdf format)
+  * debian/rules:
+    - fail the build if upstream installs files that aren't picked up
+      by any of the debs
 
- -- Sebastian Kuzminsky <seb@highlab.com>  Mon, 29 Feb 2016 10:18:55 -0700
+ -- Sebastian Kuzminsky <seb@highlab.com>  Wed, 23 Mar 2016 18:46:51 -0600
 
 yosys (0.6-1) unstable; urgency=medium
 
