@@ -1,0 +1,14 @@
+Description: Include all headers needed to build the yosys plugins.
+Author: Sebastian Kuzminsky <seb@highlab.com>
+Index: yosys/Makefile
+===================================================================
+--- yosys.orig/Makefile	2016-03-23 16:03:43.938560251 -0600
++++ yosys/Makefile	2016-03-23 16:04:07.858313544 -0600
+@@ -269,6 +269,7 @@
+ $(eval $(call add_include_file,libs/sha1/sha1.h))
+ $(eval $(call add_include_file,passes/fsm/fsmdata.h))
+ $(eval $(call add_include_file,backends/ilang/ilang_backend.h))
++$(eval $(call add_include_file,frontends/ast/ast.h))
+ 
+ OBJS += kernel/driver.o kernel/register.o kernel/rtlil.o kernel/log.o kernel/calc.o kernel/yosys.o kernel/cellaigs.o
+ kernel/log.o: CXXFLAGS += -DYOSYS_SRC='"$(YOSYS_SRC)"'
