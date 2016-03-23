@@ -49,6 +49,22 @@ Description: Framework for Verilog RTL synthesis
  passes (algorithms) using synthesis scripts and adding additional passes as
  needed by extending the yosys C++ code base.
 
+Package: yosys-dev
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${python3:Depends},
+         ${misc:Depends}
+Description: Framework for Verilog RTL synthesis (development files)
+ Yosys is a framework for Verilog RTL synthesis. It currently has extensive
+ Verilog-2005 support and provides a basic set of synthesis algorithms for
+ various application domains.
+ .
+ Yosys can be adapted to perform any synthesis job by combining the existing
+ passes (algorithms) using synthesis scripts and adding additional passes as
+ needed by extending the yosys C++ code base.
+ .
+ This package contains the headers and programs needed to build yosys plugins.
+
 Package: yosys-doc
 Section: doc
 Architecture: all
