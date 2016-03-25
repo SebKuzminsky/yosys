@@ -1,1 +1,4 @@
+# This symlink provides the "yosys-abc" name for the ABC executable, as
+# used/expected by upstream.  It was requested by upstream (Clifford Wolf)
+# to keep some out-of-tree scripts working.
 /usr/bin/berkeley-abc /usr/bin/yosys-abc
